@@ -2,179 +2,81 @@
 
 ## Status
 
-**Proposed**
+**Accepted**
 
 ## Context
 
-SComm Office synchronizes **public keys only** with a SComm Public Key Directory for identity discovery and future encryption. The external production API contract is not finalized; MVP implements the **`PublicKeyDirectory`** interface against a mock Fastify server.
+SComm Office and secMail share the **production pubkey service** (`pubkey` read/write processes). Early MVP proposed a Fastify `/api/v1/identities/...` directory; that contract is **obsolete for product paths**. See [constitution](../constitution.md) and [005-no-office-server](../architecture/005-no-office-server.md).
+
+Canonical schema and routes: ecosystem `pubkey` docs (`docs/SCHEMA.md`).
 
 ## Problem
 
-Without a documented API shape, client and server implementations diverge. Hard DELETE of keys destroys audit history needed for trust decisions and revocation.
+A parallel MVP API drifts from secMail’s `sdk_pubkey` and production discovery (preference + VKS).
 
 ## Goals
 
-- Propose REST endpoints for GET/PUT key records
-- Model **key states** (active, revoked, expired, superseded)
-- Prefer **revocation** over destructive delete
-- Zod-validated `PublicKeyRecord` in `@scomm-office/protocol`
-- `HttpPublicKeyDirectory` + `MockPublicKeyDirectory` clients
+- Client discovery against production **read** APIs: `GET /keys/preference`, `GET /vks/v1/by-email/:email`
+- Later: OTP bootstrap + signed **write** upload (possession proofs) — same as secMail
+- Keep `PublicKeyDirectory` application interface; adapt wire shapes
+- Never upload private keys
 
 ## Non-goals
 
-- Finalizing production SComm ecosystem pubkey server URL
-- Private key upload (forbidden)
-- Web-of-trust or certificate pinning in MVP
-- Key discovery via DNS (deferred)
+- Shipping Office’s Fastify pubkey routes as production
+- Web-of-trust or DNS discovery in this phase
+- Fingerprint-only lookup (production is email-scoped)
 
 ## Constraints
 
-- Never upload private keys
-- Identity path segments must use [normalized email](./email-identity-normalization.md)
-- Records versioned (`version: 1`)
-- Server auth via `ScommAuthProvider` abstraction (dev token in MVP)
+- Read/write base URLs: `VITE_PUBKEY_READ_BASE_URL` / `VITE_PUBKEY_WRITE_BASE_URL`
+- Wire encoding: base64url without padding for auth signatures/blobs
+- Identity emails use [email normalization](./email-identity-normalization.md)
 
 ## Proposed design
 
-### PublicKeyRecord model
+### Production discovery (P0)
 
-```typescript
-interface PublicKeyRecord {
-  version: 1;
-  identity: {
-    type: "email" | "scomm-uid" | "other";
-    value: string;
-  };
-  keyId: string;
-  algorithm: "Ed25519" | "X25519" | string;
-  publicKey: string;
-  encoding: "base64url" | "jwk";
-  purpose: "signing" | "encryption" | "authentication";
-  state: "created" | "active" | "revoked" | "expired" | "superseded";
-  createdAt?: string;
-  expiresAt?: string;
-  revokedAt?: string;
-  supersededBy?: string;
-  metadata?: Record<string, unknown>;
-}
-```
+| Method | Path | Auth |
+|--------|------|------|
+| `GET` | `/keys/preference?email=&usage=encrypt\|sign` | Public |
+| `GET` | `/vks/v1/by-email/:email` | Public |
+| `GET` | `/keys/revoked` | Public |
+| `GET` | `/health` | Public |
 
-### Key states
+### Write / bootstrap (P1 follow-on)
 
-| State | Meaning |
-|-------|---------|
-| `created` | Registered but not yet active |
-| `active` | Usable for verification/encryption |
-| `revoked` | Explicitly revoked; must not be used |
-| `expired` | Past `expiresAt` |
-| `superseded` | Replaced by newer keyId |
+OTP bootstrap (`POST /auth/bootstrap`, verify) → `FetchToken`; signed requests (`X-Auth-Payload` / `X-Auth-Signature`); `POST /keys` with possession proof.
 
-Clients must not cache revoked/expired records beyond TTL.
+### Client
 
-### Proposed REST API
+`@scomm-office/pubkeys`:
 
-Base: `{SCOMM_PUBKEY_BASE_URL}/v1`
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `PUT` | `/identities/{identityType}/{identity}/keys/{keyId}` | Upsert public key record |
-| `GET` | `/identities/{identityType}/{identity}/keys` | List keys for identity (filterable by state) |
-| `GET` | `/identities/{identityType}/{identity}/keys/{keyId}` | Get specific key |
-| `POST` | `/identities/{identityType}/{identity}/keys/{keyId}/revoke` | Transition to `revoked` |
-
-**Avoid hard DELETE** for trust audit trail. If DELETE exists, it should soft-delete (tombstone) only.
-
-Query parameters for GET list:
-
-- `state=active` (default for clients)
-- `purpose=encryption`
-
-### Example PUT body
-
-```json
-{
-  "version": 1,
-  "identity": { "type": "email", "value": "alice@example.com" },
-  "keyId": "key-2026-01",
-  "algorithm": "Ed25519",
-  "publicKey": "base64url...",
-  "encoding": "base64url",
-  "purpose": "signing",
-  "state": "active",
-  "createdAt": "2026-08-08T00:00:00Z"
-}
-```
-
-### Client interface
-
-```typescript
-interface PublicKeyDirectory {
-  getKeys(identity: ScommIdentity): Promise<PublicKeyRecord[]>;
-  setKey(record: PublicKeyRecord): Promise<PublicKeyRecord>;
-  revokeKey?(identity: ScommIdentity, keyId: string, reason?: string): Promise<void>;
-}
-```
-
-### Trust model (separate from discovery)
-
-```typescript
-type KeyTrust =
-  | "unknown"
-  | "directory-asserted"
-  | "verified"
-  | "organization-verified"
-  | "user-verified";
-```
-
-Finding a key ≠ proving ownership. UI must distinguish discovery from trust.
-
-### MVP server
-
-`apps/server` implements in-memory store with proposed routes. Config: `SCOMM_PUBKEY_BASE_URL` defaults to local server.
+- `ProductionPubkeyDirectory` — preference + VKS → normalized `PublicKeyRecord[]`
+- Retain `MockPublicKeyDirectory` for tests
+- Legacy `HttpPublicKeyDirectory` (`/api/v1/identities/...`) fixture-only against `apps/server`
 
 ## Alternatives
 
 | Alternative | Why rejected |
 |-------------|--------------|
-| Hard DELETE keys | Loses revocation audit trail |
-| Keybase-style proofs in v1 | Complexity; defer |
-| Single global key per identity | No rotation support |
+| Keep Fastify as product directory | Diverges from secMail; violates client-first constitution |
+| Hard DELETE keys | Production prefers archive/revoke semantics |
 
 ## Security considerations
 
-- Authenticate PUT/revoke (dev token MVP; Entra federation later)
-- Rate limit lookups to prevent enumeration
-- Validate algorithm allowlist server-side
-- TLS required in production
-- Monitor for pubkey substitution attacks ([threat-model](../security/threat-model.md))
-
-## Compatibility
-
-- Align with standalone SComm ecosystem when contract published
-- URL-encode identity paths (`alice@example.com` → path segment encoding)
-
-## Open questions
-
-- Who may PUT keys for an email identity (proof of mailbox control?)
-- Federation with external WOT or SMIME PKI
-- Key rotation grace period semantics
+- Finding a key ≠ proving ownership (trust UI separate)
+- Rate limits and TLS on production hosts
+- Private keys never leave `@scomm-office/storage` / WebCrypto
 
 ## Decision
 
-**MVP implements proposed PUT/GET + POST revoke against mock server. No hard DELETE. Client filters to `active` keys by default. Production contract subject to ecosystem alignment.**
+**Product clients use production pubkey read (then write) contracts. Fastify MVP routes are fixtures only.**
 
 ## Implementation status
 
 | Item | Status |
 |------|--------|
-| Zod schemas | Planned |
-| `HttpPublicKeyDirectory` | Planned (Milestone 5) |
-| Mock server routes | Planned |
-| In-memory cache | Planned |
-
-## Deferred work
-
-- Proof-of-email-control before PUT
-- Organization-verified key workflow
-- DNS-based discovery
-- PostgreSQL persistence
+| Production discovery adapter | In progress |
+| Bootstrap/upload UI | Deferred to P1 (interfaces remain) |
+| Fixture Fastify routes | Demoted |

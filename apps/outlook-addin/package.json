@@ -13,6 +13,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@scomm-office/billing": "workspace:*",
+    "@scomm-office/byoai": "workspace:*",
     "@scomm-office/config": "workspace:*",
     "@scomm-office/core": "workspace:*",
     "@scomm-office/crypto": "workspace:*",

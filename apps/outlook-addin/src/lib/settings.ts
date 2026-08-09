@@ -2,15 +2,28 @@ import type { ResolvedConfiguration } from "@scomm-office/protocol";
 
 export const SETTINGS_STORAGE_KEY = "scomm-office.settings.v1";
 
+const defaultPubkeyRead =
+  import.meta.env.VITE_PUBKEY_READ_BASE_URL ??
+  import.meta.env.VITE_PUBKEY_SERVER_URL ??
+  "";
+
+const defaultBillingOrigin = import.meta.env.VITE_BILLING_ORIGIN ?? "";
+
 export const DEFAULT_SETTINGS: ResolvedConfiguration = {
-  scommServerUrl: import.meta.env.VITE_SCOMM_SERVER_URL ?? "http://localhost:8787",
-  pubkeyServerUrl: import.meta.env.VITE_PUBKEY_SERVER_URL ?? "http://localhost:8787",
+  // Fixture-only; product paths ignore this when billing/pubkey envs are set.
+  scommServerUrl: import.meta.env.VITE_SCOMM_SERVER_URL || undefined,
+  pubkeyServerUrl: import.meta.env.VITE_PUBKEY_SERVER_URL || undefined,
+  pubkeyReadBaseUrl: defaultPubkeyRead || undefined,
+  pubkeyWriteBaseUrl: import.meta.env.VITE_PUBKEY_WRITE_BASE_URL || undefined,
+  billingOrigin: defaultBillingOrigin || undefined,
+  billingPortalUrl: import.meta.env.VITE_BILLING_PORTAL_URL || defaultBillingOrigin || undefined,
   idrTargetHost: import.meta.env.VITE_IDR_HOST ?? "",
   idrDefaultService: import.meta.env.VITE_IDR_SERVICE ?? "ollama",
   semanticAnalysisEnabled: true,
   complianceEnabled: true,
   experimentalEncryptionEnabled: false,
   diagnosticsEnabled: true,
+  requireAiAddonEntitlement: true,
 };
 
 export function loadSettingsFromStorage(): ResolvedConfiguration {
@@ -41,4 +54,13 @@ export function formatAddresses(
       address.displayName ? `${address.displayName} <${address.emailAddress}>` : address.emailAddress,
     )
     .join(", ");
+}
+
+export function resolvePubkeyReadBaseUrl(settings: ResolvedConfiguration): string {
+  return (
+    settings.pubkeyReadBaseUrl ||
+    settings.pubkeyServerUrl ||
+    settings.scommServerUrl ||
+    ""
+  );
 }

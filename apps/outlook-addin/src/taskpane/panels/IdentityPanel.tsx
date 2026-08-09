@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createEmailIdentity } from "@scomm-office/identity";
-import { HttpPublicKeyDirectory, resolveRecipientKeys, resolveSenderKeys } from "@scomm-office/pubkeys";
+import {
+  HttpPublicKeyDirectory,
+  ProductionPubkeyDirectory,
+  resolveRecipientKeys,
+  resolveSenderKeys,
+  type PublicKeyDirectory,
+} from "@scomm-office/pubkeys";
 import { DevMemoryKeyStore } from "@scomm-office/storage";
+import { UnsupportedFeatureError } from "@scomm-office/core";
 import type { PublicKeyRecord } from "@scomm-office/protocol";
 import { useHostContext } from "../../lib/host-context";
 import { collectRecipientEmails } from "../../lib/semantic-policy";
-import { formatAddresses } from "../../lib/settings";
+import { formatAddresses, resolvePubkeyReadBaseUrl } from "../../lib/settings";
 
 const devKeyStore = new DevMemoryKeyStore();
 
@@ -16,6 +23,28 @@ interface KeyStatus {
   error?: string;
 }
 
+function createDirectory(settings: {
+  pubkeyReadBaseUrl?: string;
+  pubkeyServerUrl?: string;
+  scommServerUrl?: string;
+}): { directory: PublicKeyDirectory; mode: "production" | "fixture" | "unset"; base: string } {
+  const readBase = resolvePubkeyReadBaseUrl(settings);
+  if (!readBase) {
+    return {
+      directory: new ProductionPubkeyDirectory("https://invalid.local"),
+      mode: "unset",
+      base: "",
+    };
+  }
+  const looksLikeFixture =
+    /localhost:8787/i.test(readBase) ||
+    Boolean(settings.scommServerUrl && readBase === settings.scommServerUrl);
+  if (looksLikeFixture && !settings.pubkeyReadBaseUrl) {
+    return { directory: new HttpPublicKeyDirectory(readBase), mode: "fixture", base: readBase };
+  }
+  return { directory: new ProductionPubkeyDirectory(readBase), mode: "production", base: readBase };
+}
+
 export function IdentityPanel() {
   const { message, settings, isMockHost, currentUserEmail, capabilities } = useHostContext();
   const [senderStatus, setSenderStatus] = useState<KeyStatus | null>(null);
@@ -24,11 +53,10 @@ export function IdentityPanel() {
   const [busy, setBusy] = useState(false);
 
   const userEmail = currentUserEmail ?? (isMockHost ? "you@example.com" : undefined);
-  const pubkeyBase = settings.pubkeyServerUrl ?? settings.scommServerUrl ?? "http://localhost:8787";
-  const directory = new HttpPublicKeyDirectory(pubkeyBase);
+  const { directory, mode, base: pubkeyBase } = useMemo(() => createDirectory(settings), [settings]);
 
   const refreshKeys = useCallback(async () => {
-    if (!message) {
+    if (!message || !pubkeyBase) {
       return;
     }
 
@@ -77,7 +105,7 @@ export function IdentityPanel() {
       }
     }
     setRecipientStatuses(statuses);
-  }, [directory, message, userEmail]);
+  }, [directory, message, userEmail, pubkeyBase]);
 
   useEffect(() => {
     void refreshKeys();
@@ -110,7 +138,13 @@ export function IdentityPanel() {
       setPublishState(`Published dev signing key ${pair.keyId} for ${userEmail}`);
       await refreshKeys();
     } catch (error) {
-      setPublishState(error instanceof Error ? error.message : String(error));
+      if (error instanceof UnsupportedFeatureError) {
+        setPublishState(
+          "Production pubkey upload is deferred (OTP + signed write). Use fixture server for SET, or upload via secMail.",
+        );
+      } else {
+        setPublishState(error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setBusy(false);
     }
@@ -120,15 +154,19 @@ export function IdentityPanel() {
     <section>
       <h2>Identity</h2>
       <dl className="meta-grid">
-        <dt>Current user</dt>
+        <dt>Current user (mailbox)</dt>
         <dd>{userEmail ?? "Unknown (Outlook profile not exposed in MVP)"}</dd>
-        <dt>Pubkey server</dt>
-        <dd>{pubkeyBase}</dd>
+        <dt>Pubkey directory</dt>
+        <dd>
+          {pubkeyBase || "— (set pubkey read URL in Settings)"} ({mode})
+        </dd>
       </dl>
 
       <section>
         <h2>Sender keys</h2>
-        {!message?.from ? (
+        {!pubkeyBase ? (
+          <p className="empty">Configure pubkey read base URL to discover keys.</p>
+        ) : !message?.from ? (
           <p className="empty">No sender on current message.</p>
         ) : senderStatus ? (
           <KeyStatusRow status={senderStatus} label="GET signing keys" />
@@ -160,11 +198,16 @@ export function IdentityPanel() {
       <section>
         <h2>Dev key publish</h2>
         <p className="note">
-          Generates a fake in-memory key via DevMemoryKeyStore and PUTs to the pubkey directory.
-          Never use in production.
+          Fixture mode only: generates a fake key via DevMemoryKeyStore and PUTs to Fastify MVP routes.
+          Production write/bootstrap is P1.
         </p>
         <div className="actions">
-          <button type="button" className="primary" disabled={busy} onClick={() => void publishDevKey()}>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy || mode !== "fixture"}
+            onClick={() => void publishDevKey()}
+          >
             SET dev public key
           </button>
           <button type="button" className="secondary" onClick={() => void refreshKeys()}>
@@ -173,7 +216,9 @@ export function IdentityPanel() {
         </div>
         {publishState ? <p className="note">{publishState}</p> : null}
         {!capabilities.internetHeaders ? (
-          <p className="error-text">Internet headers unavailable — Mailbox 1.8+ required for header stamping.</p>
+          <p className="error-text">
+            Internet headers unavailable — Mailbox 1.8+ required for header stamping.
+          </p>
         ) : null}
       </section>
     </section>

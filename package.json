@@ -9,7 +9,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm run --parallel --filter @scomm-office/server --filter @scomm-office/outlook-addin --filter @scomm-office/dev-console dev",
+    "dev": "pnpm run --parallel --filter @scomm-office/outlook-addin --filter @scomm-office/dev-console dev",
+    "dev:with-fixture-server": "pnpm run --parallel --filter @scomm-office/server --filter @scomm-office/outlook-addin --filter @scomm-office/dev-console dev",
     "build": "pnpm -r run build",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",

@@ -3,12 +3,17 @@ import { z } from "zod";
 export const configurationFieldKeySchema = z.enum([
   "scommServerUrl",
   "pubkeyServerUrl",
+  "pubkeyReadBaseUrl",
+  "pubkeyWriteBaseUrl",
+  "billingOrigin",
+  "billingPortalUrl",
   "idrTargetHost",
   "idrDefaultService",
   "semanticAnalysisEnabled",
   "complianceEnabled",
   "experimentalEncryptionEnabled",
   "diagnosticsEnabled",
+  "requireAiAddonEntitlement",
 ]);
 
 export type ConfigurationFieldKey = z.infer<typeof configurationFieldKeySchema>;
@@ -19,14 +24,21 @@ const serviceField = z.string().min(1).optional();
 const boolField = z.boolean().optional();
 
 export const resolvedConfigurationSchema = z.object({
+  /** @deprecated Fixture Fastify only — not used in product paths */
   scommServerUrl: urlField,
+  /** @deprecated Prefer pubkeyReadBaseUrl */
   pubkeyServerUrl: urlField,
+  pubkeyReadBaseUrl: urlField,
+  pubkeyWriteBaseUrl: urlField,
+  billingOrigin: urlField,
+  billingPortalUrl: urlField,
   idrTargetHost: hostField,
   idrDefaultService: serviceField,
   semanticAnalysisEnabled: boolField,
   complianceEnabled: boolField,
   experimentalEncryptionEnabled: boolField,
   diagnosticsEnabled: boolField,
+  requireAiAddonEntitlement: boolField,
 });
 
 export type ResolvedConfiguration = z.infer<typeof resolvedConfigurationSchema>;

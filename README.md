@@ -1,15 +1,17 @@
 # SComm Office
 
-**SComm Office** is an Outlook-hosted capability layer for [SComm](https://github.com/scomm-ai) — semantic mail understanding, identity/public-key discovery, compliance policy, and bring-your-own-model (BYOM) AI via [IDR](https://idr.to), all constrained by explicit trust boundaries and OpenSpec decisions.
+**SComm Office** is an Outlook-hosted capability layer for [SComm](https://github.com/scomm-ai) — semantic mail understanding, identity/public-key discovery, compliance policy, billing entitlements, and bring-your-own AI (local via [IDR](https://idr.to), cloud BYOAI), constrained by explicit trust boundaries and OpenSpec decisions. Standing goal: bring as much of SComm (secMail) into Office hosts as possible, starting with Outlook ([constitution](./openspec/constitution.md)).
 
 This monorepo ships:
 
-- **`apps/outlook-addin`** — React 19 + Vite task pane (HTTPS dev server, Office.js manifest)
+- **`apps/outlook-addin`** — React 19 + Vite task pane (HTTPS dev server, Office.js manifest) — **product**
 - **`apps/dev-console`** — browser fixture runner for semantics + policy debugging
-- **`apps/server`** — Fastify backend (health, config, pubkeys, semantics analyze, policy, audit) on Postgres
-- **`packages/*`** — shared TypeScript libraries (`@scomm-office/*`)
+- **`apps/server`** — Fastify **fixture only** (not required for product paths)
+- **`packages/*`** — shared TypeScript libraries (`@scomm-office/*`), including `billing` and `byoai`
 
-> **MVP honesty:** E2EE is stubbed, durable private-key storage is deferred, AI extraction is heuristic-first, and several Outlook capabilities (OnMessageSend soft block, WebRTC in all hosts) remain under investigation. See [OpenSpec](./openspec/README.md) and limitations below.
+> **Client-first:** Auth/billing talk to the billing host; public keys to the production pubkey service; IDR is an embedded third-party SDK. See [005-no-office-server](./openspec/architecture/005-no-office-server.md).
+
+> **MVP honesty:** E2EE is stubbed, durable private-key storage is deferred, pubkey write/bootstrap is P1, and several Outlook capabilities (OnMessageSend soft block, WebRTC in all hosts) remain under investigation. See [OpenSpec](./openspec/README.md) and limitations below.
 
 ## Architecture
 

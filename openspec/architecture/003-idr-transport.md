@@ -30,9 +30,10 @@ Raw SDK usage scattered across UI components creates:
 ## Non-goals
 
 - Reimplementing IDR protocol or signaling
-- Server-side IDR proxy (browser-origin only for MVP)
+- Server-side IDR proxy (browser-origin only; never planned as an Office product service)
 - Automatic IDR connections triggered by email content
 - TUN/TCP socket access
+- Hosting IDR on behalf of users — **IDR is a third-party subscription** ([idr.to](https://idr.to)); SComm Office only embeds `@idrto/idr_browser_sdk`
 
 ## Constraints
 
@@ -207,21 +208,21 @@ IDR destinations come from **user/org configuration only** — never from email 
 
 ## Decision
 
-**Wrap `@idrto/idr_browser_sdk` in `packages/idr` as `IdrBrowserTransport`.** UI consumes `IdrTransport` and `AiProvider` only. CSP includes `https://idr.to`, `wss://idr.to`, and `https://*.idr.to`. MVP POC targets Ollama `/api/tags` via configurable service name.
+**Wrap `@idrto/idr_browser_sdk` in `packages/idr` as `IdrBrowserTransport`.** UI consumes `IdrTransport` and `AiProvider` only. CSP includes `https://idr.to`, `wss://idr.to`, and `https://*.idr.to`. IDR remains a **third-party** user/org subscription — embed only, no Office-side proxy. Local BYOAI/Ollama POC uses configurable service name (e.g. `"ollama"`).
 
 ## Implementation status
 
 | Item | Status |
 |------|--------|
-| `IdrTransport` interface | Planned |
-| `IdrBrowserTransport` | Planned (Milestone 6) |
-| `MockIdrTransport` | Planned |
-| Settings UI + connection test | Planned |
-| CSP in manifest | Planned |
+| `IdrTransport` interface | Done |
+| `IdrBrowserTransport` | Done (POC) |
+| `MockIdrTransport` | Done |
+| Settings UI + connection test | Done (IdrPanel) |
+| CSP in manifest | Planned / verify per host |
 
 ## Deferred work
 
 - Multiple concurrent IDR connections
 - `openStream()` for binary protocols
 - Organization-approved IDR destination registry
-- OpenAI/Anthropic cloud providers (non-IDR)
+- Guaranteed WebRTC on all Outlook hosts ([webrtc-host-support](../microsoft/webrtc-host-support.md))

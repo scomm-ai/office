@@ -20,11 +20,13 @@ import {
 } from "../lib/settings";
 import { Navigation, type NavModule } from "./Navigation";
 import { MessagePanel } from "./panels/MessagePanel";
+import { AccountBillingPanel } from "./panels/AccountBillingPanel";
 import { IdentityPanel } from "./panels/IdentityPanel";
 import { SemanticsPanel } from "./panels/SemanticsPanel";
 import { SecurityPanel } from "./panels/SecurityPanel";
 import { CompliancePanel } from "./panels/CompliancePanel";
 import { IdrPanel } from "./panels/IdrPanel";
+import { AiSettingsPanel } from "./panels/AiSettingsPanel";
 import { DiagnosticsPanel } from "./panels/DiagnosticsPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 
@@ -191,16 +193,18 @@ export function App() {
         ) : null}
         <header className="app-header">
           <h1>SComm Office</h1>
-          <p>Semantics, identity, compliance, and IDR for Outlook mail</p>
+          <p>SComm capability layer for Outlook — client-first parity goal</p>
         </header>
         <Navigation active={activeModule} onChange={setActiveModule} />
         <main className="panel">
           {activeModule === "message" ? <MessagePanel /> : null}
+          {activeModule === "account" ? <AccountBillingPanel /> : null}
           {activeModule === "identity" ? <IdentityPanel /> : null}
           {activeModule === "semantics" ? <SemanticsPanel /> : null}
           {activeModule === "security" ? <SecurityPanel /> : null}
           {activeModule === "compliance" ? <CompliancePanel /> : null}
           {activeModule === "idr" ? <IdrPanel /> : null}
+          {activeModule === "ai" ? <AiSettingsPanel /> : null}
           {activeModule === "diagnostics" ? <DiagnosticsPanel /> : null}
           {activeModule === "settings" ? <SettingsPanel /> : null}
         </main>
