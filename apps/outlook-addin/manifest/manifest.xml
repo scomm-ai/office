@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+  <Id>00000000-0000-4000-8000-000000000001</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>SComm</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="SComm Office" />
+  <Description DefaultValue="SComm capability layer for Outlook mail." />
+  <IconUrl DefaultValue="https://localhost:5173/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:5173/assets/icon-64.png" />
+  <SupportUrl DefaultValue="https://localhost:5173/" />
+  <AppDomains>
+    <AppDomain>https://localhost:5173</AppDomain>
+    <AppDomain>localhost</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.8" />
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:5173/taskpane.html" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:5173/taskpane.html" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadWriteItem</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.8">
+          <bt:Set Name="Mailbox" />
+        </bt:Sets>
+      </Requirements>
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="SCommReadGroup">
+                  <Label resid="GroupLabel" />
+                  <Control xsi:type="Button" id="SCommReadTaskPane">
+                    <Label resid="TaskPaneButtonLabel" />
+                    <Supertip>
+                      <Title resid="TaskPaneButtonLabel" />
+                      <Description resid="TaskPaneButtonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon16" />
+                      <bt:Image size="32" resid="Icon32" />
+                      <bt:Image size="80" resid="Icon80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="TaskPaneUrl" />
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="SCommComposeGroup">
+                  <Label resid="GroupLabel" />
+                  <Control xsi:type="Button" id="SCommComposeTaskPane">
+                    <Label resid="TaskPaneButtonLabel" />
+                    <Supertip>
+                      <Title resid="TaskPaneButtonLabel" />
+                      <Description resid="TaskPaneButtonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon16" />
+                      <bt:Image size="32" resid="Icon32" />
+                      <bt:Image size="80" resid="Icon80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="TaskPaneUrl" />
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <!--
+              LaunchEvents (Mailbox 1.12+) — event-based activation stubs.
+              Web runtime: register handlers in commands.html via Office.actions.associate.
+              Classic Override: desktop Outlook may require separate runtime registration;
+              validate against your target host matrix (see openspec/microsoft/event-based-activation.md).
+
+              OnMessageSend (softBlock) — preview send-time policy enforcement:
+              <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSend" SendMode="SoftBlock" />
+
+              OnMessageCompose — compose lifecycle hook:
+              <LaunchEvent Type="OnMessageCompose" FunctionName="onMessageCompose" />
+
+              OnMessageDecrypt — future decrypt hook (stub):
+              <LaunchEvent Type="OnMessageDecrypt" FunctionName="onMessageDecrypt" />
+
+              Runtime page for event handlers:
+              <Runtime resid="CommandsUrl" lifetime="short" />
+            -->
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+      <Resources>
+        <bt:Images>
+          <bt:Image id="Icon16" DefaultValue="https://localhost:5173/assets/icon-16.png" />
+          <bt:Image id="Icon32" DefaultValue="https://localhost:5173/assets/icon-32.png" />
+          <bt:Image id="Icon80" DefaultValue="https://localhost:5173/assets/icon-80.png" />
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="TaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html" />
+          <bt:Url id="CommandsUrl" DefaultValue="https://localhost:5173/commands.html" />
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="GroupLabel" DefaultValue="SComm Office" />
+          <bt:String id="TaskPaneButtonLabel" DefaultValue="SComm" />
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="TaskPaneButtonDesc" DefaultValue="Open the SComm Office task pane for semantics, identity, and compliance." />
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>

@@ -1,0 +1,32 @@
+{
+  "name": "@scomm-office/dev-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5174",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@scomm-office/core": "workspace:*",
+    "@scomm-office/office": "workspace:*",
+    "@scomm-office/policy": "workspace:*",
+    "@scomm-office/protocol": "workspace:*",
+    "@scomm-office/semantics": "workspace:*",
+    "@scomm-office/testkit": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.2"
+  }
+}
