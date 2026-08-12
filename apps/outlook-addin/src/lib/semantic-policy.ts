@@ -38,7 +38,7 @@ export function collectRecipientEmails(
     cc?: Array<{ emailAddress: string }>;
     bcc?: Array<{ emailAddress: string }>;
   },
-  currentUserEmail?: string,
+  _currentUserEmail?: string,
 ): string[] {
   const emails = new Set<string>();
   for (const list of [message.to, message.cc, message.bcc]) {
@@ -47,9 +47,6 @@ export function collectRecipientEmails(
         emails.add(address.emailAddress);
       }
     }
-  }
-  if (currentUserEmail) {
-    emails.delete(currentUserEmail);
   }
   return [...emails];
 }

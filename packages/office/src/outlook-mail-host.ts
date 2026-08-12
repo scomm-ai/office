@@ -46,16 +46,23 @@ type OfficeAttachments = {
   getAsync(callback: (result: AsyncResult<OfficeAttachmentDetails[]>) => void): void;
 };
 
+type OfficeAsyncAccessor<T> = {
+  getAsync(callback: (result: AsyncResult<T>) => void): void;
+};
+
 type OfficeMailboxItem = {
   itemType?: string;
-  subject?: string;
+  /** Read mode: string. Compose mode: async accessor. */
+  subject?: string | OfficeAsyncAccessor<string>;
   internetHeaders?: OfficeInternetHeaders;
   body?: OfficeBody;
   attachments?: OfficeAttachments;
-  from?: OfficeRecipient;
-  to?: OfficeRecipient[];
-  cc?: OfficeRecipient[];
-  bcc?: OfficeRecipient[];
+  /** Read mode: direct recipient. Compose mode: async accessor. */
+  from?: OfficeRecipient | OfficeAsyncAccessor<OfficeRecipient>;
+  /** Read mode: array. Compose mode: async accessor. */
+  to?: OfficeRecipient[] | OfficeAsyncAccessor<OfficeRecipient[]>;
+  cc?: OfficeRecipient[] | OfficeAsyncAccessor<OfficeRecipient[]>;
+  bcc?: OfficeRecipient[] | OfficeAsyncAccessor<OfficeRecipient[]>;
   getAllInternetHeadersAsync?(
     callback: (result: AsyncResult<string>) => void,
   ): void;
@@ -149,7 +156,17 @@ export class OutlookMailHost implements MailHost {
   }
 
   getMode(): "read" | "compose" {
-    const itemType = this.item.itemType;
+    const item = this.item;
+    // itemType is "message" for both read and compose.
+    // Detect compose by checking if subject is an async accessor (object with getAsync)
+    // rather than a plain string, or if to has setAsync.
+    if (item.subject && typeof item.subject === "object" && "getAsync" in item.subject) {
+      return "compose";
+    }
+    if (item.to && !Array.isArray(item.to) && typeof item.to === "object" && "getAsync" in item.to) {
+      return "compose";
+    }
+    const itemType = item.itemType;
     if (itemType === "messageCompose") {
       return "compose";
     }
@@ -159,25 +176,95 @@ export class OutlookMailHost implements MailHost {
   async getCurrentMessage(): Promise<MailMessage> {
     const item = this.item;
     const mode = this.getMode();
-    const [bodyText, bodyHtml, attachments, headers] = await Promise.all([
+
+    let headers: Record<string, string> = {};
+    try {
+      headers = await this.getHeaders();
+    } catch {
+      // Headers may be unavailable in compose mode on some hosts
+    }
+
+    const [bodyText, bodyHtml, attachments] = await Promise.all([
       this.readBody("text"),
       this.readBody("html"),
       this.getAttachments(),
-      this.getHeaders(),
     ]);
 
+    if (mode === "compose") {
+      const [subject, from, to, cc, bcc] = await Promise.all([
+        this.readComposeSubject(),
+        this.readComposeFrom(),
+        this.readComposeRecipients(item.to),
+        this.readComposeRecipients(item.cc),
+        this.readComposeRecipients(item.bcc),
+      ]);
+      return { subject, from, to, cc, bcc, bodyText, bodyHtml, attachments, headers, mode };
+    }
+
     return {
-      subject: item.subject,
-      from: toMailAddress(item.from),
-      to: toMailAddresses(item.to),
-      cc: toMailAddresses(item.cc),
-      bcc: toMailAddresses(item.bcc),
+      subject: typeof item.subject === "string" ? item.subject : undefined,
+      from: toMailAddress(item.from as OfficeRecipient | undefined),
+      to: toMailAddresses(item.to as OfficeRecipient[] | undefined),
+      cc: toMailAddresses(item.cc as OfficeRecipient[] | undefined),
+      bcc: toMailAddresses(item.bcc as OfficeRecipient[] | undefined),
       bodyText,
       bodyHtml,
       attachments,
       headers,
       mode,
     };
+  }
+
+  private async readComposeSubject(): Promise<string | undefined> {
+    const subject = this.item.subject;
+    if (typeof subject === "string") return subject;
+    if (subject && typeof (subject as OfficeAsyncAccessor<string>).getAsync === "function") {
+      try {
+        return await promisify<string>((cb) => (subject as OfficeAsyncAccessor<string>).getAsync(cb));
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  private async readComposeFrom(): Promise<MailAddress | undefined> {
+    const from = this.item.from;
+    if (!from) return undefined;
+    if ((from as OfficeRecipient).emailAddress) {
+      return toMailAddress(from as OfficeRecipient);
+    }
+    if (typeof (from as OfficeAsyncAccessor<OfficeRecipient>).getAsync === "function") {
+      try {
+        const result = await promisify<OfficeRecipient>((cb) =>
+          (from as OfficeAsyncAccessor<OfficeRecipient>).getAsync(cb),
+        );
+        return toMailAddress(result);
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  private async readComposeRecipients(
+    field?: OfficeRecipient[] | OfficeAsyncAccessor<OfficeRecipient[]>,
+  ): Promise<MailAddress[] | undefined> {
+    if (!field) return undefined;
+    if (Array.isArray(field)) {
+      return toMailAddresses(field);
+    }
+    if (typeof (field as OfficeAsyncAccessor<OfficeRecipient[]>).getAsync === "function") {
+      try {
+        const result = await promisify<OfficeRecipient[]>((cb) =>
+          (field as OfficeAsyncAccessor<OfficeRecipient[]>).getAsync(cb),
+        );
+        return toMailAddresses(result);
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
   }
 
   async getComposeState(): Promise<ComposeState> {
@@ -225,14 +312,9 @@ export class OutlookMailHost implements MailHost {
     const mode = this.getMode();
 
     if (mode === "compose") {
-      if (!this.capabilities.internetHeaders || !item.internetHeaders?.getAsync) {
-        throw new CapabilityUnavailableError(
-          "Internet headers require Mailbox 1.8+ in compose mode",
-        );
-      }
-      return promisify<Record<string, string>>((callback) => {
-        item.internetHeaders!.getAsync(callback);
-      });
+      // In compose mode, internetHeaders.getAsync is not reliably available
+      // and requires header names as first parameter. Return empty for now.
+      return {};
     }
 
     if (item.getAllInternetHeadersAsync) {
