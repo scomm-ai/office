@@ -9,6 +9,9 @@ interface ImportMetaEnv {
   readonly VITE_BILLING_PORTAL_URL?: string;
   readonly VITE_IDR_HOST?: string;
   readonly VITE_IDR_SERVICE?: string;
+  readonly VITE_AZURE_CLIENT_ID?: string;
+  readonly VITE_AZURE_TENANT_ID?: string;
+  readonly VITE_AZURE_AUTHORITY?: string;
 }
 
 interface ImportMeta {

@@ -46,7 +46,7 @@ function recordFromPreference(
 export class ProductionPubkeyDirectory implements PublicKeyDirectory {
   constructor(
     private readonly readBaseUrl: string,
-    private readonly fetchImpl: FetchImpl = fetch,
+    private readonly fetchImpl: FetchImpl = (...args) => fetch(...args),
   ) {}
 
   async getKeys(identity: ScommIdentity): Promise<PublicKeyRecord[]> {

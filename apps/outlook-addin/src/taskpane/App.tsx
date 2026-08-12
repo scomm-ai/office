@@ -13,6 +13,7 @@ import type { ResolvedConfiguration } from "@scomm-office/protocol";
 import type { SemanticMailDocument } from "@scomm-office/semantics";
 import type { PolicyEvaluation, SendDecision } from "@scomm-office/policy";
 import { HostContext } from "../lib/host-context";
+import { NaaIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
 import {
   DEFAULT_SETTINGS,
   loadSettingsFromStorage,
@@ -36,6 +37,7 @@ async function bootstrapHost(): Promise<{
   mailHost: MailHost;
   capabilities: ReturnType<typeof detectOutlookCapabilities>;
   isMockHost: boolean;
+  userEmail?: string;
 }> {
   if (typeof Office !== "undefined" && Office.onReady) {
     await new Promise<void>((resolve) => {
@@ -43,7 +45,30 @@ async function bootstrapHost(): Promise<{
     });
     const capabilities = detectOutlookCapabilities({ Office });
     const mailHost = new OutlookMailHost(Office as never, capabilities);
-    return { mailHost, capabilities, isMockHost: false };
+
+    // Get user email from Office.js mailbox profile (most reliable)
+    let userEmail: string | undefined;
+    try {
+      const profile = (Office as unknown as {
+        context?: { mailbox?: { userProfile?: { emailAddress?: string; displayName?: string } } };
+      }).context?.mailbox?.userProfile;
+      userEmail = profile?.emailAddress ?? undefined;
+    } catch {
+      // userProfile may not be available on all hosts
+    }
+
+    // Fallback: try NAA (MSAL) + Microsoft Graph
+    if (!userEmail && isNaaConfigured()) {
+      try {
+        const naa = new NaaIdentityProvider();
+        const user = await naa.getUser();
+        userEmail = user.mail ?? user.userPrincipalName ?? undefined;
+      } catch {
+        // NAA may not be available on all hosts — silently continue
+      }
+    }
+
+    return { mailHost, capabilities, isMockHost: false, userEmail };
   }
 
   const mailHost = new MockMailHost({
@@ -54,7 +79,7 @@ async function bootstrapHost(): Promise<{
     to: [{ emailAddress: "you@example.com", displayName: "You" }],
   });
   const capabilities = detectOutlookCapabilities();
-  return { mailHost, capabilities, isMockHost: true };
+  return { mailHost, capabilities, isMockHost: true, userEmail: "you@example.com" };
 }
 
 export function App() {
@@ -73,6 +98,7 @@ export function App() {
   > | null>(null);
   const [idrConnected, setIdrConnected] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
 
   const refreshMessage = useCallback(async () => {
     if (!mailHost) {
@@ -97,6 +123,7 @@ export function App() {
         setMailHost(boot.mailHost);
         setCapabilities(boot.capabilities);
         setIsMockHost(boot.isMockHost);
+        setUserEmail(boot.userEmail);
         setSettings(stored);
         setIdrRuntime(runtime);
         const initialMessage = await boot.mailHost.getCurrentMessage();
@@ -141,7 +168,7 @@ export function App() {
       mailHost,
       capabilities,
       isMockHost,
-      currentUserEmail: isMockHost ? "you@example.com" : undefined,
+      currentUserEmail: userEmail,
       message,
       semanticDoc,
       policyEvaluation,
@@ -160,6 +187,7 @@ export function App() {
     mailHost,
     capabilities,
     isMockHost,
+    userEmail,
     message,
     semanticDoc,
     policyEvaluation,

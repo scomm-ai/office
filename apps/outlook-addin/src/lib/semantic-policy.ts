@@ -48,9 +48,6 @@ export function collectRecipientEmails(
       }
     }
   }
-  if (currentUserEmail) {
-    emails.delete(currentUserEmail);
-  }
   return [...emails];
 }
 
