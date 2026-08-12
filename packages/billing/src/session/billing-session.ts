@@ -56,7 +56,7 @@ export class BillingSession {
   }
 
   async initForAccount(accountKey: string): Promise<BillingAccountSession | null> {
-    let session = await this.store.readAccountSession(accountKey);
+    const session = await this.store.readAccountSession(accountKey);
     this.cachedSession = session;
     if (session?.licenseJwt) {
       await BillingSdk.init(session.licenseJwt);

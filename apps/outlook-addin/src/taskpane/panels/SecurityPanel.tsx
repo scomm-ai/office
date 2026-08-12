@@ -29,7 +29,7 @@ export function SecurityPanel() {
         setGeneratedKeyId(ids[ids.length - 1]);
       }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [generatedKeyId]);
 
   const pubkeyBase = resolvePubkeyReadBaseUrl(settings);
   const userEmail = currentUserEmail ?? (isMockHost ? "you@example.com" : undefined);
@@ -45,28 +45,6 @@ export function SecurityPanel() {
     [pubkeyBase],
   );
 
-  const decryptor = useMemo(
-    () =>
-      new ScommMessageDecryptor(async (_keyId: string) => {
-        // The envelope stores the server's keyId (e.g. "7") but IndexedDB
-        // uses local keyIds (e.g. "scomm-1786..."). Try all local keys.
-        try {
-          const allIds = await keyStore.listKeyIds();
-          for (const localId of allIds) {
-            try {
-              const key = await keyStore.getPrivate(localId);
-              if (key instanceof CryptoKey) return key;
-            } catch {
-              continue;
-            }
-          }
-          return null;
-        } catch {
-          return null;
-        }
-      }),
-    [],
-  );
 
   const handleGenerateKey = useCallback(async () => {
     setBusy(true);
