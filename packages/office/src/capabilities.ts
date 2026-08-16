@@ -71,7 +71,7 @@ function detectFromOffice(office: OfficeGlobal): OutlookCapabilities {
     mailboxRequirementSet,
     internetHeaders: mailboxAtLeast("1.8"),
     eventBasedActivation: mailboxAtLeast("1.12"),
-    onMessageCompose: mailboxAtLeast("1.1"),
+    onMessageCompose: mailboxAtLeast("1.10"),
     onMessageSend: mailboxAtLeast("1.12"),
     smartAlerts: mailboxAtLeast("1.12"),
     onMessageDecrypt: mailboxAtLeast("1.12"),
@@ -114,4 +114,20 @@ export function detectOutlookCapabilities(office?: {
 
   const caps = detectFromOffice(office.Office);
   return { ...caps, webRtc, webCryptoEd25519 };
+}
+
+/** Body encrypt still works; compose attachment bytes need Mailbox 1.8. */
+export function attachmentEncryptionNotice(capabilities: OutlookCapabilities): string | null {
+  if (capabilities.attachments) {
+    return null;
+  }
+  const version =
+    capabilities.mailboxRequirementSet && capabilities.mailboxRequirementSet !== "0"
+      ? capabilities.mailboxRequirementSet
+      : "below 1.8";
+  return (
+    `This Outlook host is Mailbox ${version}. SComm can encrypt the message body only. ` +
+    "Attachments are not encrypted on this version and will be sent in the clear. " +
+    "Use Outlook on the web or Microsoft 365 Outlook (Mailbox 1.8+) when you need files encrypted."
+  );
 }

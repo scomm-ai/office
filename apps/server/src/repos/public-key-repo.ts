@@ -1,12 +1,12 @@
-import { normalizeEmailIdentity } from "@scomm-office/core";
+import { normalizeEmail } from "@scomm-office/core";
 import type { IdentityType, PublicKeyRecord } from "@scomm-office/protocol";
 import type { Pool } from "pg";
 import type { PublicKeyRepository } from "./types.js";
 
 function storageIdentity(type: IdentityType, value: string): { type: string; value: string } {
   if (type === "email") {
-    const normalized = normalizeEmailIdentity(value);
-    return { type: "email", value: normalized.comparisonKey };
+    const canonical = normalizeEmail(value);
+    return { type: "email", value: canonical };
   }
   return { type, value: value.trim() };
 }

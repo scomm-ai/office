@@ -22,7 +22,7 @@
   </Hosts>
   <Requirements>
     <Sets>
-      <Set Name="Mailbox" MinVersion="1.8" />
+      <Set Name="Mailbox" MinVersion="1.5" />
     </Sets>
   </Requirements>
   <FormSettings>
@@ -45,9 +45,82 @@
   </Rule>
   <DisableEntityHighlighting>false</DisableEntityHighlighting>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.5">
+        <bt:Set Name="Mailbox" />
+      </bt:Sets>
+    </Requirements>
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="SCommReadGroup">
+                <Label resid="GroupLabel" />
+                <Control xsi:type="Button" id="SCommReadTaskPane">
+                  <Label resid="TaskPaneButtonLabel" />
+                  <Supertip>
+                    <Title resid="TaskPaneButtonLabel" />
+                    <Description resid="TaskPaneButtonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16" />
+                    <bt:Image size="32" resid="Icon32" />
+                    <bt:Image size="80" resid="Icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="TaskPaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+          <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="SCommComposeGroup">
+                <Label resid="GroupLabel" />
+                <Control xsi:type="Button" id="SCommComposeTaskPane">
+                  <Label resid="TaskPaneButtonLabel" />
+                  <Supertip>
+                    <Title resid="TaskPaneButtonLabel" />
+                    <Description resid="TaskPaneButtonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16" />
+                    <bt:Image size="32" resid="Icon32" />
+                    <bt:Image size="80" resid="Icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="TaskPaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon16" DefaultValue="https://localhost:5173/assets/icon-16.png" />
+        <bt:Image id="Icon32" DefaultValue="https://localhost:5173/assets/icon-32.png" />
+        <bt:Image id="Icon80" DefaultValue="https://localhost:5173/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="TaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html" />
+        <bt:Url id="CommandsUrl" DefaultValue="https://localhost:5173/commands.html" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GroupLabel" DefaultValue="SComm Office" />
+        <bt:String id="TaskPaneButtonLabel" DefaultValue="SComm" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="TaskPaneButtonDesc" DefaultValue="Open the SComm Office task pane for semantics, identity, and compliance." />
+      </bt:LongStrings>
+    </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.8">
+        <bt:Sets DefaultMinVersion="1.12">
           <bt:Set Name="Mailbox" />
         </bt:Sets>
       </Requirements>
@@ -56,9 +129,9 @@
           <DesktopFormFactor>
             <ExtensionPoint xsi:type="MessageReadCommandSurface">
               <OfficeTab id="TabDefault">
-                <Group id="SCommReadGroup">
+                <Group id="SCommReadGroupV11">
                   <Label resid="GroupLabel" />
-                  <Control xsi:type="Button" id="SCommReadTaskPane">
+                  <Control xsi:type="Button" id="SCommReadTaskPaneV11">
                     <Label resid="TaskPaneButtonLabel" />
                     <Supertip>
                       <Title resid="TaskPaneButtonLabel" />
@@ -78,9 +151,9 @@
             </ExtensionPoint>
             <ExtensionPoint xsi:type="MessageComposeCommandSurface">
               <OfficeTab id="TabDefault">
-                <Group id="SCommComposeGroup">
+                <Group id="SCommComposeGroupV11">
                   <Label resid="GroupLabel" />
-                  <Control xsi:type="Button" id="SCommComposeTaskPane">
+                  <Control xsi:type="Button" id="SCommComposeTaskPaneV11">
                     <Label resid="TaskPaneButtonLabel" />
                     <Supertip>
                       <Title resid="TaskPaneButtonLabel" />
@@ -98,24 +171,13 @@
                 </Group>
               </OfficeTab>
             </ExtensionPoint>
-            <!--
-              LaunchEvents (Mailbox 1.12+) — event-based activation stubs.
-              Web runtime: register handlers in commands.html via Office.actions.associate.
-              Classic Override: desktop Outlook may require separate runtime registration;
-              validate against your target host matrix (see openspec/microsoft/event-based-activation.md).
-
-              OnMessageSend (softBlock) — preview send-time policy enforcement:
-              <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSend" SendMode="SoftBlock" />
-
-              OnMessageCompose — compose lifecycle hook:
-              <LaunchEvent Type="OnMessageCompose" FunctionName="onMessageCompose" />
-
-              OnMessageDecrypt — future decrypt hook (stub):
-              <LaunchEvent Type="OnMessageDecrypt" FunctionName="onMessageDecrypt" />
-
-              Runtime page for event handlers:
-              <Runtime resid="CommandsUrl" lifetime="short" />
-            -->
+            <ExtensionPoint xsi:type="LaunchEvent">
+              <LaunchEvents>
+                <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSend" SendMode="Block" />
+                <LaunchEvent Type="OnMessageCompose" FunctionName="onMessageCompose" />
+              </LaunchEvents>
+              <SourceLocation resid="CommandsUrl" />
+            </ExtensionPoint>
           </DesktopFormFactor>
         </Host>
       </Hosts>

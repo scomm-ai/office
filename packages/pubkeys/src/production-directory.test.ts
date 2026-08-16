@@ -3,42 +3,32 @@ import { createEmailIdentity } from "@scomm-office/identity";
 import { ProductionPubkeyDirectory } from "./production-directory.js";
 
 describe("ProductionPubkeyDirectory", () => {
-  it("maps preference encrypt+sign to records", async () => {
+  it("maps a capability-selected artifact through the JS SDK", async () => {
     const fetchImpl: typeof fetch = async (input) => {
       const url = String(input);
-      if (url.includes("usage=encrypt")) {
-        return new Response(
-          JSON.stringify({
-            keyId: "k-enc",
-            algorithm: "openpgp-cv25519",
-            publicKey: "abc",
-            label: "work",
-          }),
-          { status: 200 },
-        );
-      }
-      if (url.includes("usage=sign")) {
-        return new Response(
-          JSON.stringify({
-            keyId: "k-sig",
-            algorithm: "openpgp-ed25519",
-            publicKey: "def",
-          }),
-          { status: 200 },
-        );
-      }
-      return new Response("not found", { status: 404 });
+      expect(url).toContain("/v1/keys?");
+      expect(url).toContain("capabilities=");
+      return new Response(
+        JSON.stringify({
+          key_id: 2,
+          family: "smime",
+          algorithm: "smime-x25519",
+          purpose: "key-agreement",
+          public_material: "abc",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     };
 
     const dir = new ProductionPubkeyDirectory("https://pubkey.example.com", fetchImpl);
     const keys = await dir.getKeys(createEmailIdentity("Alice@Example.COM"));
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(1);
     expect(keys[0]?.purpose).toBe("encryption");
-    expect(keys[1]?.purpose).toBe("signing");
-    expect(keys[0]?.identity.value).toBe("Alice@example.com");
+    expect(keys[0]?.algorithm).toBe("smime-x25519");
+    expect(keys[0]?.identity.value).toBe("alice@example.com");
   });
 
-  it("rejects setKey until write API is implemented", async () => {
+  it("rejects setKey so Office uses PubkeyClient.setKeys", async () => {
     const dir = new ProductionPubkeyDirectory("https://pubkey.example.com");
     await expect(
       dir.setKey({
@@ -50,6 +40,6 @@ describe("ProductionPubkeyDirectory", () => {
         encoding: "base64url",
         purpose: "signing",
       }),
-    ).rejects.toThrow(/not yet implemented/i);
+    ).rejects.toThrow(/PubkeyClient.setKeys/i);
   });
 });

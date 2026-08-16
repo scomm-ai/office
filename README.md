@@ -11,7 +11,9 @@ This monorepo ships:
 
 > **Client-first:** Auth/billing talk to the billing host; public keys to the production pubkey service; IDR is an embedded third-party SDK. See [005-no-office-server](./openspec/architecture/005-no-office-server.md).
 
-> **MVP honesty:** E2EE is stubbed, durable private-key storage is deferred, pubkey write/bootstrap is P1, and several Outlook capabilities (OnMessageSend soft block, WebRTC in all hosts) remain under investigation. See [OpenSpec](./openspec/README.md) and limitations below.
+> **Pubkey protocol:** Office is a **consumer** of `@scomm/pubkey` from `scomm-ai/sdk_pubkey`. It must not implement canonical signing, key selection, or vault format itself.
+
+> **Mail E2EE:** Outlook add-in is **OpenPGP only** (inline armor). JS S/MIME is out of scope. Native Outlook S/MIME stays Windows/CAPI. See [e2ee-protocol](./openspec/security/e2ee-protocol.md).
 
 ## Architecture
 
@@ -32,7 +34,7 @@ flowchart TB
     OFF["office"]
     SEM["semantics"]
     POL["policy"]
-    PK["pubkeys"]
+    PK["pubkeys → @scomm/pubkey"]
     IDR["idr"]
     PRO["protocol"]
     CRY["crypto (stubs)"]
@@ -82,7 +84,7 @@ flowchart TB
 | `packages/pubkeys` | `@scomm-office/pubkeys` | `HttpPublicKeyDirectory`, key resolution |
 | `packages/idr` | `@scomm-office/idr` | IDR browser transport, Ollama provider |
 | `packages/protocol` | `@scomm-office/protocol` | Zod DTOs, `X-SComm-*` headers |
-| `packages/crypto` | `@scomm-office/crypto` | E2EE interfaces (**stubs**) |
+| `packages/crypto` | `@scomm-office/crypto` | Legacy encryptor interfaces (throw; use `PgpEngine`) |
 | `packages/storage` | `@scomm-office/storage` | Settings + dev key store |
 | `packages/config` | `@scomm-office/config` | Effective configuration merge |
 | `packages/testkit` | `@scomm-office/testkit` | HTML fixtures |
@@ -163,9 +165,9 @@ Use **dev-console** to iterate on fixtures without Outlook.
 
 ## Identity & pubkeys
 
-- Lookup via **`HttpPublicKeyDirectory`** (`GET /api/v1/identities/email/{email}/keys`)
-- Compose-time recipient encryption key status via **`resolveRecipientKeys`**
-- Dev-only **`DevMemoryKeyStore`** + **SET** publishes a fake signing key — never for production
+- Lookup via **`ProductionPubkeyDirectory`** / `PubkeyClient.getBestKey` (`GET /v1/keys`)
+- Compose-time OpenPGP encrypt in the Security pane (`PgpEngine`)
+- Device Vault in IndexedDB; passphrase export/import for backup — host IndexedDB can vanish
 
 See [openspec/features/pubkey-server-api.md](./openspec/features/pubkey-server-api.md).
 
@@ -183,8 +185,8 @@ See [openspec/architecture/003-idr-transport.md](./openspec/architecture/003-idr
 
 ## Security caveats
 
-- **No production E2EE** — `ExperimentalMessageEncryptor` / `Decryptor` throw by design
-- **Dev keys only** — `DevMemoryKeyStore` is in-memory and fake
+- **OpenPGP overlay** — Security pane encrypts the body as armored PGP; decrypt shows in the pane only (never `setBody` plaintext)
+- **No JS S/MIME** — native Outlook S/MIME is CAPI; the add-in does not advertise `smime`
 - **AI trust boundary** — model output must not drive privileged actions without validation ([openspec/security/ai-trust-boundary.md](./openspec/security/ai-trust-boundary.md))
 - **Hostile HTML** — semantic extraction strips scripts but mail bodies are untrusted input
 - **CSP** — task pane uses a restrictive meta policy; adjust carefully for new endpoints

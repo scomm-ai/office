@@ -436,6 +436,9 @@ importers:
       '@scomm-office/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@scomm/pubkey':
+        specifier: file:../../../sdk_pubkey/packages/js
+        version: file:../sdk_pubkey/packages/js
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -474,6 +477,9 @@ importers:
       '@scomm-office/core':
         specifier: workspace:*
         version: link:../core
+      '@scomm/pubkey':
+        specifier: file:../../../sdk_pubkey/packages/js
+        version: file:../sdk_pubkey/packages/js
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -1237,6 +1243,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@scomm/pubkey-protocol@file:../sdk_pubkey/packages/protocol':
+    resolution: {directory: ../sdk_pubkey/packages/protocol, type: directory}
+    engines: {node: '>=22.6.0'}
+
+  '@scomm/pubkey@file:../sdk_pubkey/packages/js':
+    resolution: {directory: ../sdk_pubkey/packages/js, type: directory}
+    engines: {node: '>=22.6.0'}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -1914,6 +1928,15 @@ packages:
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
     engines: {node: '>=14.0.0'}
+
+  openpgp@6.3.1:
+    resolution: {integrity: sha512-7oSPvmlKPojxFoyelT5DWPIAVmqWZh4qU/5pO6bdoShEtRpCw9Sye9IXUQj6EFM3XpgGssqccAr705YtTcLNQw==}
+    engines: {node: '>= 18.0.0', typescript: '>= 5.0.0'}
+    peerDependencies:
+      '@openpgp/web-stream-tools': ~0.3.0
+    peerDependenciesMeta:
+      '@openpgp/web-stream-tools':
+        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -2926,6 +2949,15 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
 
+  '@scomm/pubkey-protocol@file:../sdk_pubkey/packages/protocol': {}
+
+  '@scomm/pubkey@file:../sdk_pubkey/packages/js':
+    dependencies:
+      '@scomm/pubkey-protocol': file:../sdk_pubkey/packages/protocol
+      openpgp: 6.3.1
+    transitivePeerDependencies:
+      - '@openpgp/web-stream-tools'
+
   '@standard-schema/spec@1.1.0': {}
 
   '@types/babel__core@7.20.5':
@@ -3637,6 +3669,8 @@ snapshots:
   obliterator@2.0.5: {}
 
   on-exit-leak-free@2.1.2: {}
+
+  openpgp@6.3.1: {}
 
   optionator@0.9.4:
     dependencies:

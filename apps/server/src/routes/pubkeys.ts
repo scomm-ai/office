@@ -1,4 +1,4 @@
-import { normalizeEmailIdentity } from "@scomm-office/core";
+import { normalizeEmail } from "@scomm-office/core";
 import { identityTypeSchema, pubkeyPutRequestSchema } from "@scomm-office/protocol";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -11,7 +11,7 @@ const revokeRequestSchema = z.object({
 
 function identitiesMatch(type: string, pathValue: string, bodyValue: string): boolean {
   if (type === "email") {
-    return normalizeEmailIdentity(pathValue).comparisonKey === normalizeEmailIdentity(bodyValue).comparisonKey;
+    return normalizeEmail(pathValue) === normalizeEmail(bodyValue);
   }
   return pathValue.trim() === bodyValue.trim();
 }

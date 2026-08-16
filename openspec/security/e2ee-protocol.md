@@ -2,155 +2,40 @@
 
 ## Status
 
-**Draft — NOT FINALIZED**
-
-## Context
-
-SComm Office will eventually encrypt message content for recipient public keys. Cryptographic protocol details must be specified before any production encryption is enabled. Outlook provides experimental `OnMessageDecrypt` event hooks.
-
-**This document defines requirements and stubs only. No production E2EE in MVP.**
-
-## Problem
-
-Ad-hoc encryption implementations cause interoperability failures, downgrade vulnerabilities, and key management disasters. Outlook-specific representation (headers vs MIME vs attachments) adds complexity.
-
-## Goals
-
-- Capture protocol design questions for future specification
-- Define **`MessageEncryptor`** / **`MessageDecryptor`** interfaces
-- Stub implementations throwing `UnsupportedFeatureError`
-- Align algorithm choices with SComm ecosystem (Ed25519, X25519, AES-GCM, HKDF)
-- Document Outlook representation options
-
-## Non-goals
-
-- Shipping encryption in MVP
-- Claiming S/MIME compatibility
-- Forward secrecy in v1 (open question)
-
-## Constraints
-
-- Must interoperate with standalone SComm native client (future)
-- Must not break non-SComm clients (encrypted payload as attachment or opaque part)
-- Algorithm agility required
-- `OnMessageDecrypt` scaffold only until protocol locked
-
-## Proposed design
-
-### Interfaces (stubs)
-
-```typescript
-interface MessageEncryptor {
-  encrypt(
-    message: EncryptableMessage,
-    recipients: RecipientKeySet[]
-  ): Promise<EncryptedMessage>;
-}
-
-interface MessageDecryptor {
-  decrypt(message: EncryptedMessage): Promise<DecryptedMessage>;
-}
-
-/** @experimental — see openspec/security/e2ee-protocol.md */
-class ExperimentalMessageEncryptor implements MessageEncryptor {
-  async encrypt(): Promise<EncryptedMessage> {
-    throw new UnsupportedFeatureError(
-      "SComm E2EE protocol has not yet been finalized"
-    );
-  }
-}
-```
-
-### Topics requiring specification
-
-| Topic | Questions |
-|-------|-----------|
-| **Canonical envelope** | JSON? CMS? Custom binary? |
-| **Recipient key wrapping** | X25519 ECDH + AES-GCM per recipient? |
-| **Sender authentication** | Ed25519 signature over envelope? |
-| **Forward secrecy** | Per-message ephemeral keys? |
-| **Key rotation** | Multi-key decrypt grace period |
-| **Multi-device recipients** | Multiple active encryption keys |
-| **Attachment encryption** | Streamed vs whole-file |
-| **Associated data** | Bind headers/metadata to ciphertext |
-| **Algorithm agility** | Version byte + suite identifier |
-| **Downgrade protection** | Signed capability negotiation |
-| **Metadata leakage** | Subject/recipient visibility |
-| **Outlook representation** | Attachment vs MIME vs header pointer |
-| **Native interop** | Byte-identical envelope with Flutter client |
-
-### Draft envelope sketch (non-normative)
-
-```typescript
-// ILLUSTRATIVE ONLY — NOT FINAL
-interface EncryptedMessage {
-  version: 1;
-  algorithmSuite: "scomm-v1-x25519-aes256gcm";
-  senderKeyId: string;
-  recipients: Array<{
-    keyId: string;
-    wrappedKey: string;  // base64url
-  }>;
-  ciphertext: string;
-  associatedData?: string;
-  signature?: string;
-}
-```
-
-### Outlook integration paths (evaluation)
-
-1. Encrypted blob as `application/octet-stream` attachment
-2. `X-SComm-Security` header with pointer to attachment
-3. Future `application/scomm+json` encrypted sub-object
-4. `OnMessageDecrypt` native hook (when documented)
-
-All paths **unverified**.
-
-### Security metadata header (until E2EE)
-
-`X-SComm-Security: none` or omitted in MVP.
-
-## Alternatives
-
-| Alternative | Why rejected for SComm |
-|-------------|------------------------|
-| S/MIME only | Ecosystem control; key directory model differs |
-| PGP inline | Poor HTML email UX |
-| TLS-only | Does not protect at-rest/recipient-forwarding |
-
-## Security considerations
-
-- Never enable experimental encryptor in production builds by default
-- Downgrade: attacker strips encryption → policy should warn (future)
-- Avoid encrypting with `directory-asserted` keys without user confirmation
-- Side-channel risks in JavaScript crypto — prefer WebCrypto
-
-## Compatibility
-
-- Decrypt stub registers only with manifest + feature flag
-- Non-SComm clients must receive readable plaintext wrapper until encryption mode
-
-## Open questions
-
-- All items in topics table above
-- Legal export classification for shipped crypto
-- Third-party crypto audit requirement
+**Locked for this product slice**
 
 ## Decision
 
-**Do not implement production E2EE. Interfaces and throwing stubs only. Protocol specification is prerequisite for Milestone beyond MVP.**
+Two independent interop planes. They do not share engines.
 
-## Implementation status
+| Client | Mail E2EE | Directory families |
+|--------|-----------|--------------------|
+| Outlook add-in | Inline OpenPGP armor (`text/plain` + `BEGIN PGP MESSAGE`) via `@scomm/pubkey` `PgpEngine` | `{ pgp: [openpgp-cv25519, openpgp-ed25519] }` only |
+| secMail0 | Inline OpenPGP **and** RFC 5751 S/MIME CMS (libcrypto) | `pgp` and `smime` |
+| Outlook native S/MIME | Windows/CAPI + imported or signed-mail certs | Not published by the add-in |
 
-| Item | Status |
-|------|--------|
-| Encryptor/decryptor interfaces | Planned stub |
-| OnMessageDecrypt handler | Scaffold only |
-| Protocol spec | **Not written** |
+The add-in **must not** implement or advertise a JS `SmimeEngine`, Graph-send CMS, GAL, or CAPI cert install. Native Outlook S/MIME never goes through the add-in engine.
 
-## Deferred work
+There is **no** SComm-proprietary ECDH envelope (`scomm-v1-ecdh-p256-aes256gcm` is deleted).
 
-- Normative protocol document v1
-- Interop test vectors with SComm native
-- External cryptographic review
-- Production encrypt/decrypt implementations
+## Outlook add-in profile
+
+- Encrypt UTF-8 body text to armored `PGP MESSAGE`. Include self as recipient so Sent items decrypt.
+- Decrypt into the Security pane `<pre>` only. Do not `setBody` plaintext.
+- Harden HTML unwrap (`<br>`, split spans, `\r\n`) before OpenPGP parse.
+- `OnMessageSend` **Block** when To/Cc/Bcc have a directory PGP key and the body has no `BEGIN PGP MESSAGE`.
+
+## secMail0 profile
+
+- When GET returns `family: pgp`, encrypt with OpenPGP (Outlook users).
+- When GET returns `family: smime`, encrypt the MIME entity with CMS (Outlook native).
+- Cert exchange: export `.cer` / PEM, import `.cer` / `.p7b`, extract certs from signed S/MIME, send signed-data so Outlook can add the cert.
+- Outlook warns on self-signed when **encrypting to** that cert; decrypt of mail **to you** does not need a public CA.
+
+## Interfaces
+
+`@scomm-office/crypto` keeps `MessageEncryptor` / `MessageDecryptor` as throwing stubs. Production mail crypto is `PgpEngine` in the Security panel, not those interfaces.
+
+## Out of scope
+
+JS/CMS engine, Graph `Mail.Send`, GAL, CAPI injection, PGP/MIME, PQ/`smime-mlkem-*`, hardware MSK adapters.

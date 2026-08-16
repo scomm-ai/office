@@ -140,7 +140,7 @@ export function IdentityPanel() {
     } catch (error) {
       if (error instanceof UnsupportedFeatureError) {
         setPublishState(
-          "Production pubkey upload is deferred (OTP + signed write). Use fixture server for SET, or upload via secMail.",
+          "Production pubkey upload needs a Master Identity Key on this device. Use the Security panel to create or restore one, then publish.",
         );
       } else {
         setPublishState(error instanceof Error ? error.message : String(error));

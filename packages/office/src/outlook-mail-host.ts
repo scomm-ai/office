@@ -31,11 +31,11 @@ type OfficeInternetHeaders = {
 };
 
 type OfficeBody = {
-  getAsync(
+  getAsync?(
     coercionType: OfficeCoercionType,
     callback: (result: AsyncResult<string>) => void,
   ): void;
-  setAsync(
+  setAsync?(
     data: string,
     options: { coercionType: OfficeCoercionType },
     callback: (result: AsyncResult<void>) => void,
@@ -56,7 +56,7 @@ type OfficeMailboxItem = {
   subject?: string | OfficeAsyncAccessor<string>;
   internetHeaders?: OfficeInternetHeaders;
   body?: OfficeBody;
-  attachments?: OfficeAttachments;
+  attachments?: OfficeAttachments | OfficeAttachmentDetails[];
   /** Read mode: direct recipient. Compose mode: async accessor. */
   from?: OfficeRecipient | OfficeAsyncAccessor<OfficeRecipient>;
   /** Read mode: array. Compose mode: async accessor. */
@@ -120,6 +120,18 @@ function toMailAddresses(recipients?: OfficeRecipient[]): MailAddress[] | undefi
   return recipients
     .map((recipient) => toMailAddress(recipient))
     .filter((address): address is MailAddress => address !== undefined);
+}
+
+function mapAttachmentDetails(details: OfficeAttachmentDetails[]): MailAttachment[] {
+  return details
+    .filter((attachment) => attachment.id && attachment.name)
+    .map((attachment) => ({
+      id: attachment.id!,
+      name: attachment.name!,
+      contentType: attachment.contentType,
+      size: attachment.size,
+      isInline: attachment.isInline,
+    }));
 }
 
 function parseInternetHeadersBlock(raw: string): Record<string, string> {
@@ -295,8 +307,9 @@ export class OutlookMailHost implements MailHost {
     }
 
     const coercionType: OfficeCoercionType = body.html !== undefined ? "html" : "text";
+    const setAsync = itemBody.setAsync.bind(itemBody);
     await promisify<void>((callback) => {
-      itemBody.setAsync(content, { coercionType }, callback);
+      setAsync(content, { coercionType }, callback);
     });
   }
 
@@ -350,26 +363,21 @@ export class OutlookMailHost implements MailHost {
 
   async getAttachments(): Promise<MailAttachment[]> {
     const attachmentsApi = this.item.attachments;
+    if (Array.isArray(attachmentsApi)) {
+      return mapAttachmentDetails(attachmentsApi);
+    }
     if (!attachmentsApi?.getAsync) {
-      if (!this.capabilities.attachments) {
-        throw new CapabilityUnavailableError("Attachments API is unavailable");
-      }
       return [];
     }
 
-    const details = await promisify<OfficeAttachmentDetails[]>((callback) => {
-      attachmentsApi.getAsync(callback);
-    });
-
-    return details
-      .filter((attachment) => attachment.id && attachment.name)
-      .map((attachment) => ({
-        id: attachment.id!,
-        name: attachment.name!,
-        contentType: attachment.contentType,
-        size: attachment.size,
-        isInline: attachment.isInline,
-      }));
+    try {
+      const details = await promisify<OfficeAttachmentDetails[]>((callback) => {
+        attachmentsApi.getAsync(callback);
+      });
+      return mapAttachmentDetails(details);
+    } catch {
+      return [];
+    }
   }
 
   private async readBody(coercionType: OfficeCoercionType): Promise<string | undefined> {
@@ -379,8 +387,9 @@ export class OutlookMailHost implements MailHost {
     }
 
     try {
+      const getAsync = itemBody.getAsync.bind(itemBody);
       return await promisify<string>((callback) => {
-        itemBody.getAsync(coercionType, callback);
+        getAsync(coercionType, callback);
       });
     } catch {
       return undefined;

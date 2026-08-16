@@ -12,7 +12,7 @@ const CAPABILITY_LABELS: Array<{
     { key: "onMessageSend", label: "OnMessageSend" },
     { key: "smartAlerts", label: "Smart Alerts" },
     { key: "onMessageDecrypt", label: "OnMessageDecrypt" },
-    { key: "attachments", label: "Attachments API" },
+    { key: "attachments", label: "Attachments API (Mailbox 1.8+)" },
     { key: "signatureApi", label: "Signature API" },
     { key: "nestedAppAuthentication", label: "Nested App Authentication" },
     { key: "webRtc", label: "WebRTC" },
