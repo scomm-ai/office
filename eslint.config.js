@@ -12,6 +12,8 @@ export default tseslint.config(
       "**/.vite/**",
       "**/playwright-report/**",
       "**/test-results/**",
+      "packages/scomm-pubkey/**",
+      "packages/scomm-pubkey-protocol/**",
     ],
   },
   js.configs.recommended,

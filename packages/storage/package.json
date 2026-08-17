@@ -18,7 +18,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@scomm/pubkey": "file:../../../sdk_pubkey/packages/js",
+    "@scomm/pubkey": "workspace:*",
     "@scomm-office/core": "workspace:*"
   },
   "devDependencies": {

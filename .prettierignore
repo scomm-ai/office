@@ -6,3 +6,5 @@ pnpm-lock.yaml
 .vite
 playwright-report
 test-results
+packages/scomm-pubkey
+packages/scomm-pubkey-protocol

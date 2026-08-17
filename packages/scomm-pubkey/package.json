@@ -1,0 +1,29 @@
+{
+	"name": "@scomm/pubkey",
+	"version": "1.0.0",
+	"description": "SComm JavaScript Pubkey SDK — protocol, Vault, and CryptoProvider",
+	"type": "module",
+	"main": "./src/index.js",
+	"types": "./index.d.ts",
+	"exports": {
+		".": {
+			"types": "./index.d.ts",
+			"import": "./src/index.js",
+			"default": "./src/index.js"
+		}
+	},
+	"files": [
+		"src",
+		"index.d.ts"
+	],
+	"scripts": {
+		"test": "node --test test/*.test.js"
+	},
+	"dependencies": {
+		"@scomm/pubkey-protocol": "workspace:*",
+		"openpgp": "^6.3.1"
+	},
+	"engines": {
+		"node": ">=22.6.0"
+	}
+}

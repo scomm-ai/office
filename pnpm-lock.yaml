@@ -437,8 +437,8 @@ importers:
         specifier: workspace:*
         version: link:../protocol
       '@scomm/pubkey':
-        specifier: file:../../../sdk_pubkey/packages/js
-        version: file:../sdk_pubkey/packages/js
+        specifier: workspace:*
+        version: link:../scomm-pubkey
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -449,6 +449,17 @@ importers:
       vitest:
         specifier: ^3.0.2
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
+  packages/scomm-pubkey:
+    dependencies:
+      '@scomm/pubkey-protocol':
+        specifier: workspace:*
+        version: link:../scomm-pubkey-protocol
+      openpgp:
+        specifier: ^6.3.1
+        version: 6.3.1
+
+  packages/scomm-pubkey-protocol: {}
 
   packages/semantics:
     dependencies:
@@ -478,8 +489,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@scomm/pubkey':
-        specifier: file:../../../sdk_pubkey/packages/js
-        version: file:../sdk_pubkey/packages/js
+        specifier: workspace:*
+        version: link:../scomm-pubkey
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -1242,14 +1253,6 @@ packages:
     resolution: {integrity: sha512-zD6NdeWEByGE9QF9vCrlJ5YQB4oq9q91kPZS37Jwj5hOkvR1lTBSpsKhKDw4IJtbQ35LsTS1HD9DZYGKIshU1Q==}
     cpu: [x64]
     os: [win32]
-
-  '@scomm/pubkey-protocol@file:../sdk_pubkey/packages/protocol':
-    resolution: {directory: ../sdk_pubkey/packages/protocol, type: directory}
-    engines: {node: '>=22.6.0'}
-
-  '@scomm/pubkey@file:../sdk_pubkey/packages/js':
-    resolution: {directory: ../sdk_pubkey/packages/js, type: directory}
-    engines: {node: '>=22.6.0'}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -2948,15 +2951,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
-
-  '@scomm/pubkey-protocol@file:../sdk_pubkey/packages/protocol': {}
-
-  '@scomm/pubkey@file:../sdk_pubkey/packages/js':
-    dependencies:
-      '@scomm/pubkey-protocol': file:../sdk_pubkey/packages/protocol
-      openpgp: 6.3.1
-    transitivePeerDependencies:
-      - '@openpgp/web-stream-tools'
 
   '@standard-schema/spec@1.1.0': {}
 

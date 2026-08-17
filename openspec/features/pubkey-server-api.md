@@ -12,7 +12,7 @@ Canonical schema and routes: ecosystem `pubkey` docs (`docs/SCHEMA.md`).
 
 ## Problem
 
-A parallel MVP API drifts from secMail’s `sdk_pubkey` and production discovery (preference + VKS).
+A parallel MVP API drifts from the Office `@scomm/pubkey` adapter and production discovery (preference + VKS).
 
 ## Goals
 

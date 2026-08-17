@@ -11,7 +11,7 @@ This monorepo ships:
 
 > **Client-first:** Auth/billing talk to the billing host; public keys to the production pubkey service; IDR is an embedded third-party SDK. See [005-no-office-server](./openspec/architecture/005-no-office-server.md).
 
-> **Pubkey protocol:** Office is a **consumer** of `@scomm/pubkey` from `scomm-ai/sdk_pubkey`. It must not implement canonical signing, key selection, or vault format itself.
+> **Pubkey protocol:** Office **owns** `@scomm/pubkey` (workspace adapter) and consumes [CKVF](https://github.com/Cryptographic-Key-Vault-Format/sdk-js) for vault files. It must not reimplement canonical signing, key selection, or vault format outside those packages.
 
 > **Mail E2EE:** Outlook add-in is **OpenPGP only** (inline armor). JS S/MIME is out of scope. Native Outlook S/MIME stays Windows/CAPI. See [e2ee-protocol](./openspec/security/e2ee-protocol.md).
 
@@ -34,7 +34,7 @@ flowchart TB
     OFF["office"]
     SEM["semantics"]
     POL["policy"]
-    PK["pubkeys → @scomm/pubkey"]
+    PK["pubkeys → @scomm/pubkey + @ckvf"]
     IDR["idr"]
     PRO["protocol"]
     CRY["crypto (stubs)"]

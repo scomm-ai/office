@@ -1,0 +1,23 @@
+{
+	"name": "@scomm/pubkey-protocol",
+	"version": "1.0.0",
+	"description": "SComm pubkey protocol types, identity, canonical encoding, and fixtures",
+	"type": "module",
+	"main": "./src/index.js",
+	"exports": {
+		".": "./src/index.js",
+		"./fixtures/*": "./fixtures/*",
+		"./registry": "./src/registry.js"
+	},
+	"files": [
+		"src",
+		"schemas",
+		"fixtures"
+	],
+	"scripts": {
+		"test": "node --test test/*.test.js"
+	},
+	"engines": {
+		"node": ">=22.6.0"
+	}
+}

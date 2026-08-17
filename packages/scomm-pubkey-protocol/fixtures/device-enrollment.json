@@ -1,0 +1,30 @@
+{
+  "description": "Canonical DeviceAuthorization and enrollment QR payloads",
+  "authorization": {
+    "version": 1,
+    "principal_id": "018f0000-0000-8000-8000-000000000001",
+    "device_id": "dev-1",
+    "device_public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "device_key_algorithm": "ed25519",
+    "created_at": 1700000000000,
+    "permissions": [
+      "authorize_device",
+      "decrypt_mail",
+      "encrypt_mail",
+      "manage_identity",
+      "manage_vault",
+      "sync_vault"
+    ],
+    "nonce": "nonce1"
+  },
+  "qr": {
+    "version": 1,
+    "session_id": "sess-1",
+    "device_public_key": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "ephemeral_public_key": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    "kem": "x25519",
+    "expiry": 1700000300000,
+    "commitment": "dddd",
+    "rendezvous": {}
+  }
+}
