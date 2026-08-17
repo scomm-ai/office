@@ -34,7 +34,6 @@
 		"Same fingerprint with different secret material is vault_integrity",
 		"Same generation key_id with different fingerprints MUST be retained",
 		"Merge never discards a private historical key merely because it is not current",
-		"Hosted wrap v2 mixes a server pepper via HKDF; the password never leaves the device",
 		"Integrity is authenticated by AES-GCM"
 	],
 	"locator": {

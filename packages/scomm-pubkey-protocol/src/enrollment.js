@@ -13,6 +13,7 @@ import { canonicalizeJson } from "./jcs.js";
 export function enrollmentQrPayload({
 	version = ENROLLMENT_QR_VERSION,
 	sessionId,
+	deviceId,
 	devicePublicKey,
 	ephemeralPublicKey,
 	kem = ENROLLMENT_KEM,
@@ -28,6 +29,7 @@ export function enrollmentQrPayload({
 	return {
 		version,
 		session_id: sessionId,
+		device_id: deviceId,
 		device_public_key: devicePublicKey,
 		ephemeral_public_key: ephemeralPublicKey,
 		kem,
@@ -42,6 +44,7 @@ export function canonicalizeEnrollmentQr(payload) {
 		return canonicalizeJson(enrollmentQrPayload({
 			version: payload.version,
 			sessionId: payload.session_id,
+			deviceId: payload.device_id,
 			devicePublicKey: payload.device_public_key,
 			ephemeralPublicKey: payload.ephemeral_public_key,
 			kem: payload.kem,

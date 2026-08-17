@@ -451,7 +451,6 @@ export class WebCryptoProvider extends CryptoProvider {
 			passphrase,
 			salt,
 			iterations,
-			options.pepper,
 		);
 		const ciphertext = new Uint8Array(
 			await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext),
@@ -459,8 +458,8 @@ export class WebCryptoProvider extends CryptoProvider {
 		return { salt, iv, iterations, ciphertext };
 	}
 
-	async unwrapVault(ciphertext, passphrase, salt, iv, iterations, pepper) {
-		const key = await this._vaultKey(passphrase, salt, iterations, pepper);
+	async unwrapVault(ciphertext, passphrase, salt, iv, iterations) {
+		const key = await this._vaultKey(passphrase, salt, iterations);
 		try {
 			return new Uint8Array(
 				await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext),
@@ -519,7 +518,7 @@ export class WebCryptoProvider extends CryptoProvider {
 		);
 	}
 
-	async _vaultKey(passphrase, salt, iterations, pepper) {
+	async _vaultKey(passphrase, salt, iterations) {
 		const material = await crypto.subtle.importKey(
 			"raw",
 			new TextEncoder().encode(passphrase),
@@ -537,25 +536,7 @@ export class WebCryptoProvider extends CryptoProvider {
 			material,
 			256,
 		);
-		let raw = new Uint8Array(bits);
-		if (pepper && pepper.length) {
-			const hkdfKey = await crypto.subtle.importKey("raw", raw, "HKDF", false, [
-				"deriveBits",
-			]);
-			raw = new Uint8Array(
-				await crypto.subtle.deriveBits(
-					{
-						name: "HKDF",
-						hash: "SHA-256",
-						salt: pepper instanceof Uint8Array ? pepper : new Uint8Array(pepper),
-						info: new TextEncoder().encode("scomm-vault-wrap-v1"),
-					},
-					hkdfKey,
-					256,
-				),
-			);
-		}
-		return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
+		return crypto.subtle.importKey("raw", new Uint8Array(bits), { name: "AES-GCM" }, false, [
 			"encrypt",
 			"decrypt",
 		]);

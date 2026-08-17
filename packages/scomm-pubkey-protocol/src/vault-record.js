@@ -8,10 +8,7 @@ import { ERROR_CODES } from "./errors.js";
 export function vaultRecordEnvelope({
 	version = VAULT_RECORD_VERSION,
 	recordId,
-	kind,
-	fingerprint,
 	ciphertext,
-	contentSha256,
 }) {
 	if (version !== VAULT_RECORD_VERSION) {
 		const err = new Error("Unsupported vault record version");
@@ -21,10 +18,7 @@ export function vaultRecordEnvelope({
 	return {
 		record_version: version,
 		record_id: recordId,
-		kind,
-		fingerprint,
 		ciphertext,
-		content_sha256: contentSha256,
 	};
 }
 

@@ -186,7 +186,7 @@ export class Vault {
 	entries: VaultEntry[];
 	vrk: Uint8Array | null;
 	createVault(principal: string): Promise<this>;
-	unlockVault(passphrase: string, options?: { pepper?: Uint8Array | string }): Promise<this>;
+	unlockVault(passphrase: string): Promise<this>;
 	ensureVrk(): Uint8Array;
 	lockVault(): void;
 	listKeys(): Array<Omit<VaultEntry, "private_material">>;
@@ -198,9 +198,9 @@ export class Vault {
 	addKey(entry: VaultEntry): VaultEntry;
 	retireKey(keyId: number): VaultEntry | null;
 	merge(other: Vault): this;
-	persist(passphrase: string, options?: { pepper?: Uint8Array }): Promise<unknown>;
-	exportVault(passphrase: string, options?: { pepper?: Uint8Array }): Promise<unknown>;
-	importVault(exported: unknown, passphrase: string, options?: { pepper?: Uint8Array }): Promise<this>;
+	persist(passphrase: string): Promise<unknown>;
+	exportVault(passphrase: string): Promise<unknown>;
+	importVault(exported: unknown, passphrase: string): Promise<this>;
 	exportKeyPackage(fingerprint: string, passphrase: string): Promise<unknown>;
 	importKeyPackage(exported: unknown, passphrase: string): Promise<VaultEntry>;
 }
@@ -245,20 +245,10 @@ export class PubkeyClient {
 	}): Promise<Record<string, unknown>>;
 	discoveryCapabilities(policy?: unknown): Promise<{ families: Record<string, string[]> }>;
 	getMe(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
-	vaultPut(input: {
-		email: string;
-		blob: unknown;
-		expectedRevision: number;
-		mskKey: KeyHandle;
-	}): Promise<unknown>;
-	vaultGet(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
-	vaultHead(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
-	vaultDisable(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
 	reportVaultCoverage(input: {
 		email: string;
 		mskKey: KeyHandle;
 		deviceId: string;
-		platform?: string;
 		locators?: string[];
 		fingerprints?: string[];
 	}): Promise<unknown>;

@@ -1,11 +1,9 @@
 /** OpenPGP 64-bit Key-ID display: AB12-CD34-EF56-7890 */
 export const OPENPGP_LOCATOR_GROUPS = 4;
 export const OPENPGP_LOCATOR_HEX_LEN = 16;
-export const VAULT_WRAP_INFO = "scomm-vault-wrap-v1";
 export const KEY_PACKAGE_KIND = "scomm-key-package";
 export const KEY_PACKAGE_VERSION = 1;
 export const VAULT_WRAP_VERSION_V1 = 1;
-export const VAULT_WRAP_VERSION_V2 = 2;
 
 export function normalizeHex(value) {
 	return String(value || "")

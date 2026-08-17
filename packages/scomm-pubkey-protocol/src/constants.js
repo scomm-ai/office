@@ -16,10 +16,6 @@ export const OPERATIONS = Object.freeze({
 	get_best_key: "get_best_key",
 	get_me: "get_me",
 	report_vault_coverage: "report_vault_coverage",
-	vault_put: "vault_put",
-	vault_get: "vault_get",
-	vault_head: "vault_head",
-	vault_disable: "vault_disable",
 	authorize_device: "authorize_device",
 	revoke_device: "revoke_device",
 	list_devices: "list_devices",
@@ -97,7 +93,6 @@ export const VAULT_PBKDF2_ITERATIONS = 210_000;
 export const VAULT_SALT_BYTES = 16;
 export const VAULT_IV_BYTES = 12;
 export const VAULT_PEPPER_BYTES = 32;
-export const VAULT_WRAP_INFO = "scomm-vault-wrap-v1";
 
 export const DEVICE_AUTHORIZATION_VERSION = 1;
 export const ENROLLMENT_QR_VERSION = 1;
@@ -111,22 +106,6 @@ export const ENROLLMENT_KEM_FALLBACK = "p-256";
 export const ENROLLMENT_HKDF_INFO = "scomm-enrollment-v1";
 export const MSK_WRAP_INFO = "scomm-msk-wrap-v1";
 export const VRK_WRAP_INFO = "scomm-vrk-wrap-v1";
-export const FULL_DEVICE_PERMISSIONS = Object.freeze([
-	"decrypt_mail",
-	"encrypt_mail",
-	"sync_vault",
-	"manage_vault",
-	"manage_identity",
-	"authorize_device",
-]);
-
-export const DEVICE_STATUS = Object.freeze({
-	pending: "pending",
-	active: "active",
-	revoked: "revoked",
-	expired: "expired",
-});
-
 export const ENROLLMENT_STATE = Object.freeze({
 	new: "NEW",
 	qrCreated: "QR_CREATED",

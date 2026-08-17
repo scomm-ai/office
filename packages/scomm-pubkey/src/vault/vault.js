@@ -10,7 +10,6 @@ import {
 	KEY_PACKAGE_KIND,
 	KEY_PACKAGE_VERSION,
 	VAULT_WRAP_VERSION_V1,
-	VAULT_WRAP_VERSION_V2,
 } from "@scomm/pubkey-protocol";
 import { PubkeyError } from "../errors.js";
 import { MemoryVaultStore } from "./store.js";
@@ -93,7 +92,7 @@ export class Vault {
 		return this;
 	}
 
-	async unlockVault(passphrase, { pepper } = {}) {
+	async unlockVault(passphrase) {
 		const record = await this.store.load();
 		if (!record) {
 			throw new PubkeyError(ERROR_CODES.vault_corrupt, "No vault in store");
@@ -106,7 +105,6 @@ export class Vault {
 				decodeBase64Url(record.kdf.salt),
 				decodeBase64Url(record.encryption.iv),
 				record.kdf.iterations,
-				pepper ? (pepper instanceof Uint8Array ? pepper : decodeBase64Url(pepper)) : undefined,
 			);
 		} catch (err) {
 			if (err instanceof PubkeyError) throw err;
@@ -274,7 +272,7 @@ export class Vault {
 		return this;
 	}
 
-	async exportVault(passphrase, { pepper } = {}) {
+	async exportVault(passphrase) {
 		this._requireUnlocked();
 		const plaintext = {
 			vault_format_version: VAULT_FORMAT_VERSION,
@@ -293,11 +291,11 @@ export class Vault {
 		const wrapped = await this.crypto.wrapVault(
 			new TextEncoder().encode(JSON.stringify(plaintext)),
 			passphrase,
-			{ iterations: VAULT_PBKDF2_ITERATIONS, pepper },
+			{ iterations: VAULT_PBKDF2_ITERATIONS },
 		);
 		return {
 			vault_format_version: VAULT_FORMAT_VERSION,
-			wrap_version: pepper ? VAULT_WRAP_VERSION_V2 : VAULT_WRAP_VERSION_V1,
+			wrap_version: VAULT_WRAP_VERSION_V1,
 			kdf: {
 				name: VAULT_KDF,
 				iterations: wrapped.iterations,
@@ -378,27 +376,27 @@ export class Vault {
 		return this.addKey(entry);
 	}
 
-	async importVault(exported, passphrase, { pepper } = {}) {
+	async importVault(exported, passphrase) {
 		const previous = await this.store.load();
 		try {
 			await this.store.save(exported);
-			return await this.unlockVault(passphrase, { pepper });
+			return await this.unlockVault(passphrase);
 		} catch (err) {
 			if (previous) await this.store.save(previous);
 			throw err;
 		}
 	}
 
-	async backupVault(passphrase, options) {
-		return this.exportVault(passphrase, options);
+	async backupVault(passphrase) {
+		return this.exportVault(passphrase);
 	}
 
-	async restoreVault(exported, passphrase, options) {
-		return this.importVault(exported, passphrase, options);
+	async restoreVault(exported, passphrase) {
+		return this.importVault(exported, passphrase);
 	}
 
-	async persist(passphrase, options) {
-		const exported = await this.exportVault(passphrase, options);
+	async persist(passphrase) {
+		const exported = await this.exportVault(passphrase);
 		const previous = await this.store.load();
 		try {
 			await this.store.save(exported);

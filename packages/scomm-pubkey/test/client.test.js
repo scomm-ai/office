@@ -75,8 +75,11 @@ describe("PubkeyClient", () => {
 		});
 		assert.equal(selected.key_id, 3);
 		assert.match(seen, /\/v1\/keys\?/);
+		assert.match(seen, /sha256=/);
 		assert.match(seen, /capabilities=/);
 		assert.match(seen, /purpose=encryption/);
+		assert.doesNotMatch(seen, /[?&]principal=/);
+		assert.doesNotMatch(seen, /[?&]email=/);
 	});
 
 	it("retries connection failures then succeeds", async () => {
@@ -178,7 +181,7 @@ describe("PubkeyClient", () => {
 				ops.push(body.operation);
 				if (body.operation === OPERATIONS.vault_list) {
 					return new Response(
-						JSON.stringify({ record_ids: ["remote-only"] }),
+						JSON.stringify({ record_ids: [remoteRecord.record_id] }),
 						{ status: 200, headers: { "Content-Type": "application/json" } },
 					);
 				}

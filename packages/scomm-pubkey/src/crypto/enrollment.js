@@ -12,6 +12,8 @@ import {
 	deviceAuthorizationPayload,
 	encodeBase64Url,
 	enrollmentQrPayload,
+	sha256Bytes,
+	sha256ToUuidV8,
 } from "@scomm/pubkey-protocol";
 import { PubkeyError } from "../errors.js";
 
@@ -51,6 +53,7 @@ export async function enrollmentCommitment(crypto, qrFields) {
 
 export async function buildEnrollmentQr(crypto, {
 	sessionId,
+	deviceId,
 	devicePublicKey,
 	ephemeral,
 	rendezvous,
@@ -58,6 +61,7 @@ export async function buildEnrollmentQr(crypto, {
 }) {
 	const draft = enrollmentQrPayload({
 		sessionId,
+		deviceId,
 		devicePublicKey: encodeBase64Url(devicePublicKey),
 		ephemeralPublicKey: encodeBase64Url(ephemeral.publicKey),
 		kem: ephemeral.algorithm,
@@ -220,6 +224,7 @@ export async function decryptVaultRecord(crypto, vrk, box) {
 
 export async function encodeVaultRecord(crypto, vrk, entry) {
 	const fingerprint = entry.fingerprint || String(entry.key_id || "");
+	const recordId = sha256ToUuidV8(await sha256Bytes(fingerprint));
 	const payload = {
 		...entry,
 		private_material:
@@ -229,9 +234,7 @@ export async function encodeVaultRecord(crypto, vrk, entry) {
 	};
 	const box = await encryptVaultRecord(crypto, vrk, payload);
 	return {
-		record_id: fingerprint,
-		kind: entry.kind || "content",
-		fingerprint,
+		record_id: recordId,
 		ciphertext: encodeBase64Url(packVaultRecordBox(box)),
 	};
 }

@@ -1,7 +1,6 @@
 import {
 	DEVICE_KEY_ALGORITHM,
 	ENROLLMENT_STATE,
-	FULL_DEVICE_PERMISSIONS,
 	MSK_ALGORITHM,
 	OPERATIONS,
 	PROTOCOL_VERSION,
@@ -15,6 +14,8 @@ import {
 	principalFromEmail,
 	requireCanonicalEmail,
 	resolveIdentityUxState,
+	emailSha256Hex,
+	sha256ToUuidV8,
 } from "@scomm/pubkey-protocol";
 import { pubkeyFetch, joinUrl } from "./http.js";
 import { PubkeyError } from "./errors.js";
@@ -96,10 +97,11 @@ export class PubkeyClient {
 	}) {
 		const canonical = requireCanonicalEmail(normalizeEmail(email));
 		const principal = await principalFromEmail(canonical);
+		const sha256 = await emailSha256Hex(canonical);
 		const proof = await this._signOperation({
 			operation: OPERATIONS.arm_msk,
 			principal,
-			payload: { email: canonical },
+			payload: {},
 			key: mskKey,
 		});
 		let firstDevice;
@@ -113,7 +115,7 @@ export class PubkeyClient {
 		return pubkeyFetch(joinUrl(this.writeBaseUrl, "/v1/msk/enroll/verify"), {
 			method: "POST",
 			body: {
-				email: canonical,
+				sha256,
 				otp,
 				captcha,
 				msk_proof: proof,
@@ -141,10 +143,11 @@ export class PubkeyClient {
 	async verifyReplace({ email, otp, captcha, mskKey, device }) {
 		const canonical = requireCanonicalEmail(normalizeEmail(email));
 		const principal = await principalFromEmail(canonical);
+		const sha256 = await emailSha256Hex(canonical);
 		const proof = await this._signOperation({
 			operation: OPERATIONS.arm_replacement_msk,
 			principal,
-			payload: { email: canonical },
+			payload: {},
 			key: mskKey,
 		});
 		let recoveryDevice;
@@ -158,7 +161,7 @@ export class PubkeyClient {
 		return pubkeyFetch(joinUrl(this.writeBaseUrl, "/v1/msk/replace/verify"), {
 			method: "POST",
 			body: {
-				email: canonical,
+				sha256,
 				otp,
 				captcha,
 				msk_proof: proof,
@@ -234,16 +237,24 @@ export class PubkeyClient {
 	async getBestKey({
 		email,
 		sha256,
-		principal,
 		purpose,
 		capabilities,
 		capabilityPolicy,
 	}) {
 		const params = new URLSearchParams();
-		if (sha256) params.set("sha256", sha256);
-		if (principal) params.set("principal", principal);
+		const hash =
+			sha256 ||
+			(email
+				? await emailSha256Hex(requireCanonicalEmail(normalizeEmail(email)))
+				: null);
+		if (!hash) {
+			throw new PubkeyError(
+				"principal_mismatch",
+				"sha256 of the canonical email is required",
+			);
+		}
+		params.set("sha256", hash);
 		if (purpose) params.set("purpose", purpose);
-		if (email) params.set("email", requireCanonicalEmail(normalizeEmail(email)));
 		const resolved =
 			capabilities ?? (await this.discoveryCapabilities(capabilityPolicy));
 		params.set("capabilities", JSON.stringify(resolved));
@@ -257,7 +268,6 @@ export class PubkeyClient {
 		email,
 		mskKey,
 		deviceId,
-		platform,
 		locators,
 		fingerprints,
 	}) {
@@ -266,46 +276,9 @@ export class PubkeyClient {
 			operation: OPERATIONS.report_vault_coverage,
 			payload: {
 				device_id: deviceId,
-				platform,
 				locators,
 				fingerprints,
 			},
-			mskKey,
-		});
-	}
-
-	async vaultPut({ email, blob, expectedRevision, mskKey }) {
-		return this.mutate({
-			email,
-			operation: OPERATIONS.vault_put,
-			payload: { blob, expected_revision: expectedRevision },
-			mskKey,
-		});
-	}
-
-	async vaultGet({ email, mskKey }) {
-		return this.mutate({
-			email,
-			operation: OPERATIONS.vault_get,
-			payload: {},
-			mskKey,
-		});
-	}
-
-	async vaultHead({ email, mskKey }) {
-		return this.mutate({
-			email,
-			operation: OPERATIONS.vault_head,
-			payload: {},
-			mskKey,
-		});
-	}
-
-	async vaultDisable({ email, mskKey }) {
-		return this.mutate({
-			email,
-			operation: OPERATIONS.vault_disable,
-			payload: {},
 			mskKey,
 		});
 	}
@@ -336,30 +309,30 @@ export class PubkeyClient {
 
 	async beginDeviceEnrollment({ email, device, rendezvous }) {
 		const deviceKey = device?.identityKey ?? (await generateDeviceKey(this.crypto));
-		const wrapKey =
-			device?.wrapKey ??
-			(await this.crypto.generateKey({
-				algorithm: "x25519",
-				purpose: "key-agreement",
-				extractable: false,
-			}));
 		const ephemeral = await generateEnrollmentEphemeral(this.crypto);
 		const sessionId = encodeBase64Url(this.crypto.random(16));
+		const deviceId = await this._deviceIdFromPublicKey(deviceKey.publicKey);
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const emailSha256 = await emailSha256Hex(canonicalEmail);
 		const qr = await buildEnrollmentQr(this.crypto, {
 			sessionId,
+			deviceId,
 			devicePublicKey: deviceKey.publicKey,
 			ephemeral,
-			rendezvous: rendezvous ?? { write_base: this.writeBaseUrl },
+			rendezvous: {
+				...(rendezvous ?? {}),
+				write_base: rendezvous?.write_base ?? this.writeBaseUrl,
+				email_sha256: emailSha256,
+			},
 		});
 		const created = await pubkeyFetch(
 			joinUrl(this.writeBaseUrl, "/v1/device-enrollments"),
 			{
 				method: "POST",
 				body: {
-					email: requireCanonicalEmail(normalizeEmail(email)),
+					email: canonicalEmail,
 					qr,
 					device_public_key: encodeBase64Url(deviceKey.publicKey),
-					device_wrap_public_key: encodeBase64Url(wrapKey.publicKey),
 					device_key_algorithm: DEVICE_KEY_ALGORITHM,
 				},
 				fetch: this.fetchImpl,
@@ -367,10 +340,10 @@ export class PubkeyClient {
 		);
 		return {
 			...created,
+			deviceId,
 			state: ENROLLMENT_STATE.qrCreated,
 			qr,
 			deviceKey,
-			wrapKey,
 			ephemeral,
 			pairingCode: JSON.stringify(qr),
 		};
@@ -397,11 +370,8 @@ export class PubkeyClient {
 			email,
 			mskKey,
 			device: {
-				deviceId: qr.session_id,
+				deviceId: qr.device_id,
 				publicKey: decodePeer(qr.device_public_key),
-				wrapPublicKey: qr.device_wrap_public_key
-					? decodePeer(qr.device_wrap_public_key)
-					: decodePeer(qr.device_public_key),
 				name: deviceName,
 			},
 		});
@@ -430,7 +400,9 @@ export class PubkeyClient {
 			{
 				method: "POST",
 				body: {
-					slot: "bootstrap",
+					sha256: await emailSha256Hex(
+						requireCanonicalEmail(normalizeEmail(email)),
+					),
 					ephemeral_public_key: encodeBase64Url(ephemeral.publicKey),
 					...box,
 				},
@@ -463,8 +435,18 @@ export class PubkeyClient {
 	}
 
 	async pullEnrollmentBootstrap({ sessionId, ephemeral, qr }) {
+		const sha256 = String(qr?.rendezvous?.email_sha256 || "");
+		if (!sha256) {
+			throw new PubkeyError(
+				"principal_mismatch",
+				"Enrollment QR is missing its email hash",
+			);
+		}
 		const relay = await pubkeyFetch(
-			joinUrl(this.writeBaseUrl, `/v1/device-enrollments/${sessionId}/relay?slot=bootstrap`),
+			joinUrl(
+				this.writeBaseUrl,
+				`/v1/device-enrollments/${sessionId}/relay?sha256=${encodeURIComponent(sha256)}`,
+			),
 			{ fetch: this.fetchImpl },
 		);
 		const transcript = `${qr.session_id}:${qr.commitment}:${relay.ephemeral_public_key}`;
@@ -579,15 +561,12 @@ export class PubkeyClient {
 	async _signDeviceAuthorization({ email, mskKey, device }) {
 		const canonical = requireCanonicalEmail(normalizeEmail(email));
 		const principal = await principalFromEmail(canonical);
+		const publicKey = device.publicKey ?? device.identityKey.publicKey;
 		const payload = deviceAuthorizationPayload({
 			principalId: principal,
-			deviceId: device.deviceId ?? encodeBase64Url(this.crypto.random(16)),
-			devicePublicKey: encodeBase64Url(device.publicKey ?? device.identityKey.publicKey),
-			deviceWrapPublicKey: device.wrapPublicKey
-				? encodeBase64Url(device.wrapPublicKey)
-				: undefined,
+			deviceId: await this._deviceIdFromPublicKey(publicKey),
+			devicePublicKey: encodeBase64Url(publicKey),
 			createdAt: Date.now(),
-			permissions: device.permissions ?? [...FULL_DEVICE_PERMISSIONS],
 			nonce: encodeBase64Url(this.crypto.random(16)),
 			deviceName: device.name,
 		});
@@ -598,6 +577,10 @@ export class PubkeyClient {
 			key: mskKey,
 		});
 		return { ...envelope, payload };
+	}
+
+	async _deviceIdFromPublicKey(publicKey) {
+		return sha256ToUuidV8(await this.crypto.hash("sha-256", publicKey));
 	}
 
 	async getMe({ email, mskKey }) {

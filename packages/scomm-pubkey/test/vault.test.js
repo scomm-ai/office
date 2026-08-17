@@ -126,32 +126,6 @@ describe("Vault", () => {
 		assert.equal(target.getKeyByFingerprint("fp-1").locator, "AB12-CD34-EF56-7890");
 	});
 
-	it("wraps with a server pepper so password-only unwrap fails", async () => {
-		const crypto = new WebCryptoProvider();
-		const vault = new Vault({ crypto, store: new MemoryVaultStore() });
-		await vault.createVault("p");
-		vault.addKey({
-			kind: "content",
-			key_id: 1,
-			fingerprint: "k1",
-			private_material: new Uint8Array([1]),
-			status: "active",
-		});
-		const pepper = new Uint8Array(32).fill(7);
-		const exported = await vault.exportVault("correct horse battery staple", {
-			pepper,
-		});
-		const other = new Vault({ crypto, store: new MemoryVaultStore() });
-		await assert.rejects(
-			() => other.importVault(exported, "correct horse battery staple"),
-			(err) =>
-				err instanceof PubkeyError &&
-				err.code === "vault_authentication_failure",
-		);
-		await other.importVault(exported, "correct horse battery staple", { pepper });
-		assert.equal(other.getKeyByFingerprint("k1").fingerprint, "k1");
-	});
-
 	it("merges the union of historical keys", async () => {
 		const crypto = new WebCryptoProvider();
 		const a = new Vault({ crypto });

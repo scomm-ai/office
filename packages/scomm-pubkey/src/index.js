@@ -29,7 +29,6 @@ export {
 	OTP_BASE62_ALPHABET,
 	PUBLIC_PRODUCT_NAME,
 	OTP_FROM_DISPLAY_NAME,
-	FULL_DEVICE_PERMISSIONS,
 	deviceAuthorizationPayload,
 	resolveIdentityUxState,
 	mustNotGenerateMsk,
@@ -71,6 +70,4 @@ export { Vault } from "./vault/vault.js";
 export {
 	VaultStore,
 	MemoryVaultStore,
-	VaultTransport,
-	HttpVaultTransport,
 } from "./vault/store.js";

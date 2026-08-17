@@ -256,10 +256,10 @@ export function SecurityPanel() {
       const listed = (await session.client.listDevices({
         email: normalizeEmail(userEmail),
         mskKey: session.msk,
-      })) as { devices?: Array<{ device_id: string; status: string; device_name?: string }> };
+      })) as { devices?: Array<{ device_id: string; active: boolean; device_name?: string }> };
       setDevicesNote(
         (listed.devices ?? [])
-          .map((device) => `${device.device_name || device.device_id} (${device.status})`)
+          .map((device) => `${device.device_name || device.device_id} (${device.active ? "active" : "revoked"})`)
           .join(" · ") || "No authorized devices yet",
       );
     } catch (err) {

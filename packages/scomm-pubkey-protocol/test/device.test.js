@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import {
 	canonicalizeDeviceAuthorization,
 	deviceAuthorizationPayload,
-	FULL_DEVICE_PERMISSIONS,
 	mustNotGenerateMsk,
 	resolveIdentityUxState,
 	IDENTITY_UX_STATES,
@@ -16,31 +15,19 @@ import {
 } from "../src/index.js";
 
 describe("device authorization", () => {
-	it("canonicalizes permissions in sorted order", () => {
-		const a = canonicalizeDeviceAuthorization({
+	it("does not include unenforced permissions", () => {
+		const payload = deviceAuthorizationPayload({
 			principalId: "p",
 			deviceId: "d",
 			devicePublicKey: "pub",
 			createdAt: 1,
-			permissions: ["sync_vault", "decrypt_mail"],
 			nonce: "n",
 		});
-		const b = canonicalizeDeviceAuthorization({
-			principalId: "p",
-			deviceId: "d",
-			devicePublicKey: "pub",
-			createdAt: 1,
-			permissions: ["decrypt_mail", "sync_vault"],
-			nonce: "n",
-		});
-		assert.equal(a, b);
-		assert.deepEqual(deviceAuthorizationPayload({
-			principalId: "p",
-			deviceId: "d",
-			devicePublicKey: "pub",
-			createdAt: 1,
-			nonce: "n",
-		}).permissions, [...FULL_DEVICE_PERMISSIONS].sort());
+		assert.equal("permissions" in payload, false);
+		assert.equal(canonicalizeDeviceAuthorization(payload), canonicalizeDeviceAuthorization({
+			...payload,
+			permissions: ["sync_vault"],
+		}));
 	});
 });
 

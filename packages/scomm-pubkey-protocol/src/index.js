@@ -24,7 +24,6 @@ export {
 	VAULT_SALT_BYTES,
 	VAULT_IV_BYTES,
 	VAULT_PEPPER_BYTES,
-	VAULT_WRAP_INFO,
 	DEVICE_AUTHORIZATION_VERSION,
 	ENROLLMENT_QR_VERSION,
 	ENROLLMENT_HANDSHAKE_VERSION,
@@ -37,8 +36,6 @@ export {
 	ENROLLMENT_HKDF_INFO,
 	MSK_WRAP_INFO,
 	VRK_WRAP_INFO,
-	FULL_DEVICE_PERMISSIONS,
-	DEVICE_STATUS,
 	ENROLLMENT_STATE,
 	RECOVERY_STATE,
 	IDENTITY_UX_STATES,
@@ -57,8 +54,6 @@ export {
 	KEY_PACKAGE_KIND,
 	KEY_PACKAGE_VERSION,
 	VAULT_WRAP_VERSION_V1,
-	VAULT_WRAP_VERSION_V2,
-	VAULT_WRAP_INFO as LOCATOR_VAULT_WRAP_INFO,
 } from "./locator.js";
 export {
 	normalizeEmail,
@@ -96,7 +91,6 @@ export {
 	applyCapabilityPolicy,
 } from "./capabilities.js";
 export {
-	normalizePermissions,
 	deviceAuthorizationPayload,
 	canonicalizeDeviceAuthorization,
 } from "./device.js";
