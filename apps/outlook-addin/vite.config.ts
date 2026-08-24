@@ -18,6 +18,8 @@ const workspacePackages = [
   "policy",
   "config",
   "storage",
+  "billing",
+  "byoai",
   "observability",
   "microsoft-graph",
   "crypto",
