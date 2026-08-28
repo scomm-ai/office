@@ -1,5 +1,4 @@
-import type { PublicKeyCache, PublicKeyCacheEntry } from "./types.js";
-import { CryptoFamily } from "./types.js";
+import type { PublicKeyCache, PublicKeyCacheEntry, CryptoFamily } from "./types.js";
 
 export class MemoryPublicKeyCache implements PublicKeyCache {
   private readonly entries = new Map<string, PublicKeyCacheEntry>();

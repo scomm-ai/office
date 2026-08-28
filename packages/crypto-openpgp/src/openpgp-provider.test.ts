@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CryptoFamily } from "@scomm-office/crypto";
-import { detectMimeStructure, mimeToEml } from "@scomm-office/mime";
+import { detectMimeStructure } from "@scomm-office/mime";
 import {
   OpenPgpCryptoProvider,
   generateOpenPgpKeyPair,
@@ -12,7 +12,6 @@ import { join } from "node:path";
 describe("OpenPgpCryptoProvider RFC 3156", () => {
   it("signs with multipart/signed and verifies independently", async () => {
     const alice = await generateOpenPgpKeyPair("alice@example.com");
-    const bob = await generateOpenPgpKeyPair("bob@example.com");
     const provider = new OpenPgpCryptoProvider();
 
     const message = {
@@ -46,7 +45,6 @@ describe("OpenPgpCryptoProvider RFC 3156", () => {
   });
 
   it("encrypts with multipart/encrypted RFC 3156 structure", async () => {
-    const alice = await generateOpenPgpKeyPair("alice@example.com");
     const bob = await generateOpenPgpKeyPair("bob@example.com");
     const provider = new OpenPgpCryptoProvider();
 

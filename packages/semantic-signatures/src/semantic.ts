@@ -145,15 +145,6 @@ export async function verifySemanticManifest(
     };
   }
 
-  const expected = await buildSemanticManifest({
-    message,
-    senderEmail: manifest.sender,
-    signingKeyId: manifest.signing_key_id,
-    nonce: manifest.nonce,
-    timestamp: manifest.timestamp,
-    algorithm: manifest.algorithm,
-  });
-
   const subjectMatch = (message.subject ?? "") === manifest.subject;
   const senderMatch = normalizeRecipients(message.from ? [message.from] : [])[0]?.emailAddress === manifest.sender;
   const toMatch =

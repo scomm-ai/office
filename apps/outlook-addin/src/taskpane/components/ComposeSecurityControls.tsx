@@ -12,7 +12,7 @@ import { restoreOfficeVault, type OfficePubkeySession } from "../../lib/pubkey-s
 import { resolvePubkeyReadBaseUrl } from "../../lib/settings";
 
 export function useComposeSecurity(session: OfficePubkeySession | null, userEmail: string | undefined) {
-  const { mailHost, message, refreshMessage, settings } = useHostContext();
+  const { mailHost, message, refreshMessage } = useHostContext();
   const [sign, setSign] = useState(false);
   const [encrypt, setEncrypt] = useState(false);
   const [protocol, setProtocol] = useState<"automatic" | CryptoFamily>("automatic");

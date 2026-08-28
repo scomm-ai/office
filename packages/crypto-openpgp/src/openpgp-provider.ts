@@ -9,6 +9,7 @@ import {
   type DecryptionKeyHandle,
   type ProtectedMessage,
   type PublicKeyMaterial,
+  type PublicKeyMetadata,
   type SigningKeyHandle,
   type VerificationState,
 } from "@scomm-office/crypto";
@@ -60,7 +61,7 @@ async function readPrivateKeyFromHandle(
 /** Handle that wraps raw private key bytes for OpenPGP operations. */
 export class OpenPgpPrivateKeyHandle implements SigningKeyHandle, DecryptionKeyHandle {
   constructor(
-    private readonly metadata: import("@scomm-office/crypto").PublicKeyMetadata,
+    private readonly metadata: PublicKeyMetadata,
     readonly privateKeyBytes: Uint8Array,
     private readonly publicKeyBytes: Uint8Array,
   ) {}
@@ -92,14 +93,6 @@ export class OpenPgpPrivateKeyHandle implements SigningKeyHandle, DecryptionKeyH
     const msg = await openpgp.createMessage({ binary: data });
     return openpgp.sign({ message: msg, signingKeys: key, detached: true, format: "armored" });
   }
-}
-
-async function readOpenPgpMessage(data: Uint8Array): Promise<openpgp.Message<string>> {
-  const text = new TextDecoder().decode(data);
-  if (text.includes("BEGIN PGP MESSAGE")) {
-    return openpgp.readMessage({ armoredMessage: text });
-  }
-  return openpgp.readMessage({ binaryMessage: data });
 }
 
 function innerMimeBytes(message: LogicalMessage): Uint8Array {

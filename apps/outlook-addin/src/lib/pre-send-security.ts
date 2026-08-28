@@ -1,5 +1,5 @@
 import { captureComposeSnapshot } from "@scomm-office/message-core";
-import { OfficeSubmissionAdapter } from "@scomm-office/office";
+import { OfficeSubmissionAdapter, type MailHost } from "@scomm-office/office";
 import { collectRecipientEmails } from "./semantic-policy.js";
 import {
   defaultSecurityPolicy,
@@ -18,7 +18,7 @@ export interface PreSendSecurityResult {
 
 export async function evaluatePreSendSecurity(
   session: OfficePubkeySession,
-  mailHost: import("@scomm-office/office").MailHost,
+  mailHost: MailHost,
   userEmail: string,
   options: ComposeSecurityOptions,
 ): Promise<PreSendSecurityResult> {

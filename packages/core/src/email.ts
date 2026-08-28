@@ -60,7 +60,7 @@ const MAX_LABEL_OCTETS = 63;
 
 /** RFC 5322 atext plus `.` and SMTPUTF8 letters / marks / numbers. */
 const LOCAL_CHARS =
-  /^[\p{L}\p{N}\p{M}!#$%&'*+\/=?^_`{|}~.-]+$/u;
+  /^[\p{L}\p{N}\p{M}!#$%&'*+/=?^_`{|}~.-]+$/u;
 
 /** IDNA / LDH label: letters, digits, marks, internal hyphen. */
 const DOMAIN_LABEL_CHARS = /^[\p{L}\p{N}\p{M}-]+$/u;

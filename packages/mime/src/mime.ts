@@ -310,7 +310,6 @@ export function extractSignedEntityFromMultipartSigned(raw: string | Uint8Array)
   const body = bodyStart >= 0 ? text.slice(bodyStart + 4) : text;
 
   const delimiter = `--${boundary}`;
-  const endDelimiter = `--${boundary}--`;
   const firstIdx = body.indexOf(delimiter);
   if (firstIdx < 0) return null;
   const afterFirst = firstIdx + delimiter.length;

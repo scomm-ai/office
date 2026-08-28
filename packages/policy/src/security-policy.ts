@@ -1,5 +1,4 @@
-import type { ProtectionMode as CryptoProtectionMode } from "@scomm-office/crypto";
-import { CryptoFamily } from "@scomm-office/crypto";
+import type { ProtectionMode as CryptoProtectionMode, CryptoFamily } from "@scomm-office/crypto";
 import type { NegotiationPolicy, NegotiationResult } from "@scomm-office/capability-negotiation";
 
 export type ProtectionMode = CryptoProtectionMode;

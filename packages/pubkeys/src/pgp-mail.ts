@@ -19,7 +19,11 @@ export function htmlToPlainText(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#13;/g, "\r")
     .replace(/&#10;/g, "\n")
-    .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, "")
+    .replace(/\u00a0/g, "")
+    .replace(/\u200b/g, "")
+    .replace(/\u200c/g, "")
+    .replace(/\u200d/g, "")
+    .replace(/\ufeff/g, "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
 }

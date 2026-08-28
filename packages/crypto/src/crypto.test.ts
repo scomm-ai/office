@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CryptoErrorCodes, MemoryPublicKeyCache, formatShortKeyId, detectProtectionKind } from "./index.js";
+import {
+  CryptoErrorCodes,
+  CryptoFamily,
+  MemoryPublicKeyCache,
+  formatShortKeyId,
+  detectProtectionKind,
+} from "./index.js";
 
 describe("@scomm-office/crypto", () => {
   it("formats short key ids", () => {
@@ -10,7 +16,7 @@ describe("@scomm-office/crypto", () => {
     const cache = new MemoryPublicKeyCache();
     await cache.put({
       identity: "alice@example.com",
-      family: "openpgp" as import("./types.js").CryptoFamily,
+      family: CryptoFamily.OpenPGP,
       algorithm: "openpgp-cv25519",
       keyId: "6677-8899",
       fingerprint: "aabbccddeeff00112233445566778899",
@@ -20,7 +26,7 @@ describe("@scomm-office/crypto", () => {
       status: "active",
       source: "test",
     });
-    const hit = await cache.get("alice@example.com", "openpgp" as import("./types.js").CryptoFamily, "encrypt");
+    const hit = await cache.get("alice@example.com", CryptoFamily.OpenPGP, "encrypt");
     expect(hit?.fingerprint).toContain("8899");
   });
 

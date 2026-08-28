@@ -1,9 +1,8 @@
 import {
   CryptoCore,
-  CryptoFamily,
   MemoryPublicKeyCache,
   detectProtectionKind,
-  type KeyVault,
+  type CryptoFamily,
   type MessageSubmissionAdapter,
   type ProtectedMessage,
   type PublicKeyMaterial,
