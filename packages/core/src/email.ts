@@ -109,7 +109,7 @@ function isValidDomain(domain: string): boolean {
     }
   }
   const tld = labels[labels.length - 1];
-  if (tld.length < 2 || /^\d+$/.test(tld) || !/\p{L}/u.test(tld)) {
+  if (!tld || tld.length < 2 || /^\d+$/.test(tld) || !/\p{L}/u.test(tld)) {
     return false;
   }
   return true;

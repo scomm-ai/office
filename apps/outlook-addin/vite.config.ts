@@ -23,6 +23,13 @@ const workspacePackages = [
   "observability",
   "microsoft-graph",
   "crypto",
+  "message-core",
+  "mime",
+  "crypto-openpgp",
+  "crypto-smime",
+  "semantic-signatures",
+  "capability-negotiation",
+  "mail-security",
 ] as const;
 
 function workspaceAliases(): Record<string, string> {
