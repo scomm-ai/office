@@ -18,7 +18,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@scomm-office/core": "workspace:*"
+    "@scomm-office/core": "workspace:*",
+    "@scomm-office/message-core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { attachmentEncryptionNotice } from "@scomm-office/office";
+import { ComposeSecurityControls } from "../components/ComposeSecurityControls";
 import { useHostContext } from "../../lib/host-context";
 import {
   ProductionPubkeyDirectory,
@@ -528,8 +529,15 @@ export function SecurityPanel() {
         {bootstrapStatus ? <p className="note">{bootstrapStatus}</p> : null}
       </section>
 
+      <ComposeSecurityControls
+        session={sessionFor()}
+        userEmail={userEmail}
+        engineReady={engineReady}
+        composeMode={composeMode}
+      />
+
       <section>
-        <h2>Message encryption</h2>
+        <h2>Legacy body encryption</h2>
         <p className="note">
           Body-only OpenPGP (armored). Recipients need a published pgp key. Your address is
           included so Sent items can decrypt. Attachments and S/MIME are not in this slice.

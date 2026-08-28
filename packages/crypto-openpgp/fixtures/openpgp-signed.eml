@@ -1,0 +1,31 @@
+Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg="pgp-sha256"; boundary="signed_mtchufkl_5f8c928b76c313deee854ba3"
+MIME-Version: 1.0
+
+--signed_mtchufkl_5f8c928b76c313deee854ba3
+Content-Type: multipart/mixed; boundary="mixed_mtchufkk_3832ebf23e98b9c5549350bd"
+MIME-Version: 1.0
+
+--mixed_mtchufkk_3832ebf23e98b9c5549350bd
+Content-Type: multipart/alternative; boundary="alt_mtchufkk_ec672af4ab967b6ea22693b5"
+
+
+--mixed_mtchufkk_3832ebf23e98b9c5549350bd
+Content-Type: text/plain
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="note.txt"
+
+aGVsbG8=
+--mixed_mtchufkk_3832ebf23e98b9c5549350bd--
+--signed_mtchufkl_5f8c928b76c313deee854ba3
+Content-Type: application/pgp-signature
+
+-----BEGIN PGP SIGNATURE-----
+
+wrsEABYKAG0FgmqRGGkJEGgQhcvUL29oRRQAAAAAABwAIHNhbHRAbm90YXRp
+b25zLm9wZW5wZ3Bqcy5vcmegDbewO2IgMTK4M9qEBKrmfDvuSSurE2h5KucT
+W7RctRYhBFfM3TuqYajuvNsRH2gQhcvUL29oAAAKSgEA5oWNCkThEhwIDQAH
+W2EohhIzLGD8Xc09ewsT5O2/72sBANusH79pSuShjh/LbTlm6VBZYcWg8Sqq
+Bdz5okgGj6EB
+=mk9x
+-----END PGP SIGNATURE-----
+--signed_mtchufkl_5f8c928b76c313deee854ba3--

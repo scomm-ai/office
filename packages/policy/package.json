@@ -18,7 +18,9 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@scomm-office/capability-negotiation": "workspace:*",
     "@scomm-office/core": "workspace:*",
+    "@scomm-office/crypto": "workspace:*",
     "@scomm-office/semantics": "workspace:*"
   },
   "devDependencies": {

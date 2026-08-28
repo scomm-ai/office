@@ -96,6 +96,9 @@ importers:
       '@scomm-office/byoai':
         specifier: workspace:*
         version: link:../../packages/byoai
+      '@scomm-office/capability-negotiation':
+        specifier: workspace:*
+        version: link:../../packages/capability-negotiation
       '@scomm-office/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -105,12 +108,21 @@ importers:
       '@scomm-office/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
+      '@scomm-office/crypto-openpgp':
+        specifier: workspace:*
+        version: link:../../packages/crypto-openpgp
       '@scomm-office/identity':
         specifier: workspace:*
         version: link:../../packages/identity
       '@scomm-office/idr':
         specifier: workspace:*
         version: link:../../packages/idr
+      '@scomm-office/mail-security':
+        specifier: workspace:*
+        version: link:../../packages/mail-security
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../../packages/message-core
       '@scomm-office/microsoft-graph':
         specifier: workspace:*
         version: link:../../packages/microsoft-graph
@@ -129,6 +141,9 @@ importers:
       '@scomm-office/pubkeys':
         specifier: workspace:*
         version: link:../../packages/pubkeys
+      '@scomm-office/semantic-signatures':
+        specifier: workspace:*
+        version: link:../../packages/semantic-signatures
       '@scomm-office/semantics':
         specifier: workspace:*
         version: link:../../packages/semantics
@@ -269,6 +284,22 @@ importers:
         specifier: ^3.0.2
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
 
+  packages/capability-negotiation:
+    dependencies:
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@scomm/pubkey-protocol':
+        specifier: workspace:*
+        version: link:../scomm-pubkey-protocol
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
   packages/config:
     dependencies:
       '@scomm-office/core':
@@ -303,6 +334,50 @@ importers:
       '@scomm-office/core':
         specifier: workspace:*
         version: link:../core
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../message-core
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
+  packages/crypto-openpgp:
+    dependencies:
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../message-core
+      '@scomm-office/mime':
+        specifier: workspace:*
+        version: link:../mime
+      openpgp:
+        specifier: ^6.1.0
+        version: 6.3.1
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
+  packages/crypto-smime:
+    dependencies:
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../message-core
+      '@scomm-office/mime':
+        specifier: workspace:*
+        version: link:../mime
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -346,11 +421,74 @@ importers:
         specifier: ^3.0.2
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
 
+  packages/mail-security:
+    dependencies:
+      '@scomm-office/capability-negotiation':
+        specifier: workspace:*
+        version: link:../capability-negotiation
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@scomm-office/crypto-openpgp':
+        specifier: workspace:*
+        version: link:../crypto-openpgp
+      '@scomm-office/crypto-smime':
+        specifier: workspace:*
+        version: link:../crypto-smime
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../message-core
+      '@scomm-office/mime':
+        specifier: workspace:*
+        version: link:../mime
+      '@scomm-office/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@scomm-office/policy':
+        specifier: workspace:*
+        version: link:../policy
+      '@scomm-office/semantic-signatures':
+        specifier: workspace:*
+        version: link:../semantic-signatures
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
+  packages/message-core:
+    dependencies:
+      '@scomm-office/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
   packages/microsoft-graph:
     dependencies:
       '@scomm-office/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
+
+  packages/mime:
+    dependencies:
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../message-core
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -373,6 +511,9 @@ importers:
       '@scomm-office/core':
         specifier: workspace:*
         version: link:../core
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@scomm-office/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -395,9 +536,15 @@ importers:
 
   packages/policy:
     dependencies:
+      '@scomm-office/capability-negotiation':
+        specifier: workspace:*
+        version: link:../capability-negotiation
       '@scomm-office/core':
         specifier: workspace:*
         version: link:../core
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@scomm-office/semantics':
         specifier: workspace:*
         version: link:../semantics
@@ -460,6 +607,19 @@ importers:
         version: 6.3.1
 
   packages/scomm-pubkey-protocol: {}
+
+  packages/semantic-signatures:
+    dependencies:
+      '@scomm-office/message-core':
+        specifier: workspace:*
+        version: link:../message-core
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.2
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
 
   packages/semantics:
     dependencies:

@@ -1,28 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { UnsupportedFeatureError } from "@scomm-office/core";
-import { ExperimentalMessageDecryptor, ExperimentalMessageEncryptor } from "./experimental.js";
+import { CryptoErrorCodes, MemoryPublicKeyCache, formatShortKeyId, detectProtectionKind } from "./index.js";
 
-describe("ExperimentalMessageEncryptor", () => {
-  it("throws UnsupportedFeatureError — proprietary envelopes are not used", async () => {
-    const encryptor = new ExperimentalMessageEncryptor();
-    await expect(
-      encryptor.encrypt({ body: "secret" }, [
-        { identity: "a@b.com", keyId: "k1", publicKey: "pk", algorithm: "X25519" },
-      ]),
-    ).rejects.toThrow(UnsupportedFeatureError);
-    await expect(
-      encryptor.encrypt({ body: "secret" }, [
-        { identity: "a@b.com", keyId: "k1", publicKey: "pk", algorithm: "X25519" },
-      ]),
-    ).rejects.toThrow("OpenPGP");
+describe("@scomm-office/crypto", () => {
+  it("formats short key ids", () => {
+    expect(formatShortKeyId("aabbccddeeff00112233445566778899")).toBe("6677-8899");
   });
-});
 
-describe("ExperimentalMessageDecryptor", () => {
-  it("throws UnsupportedFeatureError — proprietary envelopes are not used", async () => {
-    const decryptor = new ExperimentalMessageDecryptor();
-    await expect(
-      decryptor.decrypt({ envelopeVersion: 0, ciphertext: "x", recipients: [] }),
-    ).rejects.toThrow(UnsupportedFeatureError);
+  it("caches public keys", async () => {
+    const cache = new MemoryPublicKeyCache();
+    await cache.put({
+      identity: "alice@example.com",
+      family: "openpgp" as import("./types.js").CryptoFamily,
+      algorithm: "openpgp-cv25519",
+      keyId: "6677-8899",
+      fingerprint: "aabbccddeeff00112233445566778899",
+      publicKey: new Uint8Array([1]),
+      firstSeen: new Date().toISOString(),
+      lastSeen: new Date().toISOString(),
+      status: "active",
+      source: "test",
+    });
+    const hit = await cache.get("alice@example.com", "openpgp" as import("./types.js").CryptoFamily, "encrypt");
+    expect(hit?.fingerprint).toContain("8899");
+  });
+
+  it("detects openpgp signed mime", () => {
+    const mime = new TextEncoder().encode(
+      'Content-Type: multipart/signed; protocol="application/pgp-signature"',
+    );
+    expect(detectProtectionKind(mime)).toBe("openpgp-signed");
+  });
+
+  it("exports error codes", () => {
+    expect(CryptoErrorCodes.EncryptionDowngradeBlocked).toBe("EncryptionDowngradeBlocked");
   });
 });

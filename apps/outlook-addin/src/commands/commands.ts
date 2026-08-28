@@ -54,11 +54,8 @@ async function recipientEmails(item: Office.MessageCompose): Promise<string[]> {
   return [...new Set([...emailsFromRecipients(to), ...emailsFromRecipients(cc), ...emailsFromRecipients(bcc)].map((e) => normalizeEmail(e)))];
 }
 
-function isDirectoryPgp(selected: { family?: string; algorithm?: string; suite?: string } | null): boolean {
-  if (!selected) return false;
-  const family = String(selected.family || "");
-  const algo = String(selected.algorithm || selected.suite || "");
-  return family === "pgp" || algo.startsWith("openpgp");
+function readSecurityToggles(_item: Office.MessageCompose): Promise<{ sign: boolean; encrypt: boolean }> {
+  return Promise.resolve({ sign: false, encrypt: false });
 }
 
 function onMessageSend(event: Office.AddinCommands.Event): void {
@@ -69,17 +66,25 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
         event.completed({ allowEvent: true });
         return;
       }
-      const emails = await recipientEmails(item);
+
       const body = await getAsync<string>((cb) =>
         item.body.getAsync(Office.CoercionType.Html, cb),
       );
       const text = await getAsync<string>((cb) =>
         item.body.getAsync(Office.CoercionType.Text, cb),
       ).catch(() => "");
-      if (extractPgpMessage(text) || extractPgpMessage(body)) {
+
+      if (
+        extractPgpMessage(text) ||
+        extractPgpMessage(body) ||
+        body.includes('protocol="application/pgp-signature"') ||
+        body.includes('protocol="application/pgp-encrypted"')
+      ) {
         event.completed({ allowEvent: true });
         return;
       }
+
+      const emails = await recipientEmails(item);
       const { client } = createEventPubkeyClient();
       const needsEncrypt: string[] = [];
       for (const email of emails) {
@@ -88,20 +93,38 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
             email,
             purpose: "encryption",
           })) as { family?: string; algorithm?: string; suite?: string } | null;
-          if (isDirectoryPgp(selected)) needsEncrypt.push(email);
+          const family = String(selected?.family || "");
+          const algo = String(selected?.algorithm || selected?.suite || "");
+          if (family === "pgp" || algo.startsWith("openpgp")) needsEncrypt.push(email);
         } catch {
           /* lookup failure: do not brick send */
         }
       }
-      if (needsEncrypt.length > 0) {
+
+      const toggles = await readSecurityToggles(item);
+
+      if (needsEncrypt.length > 0 && !toggles.encrypt) {
         event.completed({
           allowEvent: false,
           errorMessage:
-            `Encrypt this message with OpenPGP before sending to ${needsEncrypt.join(", ")}. ` +
-            "Use the SComm Security pane → Encrypt body.",
+            `Encryption unavailable for published keys.\n\n` +
+            `${needsEncrypt.join(", ")} require OpenPGP encryption.\n\n` +
+            `Enable Encrypt in the SComm Security pane, or change recipients.`,
         } as Office.AddinCommands.EventCompletedOptions);
         return;
       }
+
+      if (toggles.encrypt && needsEncrypt.length < emails.length) {
+        const missing = emails.filter((e) => !needsEncrypt.includes(e));
+        event.completed({
+          allowEvent: false,
+          errorMessage:
+            `Encryption unavailable\n\n` +
+            `${missing.join(", ")} does not have a compatible encryption key.`,
+        } as Office.AddinCommands.EventCompletedOptions);
+        return;
+      }
+
       event.completed({ allowEvent: true });
     } catch {
       event.completed({ allowEvent: true });

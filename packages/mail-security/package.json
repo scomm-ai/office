@@ -1,5 +1,5 @@
 {
-  "name": "@scomm-office/office",
+  "name": "@scomm-office/mail-security",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,14 +18,17 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@scomm-office/core": "workspace:*",
+    "@scomm-office/capability-negotiation": "workspace:*",
     "@scomm-office/crypto": "workspace:*",
-    "@scomm-office/protocol": "workspace:*",
-    "@scomm-office/testkit": "workspace:*",
-    "zod": "^3.24.1"
+    "@scomm-office/crypto-openpgp": "workspace:*",
+    "@scomm-office/crypto-smime": "workspace:*",
+    "@scomm-office/message-core": "workspace:*",
+    "@scomm-office/mime": "workspace:*",
+    "@scomm-office/policy": "workspace:*",
+    "@scomm-office/semantic-signatures": "workspace:*",
+    "@scomm-office/observability": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22.10.5",
     "typescript": "^5.7.3",
     "vitest": "^3.0.2"
   }
