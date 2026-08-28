@@ -48,6 +48,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Build packages
+        run: pnpm -r --filter './packages/**' --sort run build
+
       - name: Lint
         run: pnpm lint
 

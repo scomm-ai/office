@@ -14,12 +14,17 @@ export interface ServerConfig {
 const ORG_FIELD_ENV: Record<ConfigurationFieldKey, string> = {
   scommServerUrl: "SCOMM_ORG_SCOMM_SERVER_URL",
   pubkeyServerUrl: "SCOMM_ORG_PUBKEY_SERVER_URL",
+  pubkeyReadBaseUrl: "SCOMM_ORG_PUBKEY_READ_BASE_URL",
+  pubkeyWriteBaseUrl: "SCOMM_ORG_PUBKEY_WRITE_BASE_URL",
+  billingOrigin: "SCOMM_ORG_BILLING_ORIGIN",
+  billingPortalUrl: "SCOMM_ORG_BILLING_PORTAL_URL",
   idrTargetHost: "SCOMM_ORG_IDR_TARGET_HOST",
   idrDefaultService: "SCOMM_ORG_IDR_DEFAULT_SERVICE",
   semanticAnalysisEnabled: "SCOMM_ORG_SEMANTIC_ANALYSIS_ENABLED",
   complianceEnabled: "SCOMM_ORG_COMPLIANCE_ENABLED",
   experimentalEncryptionEnabled: "SCOMM_ORG_EXPERIMENTAL_ENCRYPTION_ENABLED",
   diagnosticsEnabled: "SCOMM_ORG_DIAGNOSTICS_ENABLED",
+  requireAiAddonEntitlement: "SCOMM_ORG_REQUIRE_AI_ADDON_ENTITLEMENT",
 };
 
 function readBoolean(value: string | undefined): boolean | undefined {
@@ -52,7 +57,8 @@ function loadOrganizationConfig(): OrganizationConfiguration | undefined {
       field === "semanticAnalysisEnabled" ||
       field === "complianceEnabled" ||
       field === "experimentalEncryptionEnabled" ||
-      field === "diagnosticsEnabled"
+      field === "diagnosticsEnabled" ||
+      field === "requireAiAddonEntitlement"
     ) {
       const parsed = readBoolean(raw);
       if (parsed !== undefined) {

@@ -58,6 +58,22 @@ export interface KeyHandle {
 	publicKey?: Uint8Array;
 }
 
+export interface DeviceEnrollmentDevice {
+	identityKey: KeyHandle;
+	publicKey?: Uint8Array;
+	name?: string;
+}
+
+export interface MskEnvelope {
+	envelope_version: number;
+	algorithm: string;
+	public_key: string;
+	created_at: number;
+	encrypted_msk: string;
+	wraps: unknown[];
+	revoked_device_ids: string[];
+}
+
 export interface PortablePrivateKey {
 	algorithm: string;
 	encoding: string;
@@ -84,6 +100,11 @@ export class CryptoProvider {
 		options?: { extractable?: boolean; protection?: string },
 	): Promise<KeyHandle>;
 	exportPrivateKey(key: KeyHandle): Promise<PortablePrivateKey>;
+	generateDeviceKey(options?: {
+		extractable?: boolean;
+		protection?: string;
+	}): Promise<KeyHandle>;
+	generateMSK(options?: { extractable?: boolean; protection?: string }): Promise<KeyHandle>;
 	sign(key: KeyHandle, payload: Uint8Array): Promise<Uint8Array>;
 	wrapVault(
 		plaintext: Uint8Array,
@@ -194,7 +215,8 @@ export class Vault {
 	getKeyByFingerprint(fingerprint: string): VaultEntry | null;
 	getCurrentKey(purpose?: string): VaultEntry | null;
 	getHistoricalKey(keyId: number): VaultEntry | null;
-	getMsk(): VaultEntry | null;
+	getMsk(): VaultEntry | { kind: "msk_envelope"; envelope: MskEnvelope } | null;
+	setMskEnvelope(envelope: MskEnvelope): MskEnvelope;
 	addKey(entry: VaultEntry): VaultEntry;
 	retireKey(keyId: number): VaultEntry | null;
 	merge(other: Vault): this;
@@ -229,11 +251,31 @@ export class PubkeyClient {
 		otp: string;
 		captcha?: string;
 		mskKey: KeyHandle;
+		device?: DeviceEnrollmentDevice;
 	}): Promise<unknown>;
 	setKeys(input: {
 		email: string;
 		artifacts: unknown[];
 		mskKey: KeyHandle;
+	}): Promise<unknown>;
+	assertNoSilentMsk(input: {
+		principalExists: boolean;
+		localMsk: boolean;
+		explicitRecovery: boolean;
+	}): void;
+	beginDeviceEnrollment(input: {
+		email: string;
+		device?: DeviceEnrollmentDevice;
+		rendezvous?: Record<string, unknown>;
+	}): Promise<{ pairingCode?: string; qr?: Record<string, unknown> }>;
+	listDevices(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
+	beginIdentityRecovery(input: { email: string; mskPublicKey: Uint8Array }): Promise<unknown>;
+	replaceMasterSigningKey(input: {
+		email: string;
+		otp: string;
+		captcha?: string;
+		mskKey: KeyHandle;
+		device?: DeviceEnrollmentDevice;
 	}): Promise<unknown>;
 	getBestKey(input: {
 		email?: string;
