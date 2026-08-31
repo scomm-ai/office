@@ -13,7 +13,7 @@ type BoolSetting = Extract<
 const BOOL_SETTINGS: Array<{ key: BoolSetting; label: string }> = [
   { key: "semanticAnalysisEnabled", label: "Semantic analysis" },
   { key: "complianceEnabled", label: "Compliance checks" },
-  { key: "experimentalEncryptionEnabled", label: "OpenPGP overlay (Security pane)" },
+  { key: "experimentalEncryptionEnabled", label: "Experimental ECDH envelope (Security pane)" },
   { key: "diagnosticsEnabled", label: "Diagnostics panel" },
   { key: "requireAiAddonEntitlement", label: "Require AI add-on entitlement" },
 ];

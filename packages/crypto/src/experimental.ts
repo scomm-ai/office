@@ -9,9 +9,9 @@ import type {
 } from "./message-crypto.js";
 
 /**
- * Legacy encryptor interface. Outlook mail E2EE is inline OpenPGP via
- * `@scomm/pubkey` PgpEngine (Security panel). There is no SComm ECDH envelope
- * and no JS S/MIME engine.
+ * Legacy encryptor interface. Default Outlook mail E2EE is inline OpenPGP via
+ * `@scomm/pubkey` PgpEngine. The experimental ECDH envelope lives in
+ * `ScommMessageEncryptor` (Settings: Experimental ECDH envelope).
  */
 export class ExperimentalMessageEncryptor implements MessageEncryptor {
   async encrypt(

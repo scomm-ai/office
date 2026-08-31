@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { attachmentEncryptionNotice } from "@scomm-office/office";
 import { ComposeSecurityControls } from "../components/ComposeSecurityControls";
+import { EcdhEnvelopeControls } from "../components/EcdhEnvelopeControls";
 import { useHostContext } from "../../lib/host-context";
 import {
   ProductionPubkeyDirectory,
@@ -395,6 +396,14 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         <dd>{directory ? "GET /v1/keys via @scomm/pubkey" : "—"}</dd>
         <dt>Pubkey server</dt>
         <dd>{pubkeyBase || "— (set in Settings)"}</dd>
+        <dt>ECDH envelope</dt>
+        <dd>
+          {settings.experimentalEncryptionEnabled ? (
+            <span className="status ok">experimental (Settings)</span>
+          ) : (
+            <span className="status muted">off</span>
+          )}
+        </dd>
       </dl>
 
       <section>
@@ -532,6 +541,10 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         {mailStatus ? <p className="note">{mailStatus}</p> : null}
         {decryptedBody ? <pre className="code-block">{decryptedBody}</pre> : null}
       </section>
+
+      {settings.experimentalEncryptionEnabled ? (
+        <EcdhEnvelopeControls directory={directory} userEmail={userEmail} />
+      ) : null}
 
       <section>
         <h2>Vault keys</h2>
