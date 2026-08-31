@@ -131,9 +131,9 @@ Task pane **Settings** also persist to `localStorage` via `MemoryUserSettingsSto
 
 ## Sideloading Outlook add-in
 
-See **[docs/sideload.md](./docs/sideload.md)** for step-by-step sideload of `apps/outlook-addin/manifest/manifest.xml` against `https://localhost:5173`.
+**Production:** paste **https://office.scomm.ai/manifest.xml** into Outlook **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**. Install notes: **[docs/sideload.md](./docs/sideload.md)**.
 
-Trust the dev HTTPS certificate before sideloading. Manifest `AppDomains` include `localhost`.
+**Local:** trust the Vite cert, then **Add from file** `apps/outlook-addin/manifest/manifest.xml` against `https://localhost:5173`. Do not share the localhost manifest as an install link.
 
 ## Development scripts
 

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scomm.AI Outlook add-in</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --text: #1f2933;
+        --muted: #5c6b7a;
+        --accent: #2f6fab;
+        --border: #d8dee6;
+        --bg: #f4f6f8;
+      }
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.45;
+      }
+      main {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 1.5rem 1.25rem 2rem;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      h1 {
+        font-size: 1.35rem;
+        margin: 0 0 0.35rem;
+      }
+      p,
+      li {
+        color: var(--muted);
+      }
+      code,
+      .url {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 0.9em;
+        word-break: break-all;
+      }
+      a {
+        color: var(--accent);
+      }
+      .box {
+        margin: 1rem 0;
+        padding: 0.75rem 0.85rem;
+        background: #e8f0f8;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Scomm.AI for Outlook</h1>
+      <p>
+        OpenPGP encrypt, sign, decrypt, and verify in Outlook, with keys from
+        pubkey.scomm.ai.
+      </p>
+      <div class="box">
+        <strong>Manifest URL</strong> (Add from URL)<br />
+        <a class="url" href="/manifest.xml">https://office.scomm.ai/manifest.xml</a>
+      </div>
+      <p>
+        <a href="/manifest.xml" download="scomm-ai-outlook.xml">Download manifest.xml</a>
+        ·
+        <a href="/taskpane.html">Open task pane</a>
+      </p>
+      <h2>Install</h2>
+      <ol>
+        <li>Outlook: <strong>Get Add-ins</strong> → <strong>My add-ins</strong>.</li>
+        <li>
+          <strong>Add a custom add-in</strong> → <strong>Add from URL</strong>.
+        </li>
+        <li>Paste <code>https://office.scomm.ai/manifest.xml</code> → OK.</li>
+      </ol>
+      <p>
+        Classic Outlook (Windows): Home → Get Add-ins, or File → Manage Add-ins.
+        Microsoft 365 / Exchange Online mailbox required.
+      </p>
+    </main>
+  </body>
+</html>

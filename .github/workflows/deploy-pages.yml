@@ -37,6 +37,14 @@ jobs:
       - name: Build Pages artifact
         run: pnpm --filter @scomm-office/outlook-addin build:pages
 
+      - name: Confirm hosted manifest
+        run: |
+          test -f apps/outlook-addin/dist/manifest.xml
+          test -f apps/outlook-addin/dist/.nojekyll
+          test -f apps/outlook-addin/dist/index.html
+          grep -q 'https://office.scomm.ai/taskpane.html' apps/outlook-addin/dist/manifest.xml
+          ! grep -q 'https://localhost:5173' apps/outlook-addin/dist/manifest.xml
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
