@@ -170,18 +170,110 @@ export class PgpEngine {
 		}
 	}
 
-	async sign() {
-		throw new PubkeyError(
-			ERROR_CODES.unsupported_algorithm,
-			"OpenPGP signing is not implemented in this engine slice",
-		);
+	/**
+	 * @param {{ plaintext: string, privateKey: Uint8Array | string }} request
+	 * @returns {Promise<Uint8Array>} clearsigned armor (UTF-8)
+	 */
+	async sign(request = {}) {
+		this._requireAvailable();
+		if (request.plaintext == null || request.privateKey == null) {
+			throw new PubkeyError(
+				ERROR_CODES.key_not_found,
+				"OpenPGP sign requires plaintext and a private key",
+			);
+		}
+		try {
+			const signingKeys = await readPrivateKey(request.privateKey);
+			if (!signingKeys.isDecrypted()) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"OpenPGP private key is passphrase-protected; Vault keys must be stored unencrypted",
+				);
+			}
+			const message = await openpgp.createCleartextMessage({
+				text: String(request.plaintext),
+			});
+			const armored = await openpgp.sign({
+				message,
+				signingKeys,
+				format: "armored",
+			});
+			return toUint8(armored);
+		} catch (cause) {
+			if (cause instanceof PubkeyError) throw cause;
+			throw new PubkeyError(
+				ERROR_CODES.unsupported_algorithm,
+				"OpenPGP sign failed",
+				{ cause },
+			);
+		}
 	}
 
-	async verify() {
-		throw new PubkeyError(
-			ERROR_CODES.unsupported_algorithm,
-			"OpenPGP verify is not implemented in this engine slice",
-		);
+	/**
+	 * @param {{
+	 *   signed?: string | Uint8Array,
+	 *   publicKeys?: Array<Uint8Array | string>,
+	 * }} request
+	 * @returns {Promise<{ valid: boolean, keyId?: string, plaintext?: string, reason?: string }>}
+	 */
+	async verify(request = {}) {
+		this._requireAvailable();
+		if (request.signed == null) {
+			throw new PubkeyError(
+				ERROR_CODES.unsupported_algorithm,
+				"OpenPGP verify requires signed text",
+			);
+		}
+		const keys = request.publicKeys ?? [];
+		if (keys.length === 0) {
+			throw new PubkeyError(
+				ERROR_CODES.invalid_public_key,
+				"OpenPGP verify requires at least one public key",
+			);
+		}
+		try {
+			const verificationKeys = await Promise.all(keys.map((key) => readPublicKey(key)));
+			const text =
+				typeof request.signed === "string"
+					? request.signed
+					: new TextDecoder().decode(coerceBytes(request.signed));
+			if (!text.includes("BEGIN PGP SIGNED MESSAGE")) {
+				return {
+					valid: false,
+					reason: "No OpenPGP signed message",
+				};
+			}
+			const message = await openpgp.readCleartextMessage({
+				cleartextMessage: text,
+			});
+			const result = await openpgp.verify({ message, verificationKeys });
+			const sig = result.signatures[0];
+			if (!sig) {
+				return { valid: false, reason: "No signature result", plaintext: result.data };
+			}
+			try {
+				await sig.verified;
+				return {
+					valid: true,
+					keyId: sig.keyID?.toHex?.() ?? undefined,
+					plaintext: result.data,
+				};
+			} catch (cause) {
+				return {
+					valid: false,
+					keyId: sig.keyID?.toHex?.() ?? undefined,
+					plaintext: result.data,
+					reason: cause instanceof Error ? cause.message : "Signature mismatch",
+				};
+			}
+		} catch (cause) {
+			if (cause instanceof PubkeyError) throw cause;
+			throw new PubkeyError(
+				ERROR_CODES.unsupported_algorithm,
+				"OpenPGP verify failed",
+				{ cause },
+			);
+		}
 	}
 
 	/**
@@ -189,6 +281,7 @@ export class PgpEngine {
 	 *   plaintext: string | Uint8Array,
 	 *   recipientPublicKey?: Uint8Array | string,
 	 *   recipientPublicKeys?: Array<Uint8Array | string>,
+	 *   signingPrivateKey?: Uint8Array | string,
 	 *   algorithm?: string
 	 * }} request
 	 * @returns {Promise<Uint8Array>} armored PGP MESSAGE bytes (UTF-8)
@@ -221,9 +314,13 @@ export class PgpEngine {
 					: await openpgp.createMessage({
 							binary: coerceBytes(request.plaintext),
 						});
+			const signingKeys = request.signingPrivateKey
+				? [await readPrivateKey(request.signingPrivateKey)]
+				: undefined;
 			const armored = await openpgp.encrypt({
 				message,
 				encryptionKeys,
+				...(signingKeys ? { signingKeys } : {}),
 				format: "armored",
 			});
 			return toUint8(armored);

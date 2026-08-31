@@ -2,6 +2,8 @@ import { decodeBase64Url } from "@scomm/pubkey";
 
 export const PGP_MESSAGE_BEGIN = "-----BEGIN PGP MESSAGE-----";
 export const PGP_MESSAGE_END = "-----END PGP MESSAGE-----";
+export const PGP_SIGNED_BEGIN = "-----BEGIN PGP SIGNED MESSAGE-----";
+export const PGP_SIGNATURE_END = "-----END PGP SIGNATURE-----";
 
 /** Outlook HTML often splits armor across spans, `<br>`, and `\r\n`. */
 export function htmlToPlainText(html: string): string {
@@ -44,6 +46,28 @@ export function extractPgpMessage(source: string | undefined | null): string | n
       .trim();
   }
   return null;
+}
+
+export function extractPgpSignedMessage(source: string | undefined | null): string | null {
+  if (!source) return null;
+  const candidates = source.includes("<")
+    ? [htmlToPlainText(source), source]
+    : [source.replace(/\r\n/g, "\n").replace(/\r/g, "\n")];
+  for (const text of candidates) {
+    const start = text.indexOf(PGP_SIGNED_BEGIN);
+    if (start < 0) continue;
+    const end = text.indexOf(PGP_SIGNATURE_END, start);
+    if (end < 0) continue;
+    return text
+      .slice(start, end + PGP_SIGNATURE_END.length)
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+  }
+  return null;
+}
+
+export function bodyHasOpenPgpProtection(source: string | undefined | null): boolean {
+  return Boolean(extractPgpMessage(source) || extractPgpSignedMessage(source));
 }
 
 export function messagePlaintext(message: {

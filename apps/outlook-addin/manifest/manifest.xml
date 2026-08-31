@@ -6,11 +6,11 @@
   xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
   xsi:type="MailApp">
   <Id>a8ca8077-589e-4e77-a104-f3c534b5df59</Id>
-  <Version>1.0.0.0</Version>
-  <ProviderName>SComm</ProviderName>
+  <Version>1.1.0.0</Version>
+  <ProviderName>Scomm.AI</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="SComm Office" />
-  <Description DefaultValue="SComm capability layer for Outlook mail." />
+  <DisplayName DefaultValue="Scomm.AI" />
+  <Description DefaultValue="OpenPGP encrypt/sign/decrypt, pubkey.scomm.ai discovery, semantics, and compliance for Outlook." />
   <IconUrl DefaultValue="https://localhost:5173/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:5173/assets/icon-64.png" />
   <SupportUrl DefaultValue="https://localhost:5173/taskpane.html" />
@@ -53,10 +53,41 @@
     <Hosts>
       <Host xsi:type="MailHost">
         <DesktopFormFactor>
+          <FunctionFile resid="CommandsUrl" />
           <ExtensionPoint xsi:type="MessageReadCommandSurface">
             <OfficeTab id="TabDefault">
               <Group id="SCommReadGroup">
                 <Label resid="GroupLabel" />
+                <Control xsi:type="Button" id="SCommDecrypt">
+                  <Label resid="DecryptButtonLabel" />
+                  <Supertip>
+                    <Title resid="DecryptButtonLabel" />
+                    <Description resid="DecryptButtonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16" />
+                    <bt:Image size="32" resid="Icon32" />
+                    <bt:Image size="80" resid="Icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="DecryptTaskPaneUrl" />
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="SCommVerify">
+                  <Label resid="VerifyButtonLabel" />
+                  <Supertip>
+                    <Title resid="VerifyButtonLabel" />
+                    <Description resid="VerifyButtonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16" />
+                    <bt:Image size="32" resid="Icon32" />
+                    <bt:Image size="80" resid="Icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="VerifyTaskPaneUrl" />
+                  </Action>
+                </Control>
                 <Control xsi:type="Button" id="SCommReadTaskPane">
                   <Label resid="TaskPaneButtonLabel" />
                   <Supertip>
@@ -79,6 +110,36 @@
             <OfficeTab id="TabDefault">
               <Group id="SCommComposeGroup">
                 <Label resid="GroupLabel" />
+                <Control xsi:type="Button" id="SCommEncrypt">
+                  <Label resid="EncryptButtonLabel" />
+                  <Supertip>
+                    <Title resid="EncryptButtonLabel" />
+                    <Description resid="EncryptButtonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16" />
+                    <bt:Image size="32" resid="Icon32" />
+                    <bt:Image size="80" resid="Icon80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>encryptMessage</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="SCommSign">
+                  <Label resid="SignButtonLabel" />
+                  <Supertip>
+                    <Title resid="SignButtonLabel" />
+                    <Description resid="SignButtonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16" />
+                    <bt:Image size="32" resid="Icon32" />
+                    <bt:Image size="80" resid="Icon80" />
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>signMessage</FunctionName>
+                  </Action>
+                </Control>
                 <Control xsi:type="Button" id="SCommComposeTaskPane">
                   <Label resid="TaskPaneButtonLabel" />
                   <Supertip>
@@ -109,13 +170,23 @@
       <bt:Urls>
         <bt:Url id="TaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html" />
         <bt:Url id="CommandsUrl" DefaultValue="https://localhost:5173/commands.html" />
+        <bt:Url id="DecryptTaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html?module=security&amp;action=decrypt" />
+        <bt:Url id="VerifyTaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html?module=security&amp;action=verify" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GroupLabel" DefaultValue="SComm Office" />
-        <bt:String id="TaskPaneButtonLabel" DefaultValue="SComm" />
+        <bt:String id="GroupLabel" DefaultValue="Scomm.AI" />
+        <bt:String id="TaskPaneButtonLabel" DefaultValue="Scomm.AI" />
+        <bt:String id="EncryptButtonLabel" DefaultValue="Encrypt" />
+        <bt:String id="SignButtonLabel" DefaultValue="Sign" />
+        <bt:String id="DecryptButtonLabel" DefaultValue="Decrypt" />
+        <bt:String id="VerifyButtonLabel" DefaultValue="Verify" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="TaskPaneButtonDesc" DefaultValue="Open the SComm Office task pane for semantics, identity, and compliance." />
+        <bt:String id="TaskPaneButtonDesc" DefaultValue="Open Scomm.AI for identity, OpenPGP, semantics, and compliance." />
+        <bt:String id="EncryptButtonDesc" DefaultValue="Encrypt this draft with classical OpenPGP keys from pubkey.scomm.ai." />
+        <bt:String id="SignButtonDesc" DefaultValue="Clearsign this draft with your Scomm.AI OpenPGP key." />
+        <bt:String id="DecryptButtonDesc" DefaultValue="Decrypt the OpenPGP body in the Scomm.AI pane. Plaintext stays in the pane." />
+        <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on pubkey.scomm.ai." />
       </bt:LongStrings>
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
@@ -126,11 +197,45 @@
       </Requirements>
       <Hosts>
         <Host xsi:type="MailHost">
+          <Runtimes>
+            <Runtime resid="CommandsUrl" />
+          </Runtimes>
           <DesktopFormFactor>
+            <FunctionFile resid="CommandsUrl" />
             <ExtensionPoint xsi:type="MessageReadCommandSurface">
               <OfficeTab id="TabDefault">
                 <Group id="SCommReadGroupV11">
                   <Label resid="GroupLabel" />
+                  <Control xsi:type="Button" id="SCommDecryptV11">
+                    <Label resid="DecryptButtonLabel" />
+                    <Supertip>
+                      <Title resid="DecryptButtonLabel" />
+                      <Description resid="DecryptButtonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon16" />
+                      <bt:Image size="32" resid="Icon32" />
+                      <bt:Image size="80" resid="Icon80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="DecryptTaskPaneUrl" />
+                    </Action>
+                  </Control>
+                  <Control xsi:type="Button" id="SCommVerifyV11">
+                    <Label resid="VerifyButtonLabel" />
+                    <Supertip>
+                      <Title resid="VerifyButtonLabel" />
+                      <Description resid="VerifyButtonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon16" />
+                      <bt:Image size="32" resid="Icon32" />
+                      <bt:Image size="80" resid="Icon80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="VerifyTaskPaneUrl" />
+                    </Action>
+                  </Control>
                   <Control xsi:type="Button" id="SCommReadTaskPaneV11">
                     <Label resid="TaskPaneButtonLabel" />
                     <Supertip>
@@ -153,6 +258,36 @@
               <OfficeTab id="TabDefault">
                 <Group id="SCommComposeGroupV11">
                   <Label resid="GroupLabel" />
+                  <Control xsi:type="Button" id="SCommEncryptV11">
+                    <Label resid="EncryptButtonLabel" />
+                    <Supertip>
+                      <Title resid="EncryptButtonLabel" />
+                      <Description resid="EncryptButtonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon16" />
+                      <bt:Image size="32" resid="Icon32" />
+                      <bt:Image size="80" resid="Icon80" />
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>encryptMessage</FunctionName>
+                    </Action>
+                  </Control>
+                  <Control xsi:type="Button" id="SCommSignV11">
+                    <Label resid="SignButtonLabel" />
+                    <Supertip>
+                      <Title resid="SignButtonLabel" />
+                      <Description resid="SignButtonDesc" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon16" />
+                      <bt:Image size="32" resid="Icon32" />
+                      <bt:Image size="80" resid="Icon80" />
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>signMessage</FunctionName>
+                    </Action>
+                  </Control>
                   <Control xsi:type="Button" id="SCommComposeTaskPaneV11">
                     <Label resid="TaskPaneButtonLabel" />
                     <Supertip>
@@ -190,13 +325,23 @@
         <bt:Urls>
           <bt:Url id="TaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html" />
           <bt:Url id="CommandsUrl" DefaultValue="https://localhost:5173/commands.html" />
+          <bt:Url id="DecryptTaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html?module=security&amp;action=decrypt" />
+          <bt:Url id="VerifyTaskPaneUrl" DefaultValue="https://localhost:5173/taskpane.html?module=security&amp;action=verify" />
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="GroupLabel" DefaultValue="SComm Office" />
-          <bt:String id="TaskPaneButtonLabel" DefaultValue="SComm" />
+          <bt:String id="GroupLabel" DefaultValue="Scomm.AI" />
+          <bt:String id="TaskPaneButtonLabel" DefaultValue="Scomm.AI" />
+          <bt:String id="EncryptButtonLabel" DefaultValue="Encrypt" />
+          <bt:String id="SignButtonLabel" DefaultValue="Sign" />
+          <bt:String id="DecryptButtonLabel" DefaultValue="Decrypt" />
+          <bt:String id="VerifyButtonLabel" DefaultValue="Verify" />
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="TaskPaneButtonDesc" DefaultValue="Open the SComm Office task pane for semantics, identity, and compliance." />
+          <bt:String id="TaskPaneButtonDesc" DefaultValue="Open Scomm.AI for identity, OpenPGP, semantics, and compliance." />
+          <bt:String id="EncryptButtonDesc" DefaultValue="Encrypt this draft with classical OpenPGP keys from pubkey.scomm.ai." />
+          <bt:String id="SignButtonDesc" DefaultValue="Clearsign this draft with your Scomm.AI OpenPGP key." />
+          <bt:String id="DecryptButtonDesc" DefaultValue="Decrypt the OpenPGP body in the Scomm.AI pane. Plaintext stays in the pane." />
+          <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on pubkey.scomm.ai." />
         </bt:LongStrings>
       </Resources>
       <!-- WebApplicationInfo enabled after sideload validation

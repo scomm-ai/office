@@ -154,6 +154,7 @@ export class PgpEngine {
 		plaintext?: string | Uint8Array;
 		recipientPublicKey?: Uint8Array | string;
 		recipientPublicKeys?: Array<Uint8Array | string>;
+		signingPrivateKey?: Uint8Array | string;
 		algorithm?: string;
 	}): Promise<Uint8Array>;
 	decrypt(request?: {
@@ -161,8 +162,19 @@ export class PgpEngine {
 		privateKey?: Uint8Array | string;
 		algorithm?: string;
 	}): Promise<Uint8Array>;
-	sign(): Promise<never>;
-	verify(): Promise<never>;
+	sign(request?: {
+		plaintext?: string;
+		privateKey?: Uint8Array | string;
+	}): Promise<Uint8Array>;
+	verify(request?: {
+		signed?: string | Uint8Array;
+		publicKeys?: Array<Uint8Array | string>;
+	}): Promise<{
+		valid: boolean;
+		keyId?: string;
+		plaintext?: string;
+		reason?: string;
+	}>;
 }
 
 export function createPgpEngine(provider?: CryptoProvider): PgpEngine;

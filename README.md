@@ -13,7 +13,7 @@ This monorepo ships:
 
 > **Pubkey protocol:** Office **owns** `@scomm/pubkey` (workspace adapter) and consumes [CKVF](https://github.com/Cryptographic-Key-Vault-Format/sdk-js) for vault files. It must not reimplement canonical signing, key selection, or vault format outside those packages.
 
-> **Mail E2EE:** Outlook add-in is **OpenPGP only** (inline armor). JS S/MIME is out of scope. Native Outlook S/MIME stays Windows/CAPI. See [e2ee-protocol](./openspec/security/e2ee-protocol.md).
+> **Mail E2EE:** Outlook add-in is **OpenPGP only** (inline armor) with ribbon Encrypt / Sign / Decrypt / Verify. JS S/MIME is out of scope. Native Outlook S/MIME stays Windows/CAPI. See [e2ee-protocol](./openspec/security/e2ee-protocol.md).
 
 ## Architecture
 

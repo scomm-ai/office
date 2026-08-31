@@ -19,6 +19,7 @@ import {
   loadSettingsFromStorage,
   saveSettingsToStorage,
 } from "../lib/settings";
+import { readTaskPaneLaunch } from "../lib/taskpane-launch";
 import { Navigation, type NavModule } from "./Navigation";
 import { MessagePanel } from "./panels/MessagePanel";
 import { AccountBillingPanel } from "./panels/AccountBillingPanel";
@@ -83,8 +84,9 @@ async function bootstrapHost(): Promise<{
 }
 
 export function App() {
+  const launch = useMemo(() => readTaskPaneLaunch(), []);
   const [ready, setReady] = useState(false);
-  const [activeModule, setActiveModule] = useState<NavModule>("message");
+  const [activeModule, setActiveModule] = useState<NavModule>(launch.module ?? "message");
   const [mailHost, setMailHost] = useState<MailHost | null>(null);
   const [capabilities, setCapabilities] = useState(detectOutlookCapabilities());
   const [isMockHost, setIsMockHost] = useState(false);
@@ -201,7 +203,7 @@ export function App() {
   ]);
 
   if (!ready) {
-    return <div className="panel empty">Loading SComm Office…</div>;
+    return <div className="panel empty">Loading Scomm.AI…</div>;
   }
 
   if (bootError || !ctx) {
@@ -220,8 +222,8 @@ export function App() {
           <div className="banner">Mock host — running outside Outlook with testkit fixture</div>
         ) : null}
         <header className="app-header">
-          <h1>SComm Office</h1>
-          <p>SComm capability layer for Outlook — client-first parity goal</p>
+          <h1>Scomm.AI</h1>
+          <p>Outlook add-in — OpenPGP, pubkey.scomm.ai, semantics, and compliance</p>
         </header>
         <Navigation active={activeModule} onChange={setActiveModule} />
         <main className="panel">
@@ -229,7 +231,7 @@ export function App() {
           {activeModule === "account" ? <AccountBillingPanel /> : null}
           {activeModule === "identity" ? <IdentityPanel /> : null}
           {activeModule === "semantics" ? <SemanticsPanel /> : null}
-          {activeModule === "security" ? <SecurityPanel /> : null}
+          {activeModule === "security" ? <SecurityPanel launchAction={launch.action} /> : null}
           {activeModule === "compliance" ? <CompliancePanel /> : null}
           {activeModule === "idr" ? <IdrPanel /> : null}
           {activeModule === "ai" ? <AiSettingsPanel /> : null}
