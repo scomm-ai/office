@@ -2,37 +2,26 @@
 
 ## Hosted install (recommended)
 
-Public manifest (HTTPS, `office.scomm.ai` URLs — not localhost):
+Microsoft **disabled Add from URL** for custom Outlook add-ins (security). That control stays dimmed. Install from a **file**.
 
-**https://office.scomm.ai/manifest.xml**
+1. Download **[scomm-ai-outlook.xml](https://office.scomm.ai/manifest.xml)** (or open that URL and **Save As** `.xml`).
+2. In a browser go to **[https://aka.ms/olksideload](https://aka.ms/olksideload)** (Outlook on the web add-in dialog). Classic Outlook: **File → Info → Manage Add-ins**.
+3. **My add-ins** → **Custom add-ins** → **Add a custom add-in** → **Add from File** → the XML → **Install**.
+4. Restart Outlook. Open a **mail** item. Ribbon group **Scomm.AI**: Decrypt / Verify on read; Encrypt / Sign on compose.
 
 Install page: **https://office.scomm.ai/**
 
-GitHub fallback (same XML in the repo):
+The hosted XML (for download or admin Centralized Deployment) is **https://office.scomm.ai/manifest.xml**. Repo copy: `apps/outlook-addin/manifest/manifest_correct.xml`.
 
-**https://raw.githubusercontent.com/scomm-ai/office/main/apps/outlook-addin/manifest/manifest_correct.xml**
-
-If **Add from URL** rejects GitHub raw (`text/plain`), use the `office.scomm.ai` link or **Add from file** after downloading the XML.
-
-### Outlook on the web / New Outlook
-
-1. Open a mail item.
-2. **Get Add-ins** (or **Settings → Manage add-ins**).
-3. **My add-ins → Add a custom add-in → Add from URL**.
-4. Paste `https://office.scomm.ai/manifest.xml` → **OK**.
+Classic Outlook can take up to ~24 hours to show a sideloaded add-in because of client cache; a full quit (tray icon too) often helps sooner.
 
 ### Classic Outlook (Windows)
 
-Classic is the Win32 client (the **New Outlook** toggle is off). This is an Office.js add-in, not a COM add-in — it will not appear under File → Options → COM Add-ins.
+Classic is the Win32 client (**New Outlook** toggle off). This is an Office.js add-in, not COM — it will not appear under File → Options → COM Add-ins.
 
-1. Microsoft 365 / Exchange Online mailbox (POP/IMAP-only profiles usually cannot install).
-2. **Home → Get Add-ins** (or **All Apps**). If that is missing: **File → Info → Manage Add-ins** (opens the web add-in manager).
-3. **My add-ins → Custom add-ins → Add a custom add-in → Add from URL**.
-4. Paste `https://office.scomm.ai/manifest.xml` → **OK**.
-5. Quit Outlook completely (system tray too) and reopen.
-6. Open a **mail** message. Ribbon group **Scomm.AI**: Decrypt / Verify on read; Encrypt / Sign on compose.
+Use **Add from File** as above. Microsoft 365 / Exchange Online mailbox required (POP/IMAP-only profiles usually cannot install).
 
-Admins can deploy the same URL in **Microsoft 365 admin center → Integrated apps**.
+Admins can deploy the XML in **Microsoft 365 admin center → Integrated apps** (that path can still use a hosted URL even though user sideload cannot).
 
 ---
 
@@ -78,7 +67,7 @@ Keep the Vite server running.
 |---------|--------|
 | Blank task pane | Dev server running? Cert trusted in WebView2? |
 | Add-in not in ribbon | Sideloaded? Mail item (not calendar)? Restart Outlook |
-| Add from URL fails | Use `https://office.scomm.ai/manifest.xml`, not localhost or GitHub HTML blob URLs |
+| Add from URL dimmed | Microsoft removed that option. Download the XML and **Add from File** |
 | Pubkey errors | Production default is `https://pubkey.scomm.ai` |
 | Icons 404 | PNGs under `apps/outlook-addin/public/assets/` |
 
