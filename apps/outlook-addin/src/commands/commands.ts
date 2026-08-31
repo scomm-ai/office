@@ -1,28 +1,39 @@
 /// <reference types="office-js" />
 
-import { createPubkeyClient } from "@scomm-office/pubkeys";
-import { extractPgpMessage, normalizeEmail } from "@scomm-office/pubkeys";
-import { IndexedDbVaultStore } from "@scomm-office/storage";
+import { detectOutlookCapabilities, OutlookMailHost } from "@scomm-office/office";
+import {
+  extractPgpMessage,
+  extractPgpSignedMessage,
+  normalizeEmail,
+} from "@scomm-office/pubkeys";
+import {
+  loadComposeTogglesFromItem,
+  saveComposeTogglesToItem,
+  type ComposeProtectionToggles,
+} from "../lib/compose-security-state";
+import {
+  encryptComposeBody,
+  evaluateSendForToggles,
+  lookupRecipientStatuses,
+  signComposeBody,
+} from "../lib/mail-crypto-actions";
+import { getOfficePubkeySession, restoreOfficeVault } from "../lib/pubkey-session";
 
-/**
- * Event-runtime SDK init. Reconstructs from persisted vault store.
- * Does not require the task pane, React, or a shared runtime.
- */
-export function createEventPubkeyClient() {
-  const readBaseUrl =
-    (typeof import.meta !== "undefined" &&
-      (import.meta as { env?: Record<string, string> }).env
-        ?.VITE_PUBKEY_READ_BASE_URL) ||
-    "https://pubkey.scomm.ai";
-  const writeBaseUrl =
-    (typeof import.meta !== "undefined" &&
-      (import.meta as { env?: Record<string, string> }).env
-        ?.VITE_PUBKEY_WRITE_BASE_URL) ||
-    "https://api.pubkey.scomm.ai";
-  return createPubkeyClient({
-    readBaseUrl,
-    writeBaseUrl,
-    store: new IndexedDbVaultStore(),
+const DEFAULT_READ = "https://pubkey.scomm.ai";
+const DEFAULT_WRITE = "https://api.pubkey.scomm.ai";
+
+function envUrl(name: string, fallback: string): string {
+  const value =
+    typeof import.meta !== "undefined"
+      ? (import.meta as { env?: Record<string, string> }).env?.[name]
+      : undefined;
+  return value?.trim() || fallback;
+}
+
+function session() {
+  return getOfficePubkeySession({
+    readBaseUrl: envUrl("VITE_PUBKEY_READ_BASE_URL", DEFAULT_READ),
+    writeBaseUrl: envUrl("VITE_PUBKEY_WRITE_BASE_URL", DEFAULT_WRITE),
   });
 }
 
@@ -35,14 +46,11 @@ function getAsync<T>(fn: (cb: (result: Office.AsyncResult<T>) => void) => void):
   });
 }
 
-function emailsFromRecipients(
-  recips: Office.Recipients | Office.EmailAddressDetails[] | undefined,
-): string[] {
-  if (!recips) return [];
-  const list = Array.isArray(recips) ? recips : [];
-  return list
-    .map((r) => ("emailAddress" in r ? String(r.emailAddress || "") : ""))
-    .filter(Boolean);
+function emailsFromRecipients(recips: Office.EmailAddressDetails[] | undefined): string[] {
+  return (recips ?? [])
+    .map((r) => String(r.emailAddress || ""))
+    .filter(Boolean)
+    .map((email) => normalizeEmail(email));
 }
 
 async function recipientEmails(item: Office.MessageCompose): Promise<string[]> {
@@ -51,11 +59,97 @@ async function recipientEmails(item: Office.MessageCompose): Promise<string[]> {
     getAsync<Office.EmailAddressDetails[]>((cb) => item.cc.getAsync(cb)),
     getAsync<Office.EmailAddressDetails[]>((cb) => item.bcc.getAsync(cb)),
   ]);
-  return [...new Set([...emailsFromRecipients(to), ...emailsFromRecipients(cc), ...emailsFromRecipients(bcc)].map((e) => normalizeEmail(e)))];
+  return [...new Set([...emailsFromRecipients(to), ...emailsFromRecipients(cc), ...emailsFromRecipients(bcc)])];
 }
 
-function readSecurityToggles(_item: Office.MessageCompose): Promise<{ sign: boolean; encrypt: boolean }> {
-  return Promise.resolve({ sign: false, encrypt: false });
+function mailboxHost() {
+  const capabilities = detectOutlookCapabilities({ Office });
+  return {
+    capabilities,
+    mailHost: new OutlookMailHost(Office as never, capabilities),
+  };
+}
+
+function userEmail(): string {
+  const email = Office.context.mailbox?.userProfile?.emailAddress;
+  if (!email) throw new Error("Mailbox address is unavailable");
+  return email;
+}
+
+async function notify(item: Office.Item, message: string, type: "info" | "error" = "info"): Promise<void> {
+  const bag = (item as Office.MessageCompose).notificationMessages;
+  if (!bag) return;
+    const details =
+      type === "error"
+        ? {
+            type: Office.MailboxEnums.ItemNotificationMessageType.ErrorMessage,
+            message: message.slice(0, 150),
+          }
+        : {
+            type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+            message: message.slice(0, 150),
+            icon: "Icon16",
+            persistent: false,
+          };
+    try {
+      await getAsync<void>((cb) => bag.replaceAsync("scomm.crypto", details, cb));
+  } catch {
+    /* some hosts reject notifications */
+  }
+}
+
+async function completeCommand(event: Office.AddinCommands.Event, work: () => Promise<string>): Promise<void> {
+  const item = Office.context.mailbox.item;
+  try {
+    const message = await work();
+    if (item) await notify(item, message);
+  } catch (err) {
+    const text = err instanceof Error ? err.message : String(err);
+    if (item) await notify(item, text, "error");
+  } finally {
+    event.completed();
+  }
+}
+
+function encryptMessage(event: Office.AddinCommands.Event): void {
+  void completeCommand(event, async () => {
+    const item = Office.context.mailbox.item as Office.MessageCompose;
+    const prev = await loadComposeTogglesFromItem(item);
+    const next: ComposeProtectionToggles = { ...prev, encrypt: true };
+    await saveComposeTogglesToItem(item, next);
+    const { mailHost, capabilities } = mailboxHost();
+    const pubkey = session();
+    await restoreOfficeVault(pubkey);
+    return encryptComposeBody({
+      session: pubkey,
+      mailHost,
+      userEmail: userEmail(),
+      sign: next.sign,
+      capabilities,
+    });
+  });
+}
+
+function signMessage(event: Office.AddinCommands.Event): void {
+  void completeCommand(event, async () => {
+    const item = Office.context.mailbox.item as Office.MessageCompose;
+    const prev = await loadComposeTogglesFromItem(item);
+    const next: ComposeProtectionToggles = { ...prev, sign: true };
+    await saveComposeTogglesToItem(item, next);
+    const { mailHost } = mailboxHost();
+    const pubkey = session();
+    await restoreOfficeVault(pubkey);
+    if (next.encrypt) {
+      return encryptComposeBody({
+        session: pubkey,
+        mailHost,
+        userEmail: userEmail(),
+        sign: true,
+        capabilities: detectOutlookCapabilities({ Office }),
+      });
+    }
+    return signComposeBody({ session: pubkey, mailHost });
+  });
 }
 
 function onMessageSend(event: Office.AddinCommands.Event): void {
@@ -67,9 +161,7 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
         return;
       }
 
-      const body = await getAsync<string>((cb) =>
-        item.body.getAsync(Office.CoercionType.Html, cb),
-      );
+      const body = await getAsync<string>((cb) => item.body.getAsync(Office.CoercionType.Html, cb));
       const text = await getAsync<string>((cb) =>
         item.body.getAsync(Office.CoercionType.Text, cb),
       ).catch(() => "");
@@ -77,6 +169,8 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
       if (
         extractPgpMessage(text) ||
         extractPgpMessage(body) ||
+        extractPgpSignedMessage(text) ||
+        extractPgpSignedMessage(body) ||
         body.includes('protocol="application/pgp-signature"') ||
         body.includes('protocol="application/pgp-encrypted"')
       ) {
@@ -85,60 +179,61 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
       }
 
       const emails = await recipientEmails(item);
-      const { client } = createEventPubkeyClient();
-      const needsEncrypt: string[] = [];
-      for (const email of emails) {
-        try {
-          const selected = (await client.getBestKey({
-            email,
-            purpose: "encryption",
-          })) as { family?: string; algorithm?: string; suite?: string } | null;
-          const family = String(selected?.family || "");
-          const algo = String(selected?.algorithm || selected?.suite || "");
-          if (family === "pgp" || algo.startsWith("openpgp")) needsEncrypt.push(email);
-        } catch {
-          /* lookup failure: do not brick send */
+      const toggles = await loadComposeTogglesFromItem(item);
+      const pubkey = session();
+      const recipients = await lookupRecipientStatuses(pubkey, emails);
+      const gate = evaluateSendForToggles(toggles, text, body, recipients);
+      if (!gate.allow) {
+        event.completed({
+          allowEvent: false,
+          errorMessage: gate.errorMessage ?? "Scomm.AI blocked this send.",
+        } as Office.AddinCommands.EventCompletedOptions);
+        return;
+      }
+
+      if (gate.needsProtect) {
+        const { mailHost, capabilities } = mailboxHost();
+        await restoreOfficeVault(pubkey);
+        if (toggles.encrypt) {
+          await encryptComposeBody({
+            session: pubkey,
+            mailHost,
+            userEmail: userEmail(),
+            sign: toggles.sign,
+            capabilities,
+          });
+        } else if (toggles.sign) {
+          await signComposeBody({ session: pubkey, mailHost });
         }
       }
 
-      const toggles = await readSecurityToggles(item);
-
-      if (needsEncrypt.length > 0 && !toggles.encrypt) {
-        event.completed({
-          allowEvent: false,
-          errorMessage:
-            `Encryption unavailable for published keys.\n\n` +
-            `${needsEncrypt.join(", ")} require OpenPGP encryption.\n\n` +
-            `Enable Encrypt in the SComm Security pane, or change recipients.`,
-        } as Office.AddinCommands.EventCompletedOptions);
-        return;
-      }
-
-      if (toggles.encrypt && needsEncrypt.length < emails.length) {
-        const missing = emails.filter((e) => !needsEncrypt.includes(e));
-        event.completed({
-          allowEvent: false,
-          errorMessage:
-            `Encryption unavailable\n\n` +
-            `${missing.join(", ")} does not have a compatible encryption key.`,
-        } as Office.AddinCommands.EventCompletedOptions);
-        return;
-      }
-
       event.completed({ allowEvent: true });
-    } catch {
+    } catch (err) {
+      try {
+        const item = Office.context.mailbox.item as Office.MessageCompose;
+        const toggles = await loadComposeTogglesFromItem(item);
+        if (toggles.encrypt || toggles.sign) {
+          event.completed({
+            allowEvent: false,
+            errorMessage: err instanceof Error ? err.message : "Scomm.AI could not protect this message.",
+          } as Office.AddinCommands.EventCompletedOptions);
+          return;
+        }
+      } catch {
+        /* lookup of toggles failed — do not brick send */
+      }
       event.completed({ allowEvent: true });
     }
   })();
 }
 
 function onMessageCompose(event: Office.AddinCommands.Event): void {
-  void createEventPubkeyClient();
+  void session();
   event.completed({ allowEvent: true });
 }
 
 function onMessageDecrypt(event: Office.AddinCommands.Event): void {
-  void createEventPubkeyClient();
+  void session();
   event.completed({ allowEvent: true });
 }
 
@@ -146,6 +241,8 @@ Office.onReady(() => {
   Office.actions.associate("onMessageSend", onMessageSend);
   Office.actions.associate("onMessageCompose", onMessageCompose);
   Office.actions.associate("onMessageDecrypt", onMessageDecrypt);
+  Office.actions.associate("encryptMessage", encryptMessage);
+  Office.actions.associate("signMessage", signMessage);
 });
 
-export { onMessageCompose, onMessageDecrypt, onMessageSend };
+export { encryptMessage, onMessageCompose, onMessageDecrypt, onMessageSend, signMessage };

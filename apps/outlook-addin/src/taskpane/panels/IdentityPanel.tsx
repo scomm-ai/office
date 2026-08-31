@@ -153,6 +153,9 @@ export function IdentityPanel() {
   return (
     <section>
       <h2>Identity</h2>
+      <p className="note">
+        Keys are discovered on pubkey.scomm.ai — the same directory as the Scomm.AI mail client.
+      </p>
       <dl className="meta-grid">
         <dt>Current user (mailbox)</dt>
         <dd>{userEmail ?? "Unknown (Outlook profile not exposed in MVP)"}</dd>

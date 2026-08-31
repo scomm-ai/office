@@ -94,6 +94,38 @@ describe("PgpEngine", () => {
 		assert.equal(new TextDecoder().decode(decrypted), "html wrapped");
 	});
 
+	it("clearsigns and verifies with the generated key", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const signed = await engine.sign({
+			plaintext: "signed from outlook",
+			privateKey: alice.privateKey,
+		});
+		const armor = new TextDecoder().decode(signed);
+		assert.match(armor, /-----BEGIN PGP SIGNED MESSAGE-----/);
+		const verified = await engine.verify({
+			signed: armor,
+			publicKeys: [alice.publicKey],
+		});
+		assert.equal(verified.valid, true);
+		assert.equal(verified.plaintext, "signed from outlook");
+	});
+
+	it("encrypts with an embedded signature", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const ciphertext = await engine.encrypt({
+			plaintext: "signed secret",
+			recipientPublicKey: alice.publicKey,
+			signingPrivateKey: alice.privateKey,
+		});
+		const decrypted = await engine.decrypt({
+			ciphertext,
+			privateKey: alice.privateKey,
+		});
+		assert.equal(new TextDecoder().decode(decrypted), "signed secret");
+	});
+
 	it("advertises pgp on PubkeyClient discovery only when the engine is wired", async () => {
 		const crypto = new WebCryptoProvider();
 		const without = new PubkeyClient({ crypto });

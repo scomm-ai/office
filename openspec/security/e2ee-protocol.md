@@ -21,9 +21,12 @@ There is **no** SComm-proprietary ECDH envelope (`scomm-v1-ecdh-p256-aes256gcm` 
 ## Outlook add-in profile
 
 - Encrypt UTF-8 body text to armored `PGP MESSAGE`. Include self as recipient so Sent items decrypt.
+- Sign as clearsigned OpenPGP. Encrypt may embed a signature when Sign is also on.
 - Decrypt into the Security pane `<pre>` only. Do not `setBody` plaintext.
+- Verify using the sender signing key from pubkey.scomm.ai.
 - Harden HTML unwrap (`<br>`, split spans, `\r\n`) before OpenPGP parse.
-- `OnMessageSend` **Block** when To/Cc/Bcc have a directory PGP key and the body has no `BEGIN PGP MESSAGE`.
+- Ribbon Encrypt / Sign persist compose flags; `OnMessageSend` **Block** when To/Cc/Bcc have a directory OpenPGP key the add-in can encrypt to and the body has no OpenPGP protection.
+- Classical OpenPGP only. S/MIME and PQC keys are explained in the pane; they are not encrypted by this add-in.
 
 ## secMail0 profile
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  bodyHasOpenPgpProtection,
   decodePublicMaterial,
   extractPgpMessage,
+  extractPgpSignedMessage,
   htmlToPlainText,
   messagePlaintext,
 } from "./pgp-mail.js";
@@ -28,6 +30,13 @@ describe("pgp-mail", () => {
     expect(htmlToPlainText("<p>hi<br>there</p>")).toContain("hi");
     expect(messagePlaintext({ bodyHtml: "<p>secret</p>" })).toContain("secret");
     expect(messagePlaintext({ bodyText: "plain", bodyHtml: "<p>html</p>" })).toBe("plain");
+  });
+
+  it("extracts a clearsigned OpenPGP message", () => {
+    const signed =
+      "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA512\n\nhi\n-----BEGIN PGP SIGNATURE-----\n\nabc\n-----END PGP SIGNATURE-----";
+    expect(extractPgpSignedMessage(signed)).toContain("BEGIN PGP SIGNED MESSAGE");
+    expect(bodyHasOpenPgpProtection(signed)).toBe(true);
   });
 
   it("decodes base64url public material", () => {

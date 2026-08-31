@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { attachmentEncryptionNotice } from "@scomm-office/office";
 import { ComposeSecurityControls } from "../components/ComposeSecurityControls";
 import { useHostContext } from "../../lib/host-context";
 import {
   ProductionPubkeyDirectory,
-  decodePublicMaterial,
   extractPgpMessage,
-  messagePlaintext,
+  extractPgpSignedMessage,
   normalizeEmail,
 } from "@scomm-office/pubkeys";
-import { collectRecipientEmails } from "../../lib/semantic-policy";
-import { resolvePubkeyReadBaseUrl } from "../../lib/settings";
+import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../lib/settings";
+import type { TaskPaneCryptoAction } from "../../lib/taskpane-launch";
+import {
+  decryptCurrentBody,
+  encryptComposeBody,
+  verifyCurrentBody,
+} from "../../lib/mail-crypto-actions";
 import {
   getOfficePubkeySession,
   persistMsk,
@@ -23,7 +27,6 @@ import {
   fetchVaultInventory,
   listVaultTiles,
   syncHostedVault,
-  vaultPgpPrivateKeys,
   type OfficePubkeySession,
 } from "../../lib/pubkey-session";
 
@@ -37,7 +40,7 @@ type BootstrapStep =
   | "recover-otp"
   | "verified";
 
-export function SecurityPanel() {
+export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPaneCryptoAction }) {
   const { settings, currentUserEmail, isMockHost, mailHost, message, refreshMessage, capabilities } =
     useHostContext();
   const [busy, setBusy] = useState(false);
@@ -50,6 +53,7 @@ export function SecurityPanel() {
   const [hasPgp, setHasPgp] = useState(false);
   const [mailStatus, setMailStatus] = useState<string | null>(null);
   const [decryptedBody, setDecryptedBody] = useState<string | null>(null);
+  const launchRan = useRef(false);
   const [engineReady, setEngineReady] = useState(false);
   const [vaultPassphrase, setVaultPassphrase] = useState("");
   const [vaultBackup, setVaultBackup] = useState("");
@@ -69,9 +73,9 @@ export function SecurityPanel() {
     if (!pubkeyBase) return null;
     return getOfficePubkeySession({
       readBaseUrl: pubkeyBase,
-      writeBaseUrl: settings.pubkeyWriteBaseUrl || pubkeyBase,
+      writeBaseUrl: resolvePubkeyWriteBaseUrl(settings),
     });
-  }, [pubkeyBase, settings.pubkeyWriteBaseUrl]);
+  }, [pubkeyBase, settings]);
 
   useEffect(() => {
     const session = sessionFor();
@@ -277,58 +281,21 @@ export function SecurityPanel() {
     setBusy(true);
     setMailStatus(null);
     try {
-      const current = message ?? (await mailHost.getCurrentMessage());
-      const recipients = collectRecipientEmails(current);
-      const emails = [...new Set([...recipients, userEmail].map((value) => normalizeEmail(value)))];
-      const missing: string[] = [];
-      const publicKeys: Uint8Array[] = [];
-      for (const email of emails) {
-        try {
-          const selected = await session.client.getBestKey({
-            email,
-            purpose: "encryption",
-          });
-          const material = selected?.public_material as string | undefined;
-          if (!material) {
-            missing.push(email);
-            continue;
-          }
-          publicKeys.push(decodePublicMaterial(material));
-        } catch {
-          missing.push(email);
-        }
-      }
-      if (missing.length > 0) {
-        throw new Error(`No OpenPGP encryption key for: ${missing.join(", ")}`);
-      }
-      const plaintext = messagePlaintext(current);
-      if (!plaintext.trim()) {
-        throw new Error("Message body is empty");
-      }
-      const ciphertext = await session.pgpEngine.encrypt({
-        plaintext,
-        recipientPublicKeys: publicKeys,
+      const note = await encryptComposeBody({
+        session,
+        mailHost,
+        userEmail,
+        sign: false,
+        capabilities,
       });
-      const armored = new TextDecoder().decode(ciphertext);
-      await mailHost.setBody({ text: armored });
       await refreshMessage();
-      const notice = isMockHost ? null : attachmentEncryptionNotice(capabilities);
-      const leftover =
-        notice ??
-        (current.attachments && current.attachments.length > 0
-          ? "Attachments were not encrypted."
-          : null);
-      setMailStatus(
-        leftover
-          ? `Encrypted body for ${emails.join(", ")}. ${leftover}`
-          : `Encrypted for ${emails.join(", ")}.`,
-      );
+      setMailStatus(note);
     } catch (err) {
       setMailStatus(`Encrypt failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
-  }, [userEmail, sessionFor, message, mailHost, refreshMessage, capabilities, isMockHost]);
+  }, [userEmail, sessionFor, mailHost, refreshMessage, capabilities]);
 
   const handleDecrypt = useCallback(async () => {
     const session = sessionFor();
@@ -337,39 +304,29 @@ export function SecurityPanel() {
     setMailStatus(null);
     setDecryptedBody(null);
     try {
-      if (!session.vault.unlocked) {
-        const restored = await restoreOfficeVault(session);
-        if (!restored.restored) {
-          throw new Error("Unlock the Vault (enroll MSK) before decrypting");
-        }
-      }
-      const current = message ?? (await mailHost.getCurrentMessage());
-      const armored = extractPgpMessage(current.bodyText) ?? extractPgpMessage(current.bodyHtml);
-      if (!armored) {
-        throw new Error("No OpenPGP message in the current item");
-      }
-      const keys = vaultPgpPrivateKeys(session);
-      if (keys.length === 0) {
-        throw new Error("Vault has no OpenPGP private key");
-      }
-      let lastError: unknown;
-      for (const privateKey of keys) {
-        try {
-          const plain = await session.pgpEngine.decrypt({ ciphertext: armored, privateKey });
-          setDecryptedBody(new TextDecoder().decode(plain));
-          setMailStatus("Decrypted with a Vault OpenPGP key.");
-          return;
-        } catch (err) {
-          lastError = err;
-        }
-      }
-      throw lastError instanceof Error ? lastError : new Error("No Vault key decrypted this message");
+      const result = await decryptCurrentBody({ session, mailHost });
+      setDecryptedBody(result.plaintext);
+      setMailStatus(result.note);
     } catch (err) {
       setMailStatus(`Decrypt failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
-  }, [sessionFor, message, mailHost]);
+  }, [sessionFor, mailHost]);
+
+  const handleVerify = useCallback(async () => {
+    const session = sessionFor();
+    if (!session) return;
+    setBusy(true);
+    setMailStatus(null);
+    try {
+      setMailStatus(await verifyCurrentBody({ session, mailHost }));
+    } catch (err) {
+      setMailStatus(`Verify failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [sessionFor, mailHost]);
 
   const handleExportVault = useCallback(async () => {
     const session = sessionFor();
@@ -405,9 +362,20 @@ export function SecurityPanel() {
     }
   }, [sessionFor, vaultPassphrase, vaultBackup]);
 
+  useEffect(() => {
+    if (launchRan.current || !launchAction || !engineReady) return;
+    launchRan.current = true;
+    if (launchAction === "decrypt") void handleDecrypt();
+    if (launchAction === "verify") void handleVerify();
+    if (launchAction === "encrypt") void handleEncrypt();
+  }, [launchAction, engineReady, handleDecrypt, handleVerify, handleEncrypt]);
+
   const composeMode = message?.mode === "compose" || isMockHost;
   const pgpPresent = Boolean(
-    extractPgpMessage(message?.bodyText) ?? extractPgpMessage(message?.bodyHtml),
+    extractPgpMessage(message?.bodyText) ??
+      extractPgpMessage(message?.bodyHtml) ??
+      extractPgpSignedMessage(message?.bodyText) ??
+      extractPgpSignedMessage(message?.bodyHtml),
   );
   const attachmentNotice = isMockHost ? null : attachmentEncryptionNotice(capabilities);
 
@@ -430,17 +398,17 @@ export function SecurityPanel() {
       </dl>
 
       <section>
-        <h2>SComm identity</h2>
+        <h2>Scomm.AI identity</h2>
         {!userEmail ? (
-          <p className="note">Current user email unknown — sign in via Microsoft to set up SComm.</p>
+          <p className="note">Current user email unknown — sign in via Microsoft to set up Scomm.AI.</p>
         ) : bootstrapStep === "idle" ? (
           <div className="actions">
-            <p className="note">Set up SComm on this device for {userEmail}.</p>
+            <p className="note">Set up Scomm.AI on this device for {userEmail}.</p>
             <button type="button" className="primary" disabled={busy} onClick={() => void handleRequestOtp()}>
-              Create SComm identity
+              Create Scomm.AI identity
             </button>
             <button type="button" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
-              I already have SComm on another device
+              I already have Scomm.AI on another device
             </button>
           </div>
         ) : bootstrapStep === "otp-sent" ? (
@@ -537,26 +505,30 @@ export function SecurityPanel() {
       />
 
       <section>
-        <h2>Legacy body encryption</h2>
+        <h2>OpenPGP (GpgOL-style)</h2>
         <p className="note">
-          Body-only OpenPGP (armored). Recipients need a published pgp key. Your address is
-          included so Sent items can decrypt. Attachments and S/MIME are not in this slice.
+          Encrypt and sign the Outlook body as armored OpenPGP. Recipients are resolved on
+          pubkey.scomm.ai. Decrypt and verify stay in this pane so plaintext is not written back
+          to the mailbox. Attachments need Mailbox 1.8+.
         </p>
         {composeMode && attachmentNotice ? <p className="note">{attachmentNotice}</p> : null}
         <div className="actions">
           <button
             type="button"
             className="primary"
-            disabled={busy || !engineReady || !hasPgp || !composeMode}
+            disabled={busy || !engineReady || !composeMode}
             onClick={() => void handleEncrypt()}
           >
-            Encrypt body
+            Encrypt
           </button>
-          <button type="button" disabled={busy || !engineReady || !hasPgp} onClick={() => void handleDecrypt()}>
-            Decrypt body
+          <button type="button" disabled={busy || !engineReady} onClick={() => void handleDecrypt()}>
+            Decrypt
+          </button>
+          <button type="button" disabled={busy || !engineReady} onClick={() => void handleVerify()}>
+            Verify signature
           </button>
         </div>
-        {pgpPresent ? <p className="note">Current item looks like an OpenPGP message.</p> : null}
+        {pgpPresent ? <p className="note">Current item looks like OpenPGP.</p> : null}
         {mailStatus ? <p className="note">{mailStatus}</p> : null}
         {decryptedBody ? <pre className="code-block">{decryptedBody}</pre> : null}
       </section>
