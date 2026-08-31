@@ -45,6 +45,16 @@
       a {
         color: var(--accent);
       }
+      .primary {
+        display: inline-block;
+        margin: 0.75rem 0 0;
+        padding: 0.55rem 0.9rem;
+        background: var(--accent);
+        color: #fff;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 600;
+      }
       .box {
         margin: 1rem 0;
         padding: 0.75rem 0.85rem;
@@ -60,26 +70,44 @@
         OpenPGP encrypt, sign, decrypt, and verify in Outlook, with keys from
         pubkey.scomm.ai.
       </p>
-      <div class="box">
-        <strong>Manifest URL</strong> (Add from URL)<br />
-        <a class="url" href="/manifest.xml">https://office.scomm.ai/manifest.xml</a>
-      </div>
       <p>
-        <a href="/manifest.xml" download="scomm-ai-outlook.xml">Download manifest.xml</a>
-        ·
-        <a href="/taskpane.html">Open task pane</a>
+        Microsoft disabled <strong>Add from URL</strong> for custom Outlook add-ins.
+        Download the manifest, then use <strong>Add from File</strong>.
       </p>
+      <p>
+        <a class="primary" href="/manifest.xml" download="scomm-ai-outlook.xml"
+          >Download scomm-ai-outlook.xml</a
+        >
+      </p>
+      <div class="box">
+        If the browser shows XML instead of saving, use
+        <strong>File → Save As</strong> and keep the <code>.xml</code> extension.
+      </div>
       <h2>Install</h2>
       <ol>
-        <li>Outlook: <strong>Get Add-ins</strong> → <strong>My add-ins</strong>.</li>
         <li>
-          <strong>Add a custom add-in</strong> → <strong>Add from URL</strong>.
+          Open the add-in dialog:
+          <a href="https://aka.ms/olksideload">https://aka.ms/olksideload</a>
+          (or classic Outlook: <strong>File → Manage Add-ins</strong>).
         </li>
-        <li>Paste <code>https://office.scomm.ai/manifest.xml</code> → OK.</li>
+        <li><strong>My add-ins</strong> → bottom <strong>Custom add-ins</strong>.</li>
+        <li>
+          <strong>Add a custom add-in</strong> → <strong>Add from File</strong> →
+          choose the downloaded XML → Install.
+        </li>
+        <li>
+          Restart Outlook. On a mail item, the ribbon group is
+          <strong>Scomm.AI</strong>.
+        </li>
       </ol>
       <p>
-        Classic Outlook (Windows): Home → Get Add-ins, or File → Manage Add-ins.
-        Microsoft 365 / Exchange Online mailbox required.
+        Microsoft 365 / Exchange Online mailbox required. Classic Outlook may take
+        a while to show a newly sideloaded add-in (client cache).
+      </p>
+      <p>
+        Admins: deploy the same XML in Microsoft 365 admin center → Integrated apps.
+        Manifest:
+        <a class="url" href="/manifest.xml">https://office.scomm.ai/manifest.xml</a>
       </p>
     </main>
   </body>

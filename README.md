@@ -131,7 +131,7 @@ Task pane **Settings** also persist to `localStorage` via `MemoryUserSettingsSto
 
 ## Sideloading Outlook add-in
 
-**Production:** paste **https://office.scomm.ai/manifest.xml** into Outlook **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**. Install notes: **[docs/sideload.md](./docs/sideload.md)**.
+**Production:** Microsoft disabled **Add from URL**. Download **https://office.scomm.ai/manifest.xml**, then **Add from File** via **https://aka.ms/olksideload** (or classic Outlook **File → Manage Add-ins**). Details: **[docs/sideload.md](./docs/sideload.md)**.
 
 **Local:** trust the Vite cert, then **Add from file** `apps/outlook-addin/manifest/manifest.xml` against `https://localhost:5173`. Do not share the localhost manifest as an install link.
 
