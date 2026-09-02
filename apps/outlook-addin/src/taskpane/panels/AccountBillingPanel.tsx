@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BillingAuthClient,
-  BillingPortalUrls,
-  BillingSdk,
-  BillingSession,
-  LocalStorageBillingSessionStore,
-  type BillingOAuthProvidersDocument,
-  type BillingTokenPayload,
-  type Plan,
-} from "@scomm-office/billing";
+  acquireApiToken,
+  authBaseUrl,
+  fetchOAuthProviders,
+  shopUrl,
+  signInWithEmail,
+  type OAuthProvidersDocument,
+} from "@2key/browser-sdk/auth";
+import type { LicensePayload, Plan } from "@2key/browser-sdk/billing";
+import { BILLING_ADDON_AI_ASSISTANT } from "../../lib/billing-catalog";
+import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
 
 const ACCOUNT_KEY = "default";
@@ -20,55 +21,59 @@ export function AccountBillingPanel() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pasteToken, setPasteToken] = useState("");
-  const [providers, setProviders] = useState<BillingOAuthProvidersDocument | null>(null);
-  const [payload, setPayload] = useState<BillingTokenPayload | null>(null);
+  const [providers, setProviders] = useState<OAuthProvidersDocument | null>(null);
+  const [payload, setPayload] = useState<LicensePayload | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [profileEmail, setProfileEmail] = useState<string | null>(null);
-
-  const store = useMemo(() => new LocalStorageBillingSessionStore(), []);
-  const session = useMemo(() => new BillingSession(store), [store]);
+  const [deviceSki, setDeviceSki] = useState<string | null>(null);
+  const [aiOk, setAiOk] = useState(false);
 
   const billingOrigin = settings.billingOrigin?.trim() ?? "";
 
-  const authClient = useMemo(() => {
+  const billing = useMemo(() => {
     if (!billingOrigin) {
       return null;
     }
-    return new BillingAuthClient({
-      billingBaseUrl: billingOrigin,
-      callbackURL:
-        typeof window !== "undefined" ? `${window.location.origin}/taskpane.html` : undefined,
-    });
+    return createOfficeBillingClient(billingOrigin);
   }, [billingOrigin]);
 
   const refresh = useCallback(async () => {
-    if (billingOrigin) {
-      BillingSdk.configure({ billingApiBaseUrl: billingOrigin });
+    if (!billing) {
+      setPayload(null);
+      setDeviceSki(null);
+      setAiOk(false);
+      return;
     }
-    const account = await session.initForAccount(ACCOUNT_KEY);
-    setPayload(BillingSdk.getPayload());
-    setProfileEmail(account?.userProfile?.email ?? null);
-  }, [billingOrigin, session]);
+    const device = await billing.ensureDeviceId({
+      accountKey: ACCOUNT_KEY,
+      friendlyName: "Outlook",
+    });
+    setDeviceSki(device.ski);
+    const restored = await billing.restore(ACCOUNT_KEY);
+    setPayload(restored);
+    try {
+      const e = billing.entitlements();
+      setAiOk(e.hasAddon(BILLING_ADDON_AI_ASSISTANT) || e.hasOffering(BILLING_ADDON_AI_ASSISTANT));
+    } catch {
+      setAiOk(false);
+    }
+  }, [billing]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const discover = async () => {
-    if (!authClient) {
+    if (!billing) {
       setStatus("Set billing origin in Settings first.");
       return;
     }
     setBusy(true);
     setStatus(null);
     try {
-      const doc = await authClient.discover();
+      const doc = await fetchOAuthProviders(billing.config);
       setProviders(doc);
-      setStatus(
-        `Providers: ${doc.providers.join(", ") || "none"}; email/password: ${
-          doc.emailPasswordEnabled ? "yes" : "unknown"
-        }`,
-      );
+      const enabled = doc.providers.filter((p) => p.enabled).map((p) => p.id);
+      setStatus(`Providers: ${enabled.join(", ") || "none"}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -77,18 +82,22 @@ export function AccountBillingPanel() {
   };
 
   const signIn = async () => {
-    if (!authClient) {
+    if (!billing) {
       setStatus("Set billing origin in Settings first.");
       return;
     }
     setBusy(true);
     setStatus(null);
     try {
-      await authClient.signInEmail({ email, password });
-      const tokens = await authClient.acquireApiToken();
-      await session.persistAuthTokens({ accountKey: ACCOUNT_KEY, tokens });
-      const sync = await session.syncOnlineForAccount({ accountKey: ACCOUNT_KEY });
-      setStatus(sync.kind === "success" ? sync.message : sync.message);
+      await signInWithEmail(billing.config, { email, password });
+      const minted = await acquireApiToken(billing.config);
+      if (minted.orgPickRequired) {
+        setStatus("Choose an organization in the billing portal, then sync again.");
+        return;
+      }
+      await billing.ensureDeviceId({ accountKey: ACCOUNT_KEY, friendlyName: "Outlook" });
+      await billing.syncLicense({ accessToken: minted.token, accountKey: ACCOUNT_KEY });
+      setStatus("Signed in and license synced.");
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -98,11 +107,20 @@ export function AccountBillingPanel() {
   };
 
   const syncLicense = async () => {
+    if (!billing) {
+      setStatus("Set billing origin in Settings first.");
+      return;
+    }
     setBusy(true);
     setStatus(null);
     try {
-      const sync = await session.syncOnlineForAccount({ accountKey: ACCOUNT_KEY });
-      setStatus(sync.message);
+      const minted = await acquireApiToken(billing.config);
+      if (minted.orgPickRequired || !minted.token) {
+        setStatus("Sign in first, then sync license.");
+        return;
+      }
+      await billing.syncLicense({ accessToken: minted.token, accountKey: ACCOUNT_KEY });
+      setStatus("License synced.");
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -112,17 +130,15 @@ export function AccountBillingPanel() {
   };
 
   const verifyPaste = async () => {
+    if (!billing) {
+      setStatus("Set billing origin in Settings first.");
+      return;
+    }
     setBusy(true);
     setStatus(null);
     try {
-      if (billingOrigin) {
-        BillingSdk.configure({ billingApiBaseUrl: billingOrigin });
-      }
-      const result = await session.verifyOfflineToken({
-        accountKey: ACCOUNT_KEY,
-        token: pasteToken,
-      });
-      setStatus(result.message);
+      await billing.pasteLicense(pasteToken, ACCOUNT_KEY);
+      setStatus("Token verified. Subscription data updated.");
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -132,14 +148,13 @@ export function AccountBillingPanel() {
   };
 
   const loadPlans = async () => {
-    if (!billingOrigin) {
+    if (!billing) {
       setStatus("Set billing origin in Settings first.");
       return;
     }
     setBusy(true);
     try {
-      BillingSdk.configure({ billingApiBaseUrl: billingOrigin });
-      const catalog = await BillingSdk.fetchPlanCatalog();
+      const catalog = await billing.api.fetchPlans();
       setPlans(catalog);
       setStatus(`Loaded ${catalog.length} plan(s).`);
     } catch (error) {
@@ -150,25 +165,25 @@ export function AccountBillingPanel() {
   };
 
   const openPortal = () => {
-    const portalBase = settings.billingPortalUrl || billingOrigin;
-    if (!portalBase) {
-      setStatus("Set billing portal URL.");
+    if (!billing) {
+      setStatus("Set billing origin in Settings first.");
       return;
     }
-    const urls = new BillingPortalUrls(portalBase);
-    const token = session.accountSession?.authTokens?.accessToken;
-    window.open(urls.home(token), "_blank", "noopener,noreferrer");
+    window.open(shopUrl(billing.config), "_blank", "noopener,noreferrer");
   };
 
   const signOut = async () => {
     setBusy(true);
     try {
-      if (authClient) {
-        await authClient.signOut().catch(() => undefined);
+      if (billing) {
+        await fetch(`${authBaseUrl(billing.config)}/sign-out`, {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => undefined);
+        await billing.session.clear(ACCOUNT_KEY);
       }
-      await session.clearAccount(ACCOUNT_KEY);
       setPayload(null);
-      setProfileEmail(null);
+      setAiOk(false);
       setStatus("Signed out of billing profile.");
     } finally {
       setBusy(false);
@@ -180,18 +195,20 @@ export function AccountBillingPanel() {
       <h2>Account & Billing</h2>
       <p className="note">
         Profile/billing SSO is separate from the Outlook mailbox identity (dual auth). License JWTs
-        verify client-side; checkout stays on the billing portal.
+        verify client-side via `@2key/browser-sdk`; checkout stays on the billing portal.
       </p>
 
       <dl className="meta-grid">
         <dt>Mailbox (host)</dt>
         <dd>{currentUserEmail ?? (isMockHost ? "you@example.com" : "Unknown")}</dd>
         <dt>Billing profile</dt>
-        <dd>{profileEmail ?? "Not signed in"}</dd>
+        <dd>{payload?.payingParty.billingEmail ?? "Not signed in"}</dd>
         <dt>Billing origin</dt>
         <dd>{billingOrigin || "— (set in Settings)"}</dd>
+        <dt>Device SKI</dt>
+        <dd>{deviceSki ?? "—"}</dd>
         <dt>AI add-on</dt>
-        <dd>{session.hasAiAssistantEntitlement(payload) ? "entitled" : "not entitled"}</dd>
+        <dd>{aiOk ? "entitled" : "not entitled"}</dd>
       </dl>
 
       <div className="field">
@@ -241,8 +258,12 @@ export function AccountBillingPanel() {
         </div>
         {providers ? (
           <p className="note">
-            Social: {providers.providers.join(", ") || "none"} — popup OAuth may be blocked in some
-            Outlook WebViews; use email or paste token.
+            Social:{" "}
+            {providers.providers
+              .filter((p) => p.enabled)
+              .map((p) => p.id)
+              .join(", ") || "none"}{" "}
+            — popup OAuth may be blocked in some Outlook WebViews; use email or paste token.
           </p>
         ) : null}
       </section>
@@ -271,13 +292,7 @@ export function AccountBillingPanel() {
           <button type="button" className="secondary" disabled={busy} onClick={() => void loadPlans()}>
             Load plan catalog
           </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={!session.canOpenPortal()}
-            onClick={openPortal}
-            title={session.canOpenPortal() ? "Open billing portal" : "Paying-party owners only"}
-          >
+          <button type="button" className="secondary" disabled={!billing} onClick={openPortal}>
             Open billing portal
           </button>
         </div>

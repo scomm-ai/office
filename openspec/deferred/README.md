@@ -39,7 +39,7 @@ SComm Office deliberately defers features where requirements are incomplete, pla
 
 | Item | Spec |
 |------|------|
-| Billing / Better Auth client | [006-billing-auth-js](../architecture/006-billing-auth-js.md) |
+| Billing via `@2key/browser-sdk` | [006-billing-auth-js](../architecture/006-billing-auth-js.md) |
 | Production pubkey discovery | [pubkey-server-api](../features/pubkey-server-api.md) |
 | Cloud + Local BYOAI | [byoai](../features/byoai.md) |
 | IDR third-party embed | [003-idr-transport](../architecture/003-idr-transport.md) |

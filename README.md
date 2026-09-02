@@ -7,7 +7,7 @@ This monorepo ships:
 - **`apps/outlook-addin`** — React 19 + Vite task pane (HTTPS dev server, Office.js manifest) — **product**
 - **`apps/dev-console`** — browser fixture runner for semantics + policy debugging
 - **`apps/server`** — Fastify **fixture only** (not required for product paths)
-- **`packages/*`** — shared TypeScript libraries (`@scomm-office/*`), including `billing` and `byoai`
+- **`packages/*`** — shared TypeScript libraries (`@scomm-office/*`), including `byoai`. Billing/license is `@2key/browser-sdk` (not a local package).
 
 > **Client-first:** Auth/billing talk to the billing host; public keys to the production pubkey service; IDR is an embedded third-party SDK. See [005-no-office-server](./openspec/architecture/005-no-office-server.md).
 
@@ -90,7 +90,7 @@ flowchart TB
 | `packages/testkit` | `@scomm-office/testkit` | HTML fixtures |
 | `openspec/` | — | Architecture & security decisions |
 
-Workspace discovery: `pnpm-workspace.yaml` includes `apps/*` and `packages/*`.
+Workspace discovery: `pnpm-workspace.yaml` includes `apps/*`, `packages/*`, and a sibling checkout of `@2key/browser-sdk` at `../2key-billing-sdks/packages/javascript/packages/*`. Clone that repo next to this one before `pnpm install`.
 
 ## Prerequisites
 
@@ -125,6 +125,8 @@ Copy `.env.example` to `.env` at the repo root. Vite apps read `VITE_*` variable
 | `VITE_PUBKEY_SERVER_URL` | same as above | Public key directory |
 | `VITE_IDR_HOST` | *(empty)* | Your IDR tunnel host |
 | `VITE_IDR_SERVICE` | `ollama` | IDR service name for BYOM |
+| `VITE_BILLING_ORIGIN` | *(empty)* | Billing API origin (`https://…`) |
+| `VITE_BILLING_PORTAL_URL` | same as origin | Billing portal / shop URL |
 | `DATABASE_URL` | `postgres://...@localhost:5433/scomm_office` | Future Postgres (port **5433**) |
 
 Task pane **Settings** also persist to `localStorage` via `MemoryUserSettingsStore`.

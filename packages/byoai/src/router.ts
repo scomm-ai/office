@@ -1,24 +1,28 @@
-import { BILLING_ADDON_AI_ASSISTANT, type BillingTokenPayload } from "@scomm-office/billing";
 import type { IdrTransport } from "@scomm-office/idr";
 import { OllamaViaIdrProvider } from "@scomm-office/idr";
 import type { CloudAiClient } from "./cloud-client.js";
-import { hasAiEntitlement, type AiEntitlementPolicy } from "./entitlements.js";
+import {
+  BILLING_ADDON_AI_ASSISTANT,
+  hasAiEntitlement,
+  type AddonGate,
+  type AiEntitlementPolicy,
+} from "./entitlements.js";
 import type { ByoaiSettings, CloudAiProfile } from "./types.js";
 
-export type { AiEntitlementPolicy } from "./entitlements.js";
-export { hasAiEntitlement } from "./entitlements.js";
+export type { AddonGate, AiEntitlementPolicy } from "./entitlements.js";
+export { BILLING_ADDON_AI_ASSISTANT, hasAiEntitlement } from "./entitlements.js";
 
 export class ByoaiRouter {
   constructor(
     private readonly settings: ByoaiSettings,
     private readonly cloudClient: CloudAiClient,
     private readonly getIdrTransport: () => IdrTransport | null,
-    private readonly getLicensePayload: () => BillingTokenPayload | null,
+    private readonly getAddonGate: () => AddonGate | null,
     private readonly policy: AiEntitlementPolicy = { requireAiAddon: true },
   ) {}
 
   assertEntitled(): void {
-    if (!hasAiEntitlement(this.getLicensePayload(), this.policy)) {
+    if (!hasAiEntitlement(this.getAddonGate(), this.policy)) {
       throw new Error(
         `AI features require the "${BILLING_ADDON_AI_ASSISTANT}" add-on. Sync billing or paste a license token.`,
       );

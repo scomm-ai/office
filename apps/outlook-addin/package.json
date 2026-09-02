@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@azure/msal-browser": "^5.18.0",
-    "@scomm-office/billing": "workspace:*",
+    "@2key/browser-sdk": "workspace:*",
     "@scomm-office/byoai": "workspace:*",
     "@scomm-office/config": "workspace:*",
     "@scomm-office/core": "workspace:*",
