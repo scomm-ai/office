@@ -36,6 +36,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout 2key billing SDKs (sibling)
+        env:
+          SDK_TOKEN: ${{ secrets.TWOKEY_BILLING_SDKS_TOKEN }}
+        run: |
+          dest="$GITHUB_WORKSPACE/../2key-billing-sdks"
+          branch="feat/unified-sdk-license-parity"
+          if [ -n "$SDK_TOKEN" ]; then
+            git clone --depth 1 --branch "$branch" \
+              "https://x-access-token:${SDK_TOKEN}@github.com/2keyapp/2key-billing-sdks.git" \
+              "$dest"
+          else
+            git clone --depth 1 --branch "$branch" \
+              https://github.com/2keyapp/2key-billing-sdks.git \
+              "$dest"
+          fi
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.0
@@ -47,6 +63,19 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Build @2key/browser-sdk
+        run: pnpm --filter @2key/browser-sdk... run build
+
+      - name: Forbid local billing / Better Auth
+        run: |
+          test ! -d packages/billing
+          if grep -R -n -E "better-auth|@scomm-office/billing" \
+            --exclude-dir=node_modules --exclude-dir=dist \
+            apps packages; then
+            echo "Forbidden billing client import" >&2
+            exit 1
+          fi
 
       - name: Build packages
         run: pnpm -r --filter './packages/**' --sort run build

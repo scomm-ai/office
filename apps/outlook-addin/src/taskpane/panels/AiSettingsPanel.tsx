@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createCloudProfile,
   displayNameForProvider,
@@ -7,12 +7,8 @@ import {
   type CloudAiProfile,
   type CloudAiProviderKind,
 } from "@scomm-office/byoai";
-import {
-  BILLING_ADDON_AI_ASSISTANT,
-  BillingSdk,
-  LocalStorageBillingSessionStore,
-  BillingSession,
-} from "@scomm-office/billing";
+import { BILLING_ADDON_AI_ASSISTANT } from "../../lib/billing-catalog";
+import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
 
 const BYOAI_PROFILES_KEY = "scomm-office.byoai.profiles.v1";
@@ -41,18 +37,35 @@ export function AiSettingsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(profiles[0]?.id ?? null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [entitled, setEntitled] = useState(false);
 
   const keyStore = useMemo(() => new LocalStorageCloudAiKeyStore(), []);
   const cloudClient = useMemo(() => new CloudAiClient(keyStore), [keyStore]);
-  const billingSession = useMemo(
-    () => new BillingSession(new LocalStorageBillingSessionStore()),
-    [],
+  const billingOrigin = settings.billingOrigin?.trim() ?? "";
+  const billing = useMemo(
+    () => (billingOrigin ? createOfficeBillingClient(billingOrigin) : null),
+    [billingOrigin],
   );
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
-
-  const entitled = BillingSdk.hasAddon(BILLING_ADDON_AI_ASSISTANT);
   const requireEntitlement = settings.requireAiAddonEntitlement !== false;
+
+  useEffect(() => {
+    if (!billing) {
+      setEntitled(false);
+      return;
+    }
+    void billing.restore(ACCOUNT_KEY).then(() => {
+      try {
+        const e = billing.entitlements();
+        setEntitled(
+          e.hasAddon(BILLING_ADDON_AI_ASSISTANT) || e.hasOffering(BILLING_ADDON_AI_ASSISTANT),
+        );
+      } catch {
+        setEntitled(false);
+      }
+    });
+  }, [billing]);
 
   const persist = (next: CloudAiProfile[]) => {
     setProfiles(next);
@@ -103,7 +116,9 @@ export function AiSettingsPanel() {
     setBusy(true);
     setStatus(null);
     try {
-      await billingSession.initForAccount(ACCOUNT_KEY);
+      if (billing) {
+        await billing.restore(ACCOUNT_KEY);
+      }
       const ok = await cloudClient.testConnection(selected, draftApiKey || undefined);
       setStatus(ok ? "Cloud provider reachable." : "Could not connect (check key / URL).");
     } catch (error) {

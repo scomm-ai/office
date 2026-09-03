@@ -2,58 +2,68 @@
 
 ## Status
 
-**Accepted**
+**Accepted** (revised)
 
 ## Context
 
-secMail uses `billing_dart_sdk` (Better Auth Flutter client + license JWT sync). SComm Office is TypeScript/React. The Dart SDK at `billing_dart_sdk` is the **API reference**; Office ports the surface to `@scomm-office/billing`, structured so it can later extract as a standalone JS SDK.
+secMail uses `2key_dart_sdk`. Outlook is TypeScript/React. Both must be the **same using-party product**: DeviceID, signed license, catalog-gated entitlements.
+
+`@2key/browser-sdk` (in `2key-billing-sdks`) is that JS client. This repo is a **host**, not an SDK.
 
 ## Problem
 
-Without a shared client module, Account/Billing UI and entitlement gates will diverge from secMail’s license model.
+A local `@scomm-office/billing` port of Dart + Better Auth would drift from Flutter and duplicate JWT/entitlement math.
 
 ## Goals
 
-- Mirror Dart SDK concerns: auth, session, license sync (ETag/304), ES256 verify, entitlements, plan catalog, portal URL helpers
-- Use Better Auth **JS** client against `{billingOrigin}/api/auth`
-- Call `{billingOrigin}/api/v1/license`, `/subscriptions/me`, `/plans`
-- Work inside Outlook task-pane WebViews (popup/redirect OAuth; no Flutter deep links)
+- Pin `@2key/browser-sdk` for DeviceID, license restore/sync, and `hasProduct` / `hasOffering` / `hasAddon`
+- Email/password + `acquireApiToken` via SDK HTTP adapters (no Better Auth types)
+- Dual identity: mailbox (Office.js / MSAL) ≠ billing SSO
+- Fail-closed gates against a static Outlook catalog intersected with the verified JWT
 
 ## Non-goals
 
 - Hosting Better Auth or billing APIs inside Office
 - Full portal/admin API (checkout, invoices, seats)
-- Vendoring Dart source into the monorepo
+- Porting Dart into this monorepo
+- Embedding DP / Rust AuthZ in the Outlook add-in
 
 ## Constraints
 
 - License verify PEM is public only; never embed private signing keys
-- Dual identity: billing SSO ≠ mailbox identity ([constitution](../constitution.md))
-- Cookie/session quirks in Office WebViews — document fallbacks (email/password, paste license token)
+- Outlook WebViews: prefer email/password and paste-token; social OAuth via `displayDialogAsync` when needed
+- Never send mail bodies or Graph tokens to billing
+- Production add-in origin: `https://office.scomm.ai`
 
 ## Proposed design
 
-Package: `packages/billing` → `@scomm-office/billing`
+Host wiring lives in `apps/outlook-addin/src/lib/billing-*.ts`.
 
-| Surface | Role |
-|---------|------|
-| `BillingSdk` | configure, sync, verify, `getPayload`, catalog |
-| `BillingAuthClient` | Better Auth sign-in + `GET /api/auth/token` mint |
-| `BillingSession` | persist auth/license, poll, offline paste |
-| `BillingApiClient` | thin `/api/v1/*` HTTP |
-| `TokenVerifier` | ES256 JWT → payload + entitlement helpers |
+```ts
+const billing = createBillingClient({
+  apiBaseUrl,
+  publicKeyPem,
+  storagePrefix: "scomm-office",
+  catalog: SCOMM_OFFICE_CATALOG,
+});
+await billing.ensureDeviceId();
+await billing.restore();
+await billing.syncLicense({ accessToken });
+billing.hasAddon("ai_assistant");
+```
 
-Reference: `packages/billing/REFERENCE.md` → Dart SDK path.
+`@scomm-office/byoai` receives an `AddonGate` (`hasAddon` / `hasOffering`). It must not parse JWTs.
 
 ## Decision
 
-**Implement `@scomm-office/billing` as the using-party JS client. Pin `better-auth` (npm or 2keyapp fork) to match the billing host.**
+**Delete `@scomm-office/billing`. The add-in consumes `@2key/browser-sdk` only.**
 
 ## Implementation status
 
 | Item | Status |
 |------|--------|
-| Package scaffold | In progress |
-| JWT verify + entitlements | In progress |
-| Auth client + session | In progress |
-| Add-in Account/Billing UI | In progress |
+| Pin `@2key/browser-sdk` | Done |
+| Account/Billing UI on DeviceID + sync + gates | Done |
+| BYOAI `hasAddon("ai_assistant")` / `hasOffering` | Done |
+| Delete `@scomm-office/billing` | Done |
+| CI forbid `better-auth` and local JWT parsers | Done |
