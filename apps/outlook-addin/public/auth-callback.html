@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Signing in…</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      body { font-family: "Segoe UI", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f4f6f8; color: #1f2933; }
+      .card { text-align: center; padding: 2rem; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p id="msg">Completing sign-in…</p>
+    </div>
+    <script>
+      Office.onReady(function () {
+        try {
+          Office.context.ui.messageParent(JSON.stringify({ status: "success" }));
+        } catch (e) {
+          document.getElementById("msg").textContent = "Signed in. You can close this window.";
+        }
+      });
+    </script>
+  </body>
+</html>

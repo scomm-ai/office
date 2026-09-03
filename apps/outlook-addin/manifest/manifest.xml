@@ -17,6 +17,7 @@
   <AppDomains>
     <AppDomain>https://localhost:5173</AppDomain>
     <AppDomain>https://office.scomm.ai</AppDomain>
+    <AppDomain>https://billing.scomm.ai</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox" />

@@ -4,12 +4,12 @@ import {
   authBaseUrl,
   fetchOAuthProviders,
   shopUrl,
-  signInWithEmail,
-  type OAuthProvidersDocument,
+  type OAuthProviderInfo,
 } from "@2key/browser-sdk/auth";
 import type { LicensePayload, Plan } from "@2key/browser-sdk/billing";
 import { BILLING_ADDON_AI_ASSISTANT, BILLING_ADDON_PGP } from "../../lib/billing-catalog";
 import { createOfficeBillingClient } from "../../lib/billing-client";
+import { openOAuthDialog } from "../../lib/billing-oauth-dialog";
 import { useHostContext } from "../../lib/host-context";
 import { DEFAULT_SETTINGS } from "../../lib/settings";
 
@@ -19,10 +19,8 @@ export function AccountBillingPanel() {
   const { settings, updateSettings, isMockHost, currentUserEmail } = useHostContext();
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [pasteToken, setPasteToken] = useState("");
-  const [providers, setProviders] = useState<OAuthProvidersDocument | null>(null);
+  const [providers, setProviders] = useState<OAuthProviderInfo[]>([]);
   const [payload, setPayload] = useState<LicensePayload | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [deviceSki, setDeviceSki] = useState<string | null>(null);
@@ -67,26 +65,16 @@ export function AccountBillingPanel() {
     void refresh();
   }, [refresh]);
 
-  const discover = async () => {
-    if (!billing) {
-      setStatus("Set billing origin in Settings first.");
-      return;
-    }
-    setBusy(true);
-    setStatus(null);
-    try {
-      const doc = await fetchOAuthProviders(billing.config);
-      setProviders(doc);
-      const enabled = doc.providers.filter((p) => p.enabled).map((p) => p.id);
-      setStatus(`Providers: ${enabled.join(", ") || "none"}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    if (!billing) return;
+    fetchOAuthProviders(billing.config)
+      .then((doc) =>
+        setProviders(doc.providers.filter((p) => p.enabled && p.id !== "email")),
+      )
+      .catch(() => setProviders([]));
+  }, [billing]);
 
-  const signIn = async () => {
+  const signInWithProvider = async (providerId: string) => {
     if (!billing) {
       setStatus("Set billing origin in Settings first.");
       return;
@@ -94,14 +82,26 @@ export function AccountBillingPanel() {
     setBusy(true);
     setStatus(null);
     try {
-      await signInWithEmail(billing.config, { email, password });
-      const minted = await acquireApiToken(billing.config);
-      if (minted.orgPickRequired) {
-        setStatus("Choose an organization in the billing portal, then sync again.");
+      const result = await openOAuthDialog(billing.config, providerId);
+      if (result.status === "cancelled") {
+        setStatus("Sign-in cancelled.");
         return;
       }
+      if (result.status === "error") {
+        setStatus(result.message);
+        return;
+      }
+      let token = result.token;
+      if (!token) {
+        const minted = await acquireApiToken(billing.config);
+        if (minted.orgPickRequired) {
+          setStatus("Choose an organization in the billing portal, then sync again.");
+          return;
+        }
+        token = minted.token;
+      }
       await billing.ensureDeviceId({ accountKey: ACCOUNT_KEY, friendlyName: "Outlook" });
-      await billing.syncLicense({ accessToken: minted.token, accountKey: ACCOUNT_KEY });
+      await billing.syncLicense({ accessToken: token, accountKey: ACCOUNT_KEY });
       setStatus("Signed in and license synced.");
       await refresh();
     } catch (error) {
@@ -232,31 +232,26 @@ export function AccountBillingPanel() {
 
       <section>
         <h2>Sign in</h2>
-        <div className="field">
-          <label htmlFor="billing-email">Email</label>
-          <input
-            id="billing-email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="billing-password">Password</label>
-          <input
-            id="billing-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+        <div className="actions">
+          {providers.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() => void signInWithProvider(p.id)}
+            >
+              Sign in with {p.id.charAt(0).toUpperCase() + p.id.slice(1)}
+            </button>
+          ))}
+          {providers.length === 0 && billingOrigin ? (
+            <p className="note">No sign-in providers discovered.</p>
+          ) : null}
+          {!billingOrigin ? (
+            <p className="note">Set billing origin in Settings first.</p>
+          ) : null}
         </div>
         <div className="actions">
-          <button type="button" className="primary" disabled={busy} onClick={() => void signIn()}>
-            Sign in
-          </button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => void discover()}>
-            Discover providers
-          </button>
           <button type="button" className="secondary" disabled={busy} onClick={() => void syncLicense()}>
             Sync license
           </button>
@@ -264,16 +259,6 @@ export function AccountBillingPanel() {
             Sign out
           </button>
         </div>
-        {providers ? (
-          <p className="note">
-            Social:{" "}
-            {providers.providers
-              .filter((p) => p.enabled)
-              .map((p) => p.id)
-              .join(", ") || "none"}{" "}
-            — popup OAuth may be blocked in some Outlook WebViews; use email or paste token.
-          </p>
-        ) : null}
       </section>
 
       <section>
