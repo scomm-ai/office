@@ -10,6 +10,7 @@ import {
   type KeyHandle,
 } from "@scomm-office/pubkeys";
 import { IndexedDbDeviceSecretStore, IndexedDbVaultStore } from "@scomm-office/storage";
+import { assertPgpAddon } from "./billing-pgp";
 
 type PubkeyBundle = ReturnType<typeof createPubkeyClient>;
 
@@ -131,6 +132,7 @@ export async function publishPgpContentKey(
   session: OfficePubkeySession,
   email: string,
 ): Promise<void> {
+  await assertPgpAddon();
   const msk = session.msk;
   if (!msk) {
     throw new Error("MSK is not armed");

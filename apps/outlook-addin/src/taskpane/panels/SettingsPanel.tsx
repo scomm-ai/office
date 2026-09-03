@@ -1,5 +1,6 @@
 import type { ResolvedConfiguration } from "@scomm-office/protocol";
 import { useHostContext } from "../../lib/host-context";
+import { DEFAULT_SETTINGS } from "../../lib/settings";
 
 type BoolSetting = Extract<
   keyof ResolvedConfiguration,
@@ -33,7 +34,7 @@ export function SettingsPanel() {
         <input
           id="billing-origin"
           type="url"
-          placeholder="https://billing.example.com"
+          placeholder={DEFAULT_SETTINGS.billingOrigin ?? ""}
           value={settings.billingOrigin ?? ""}
           onChange={(event) => updateSettings({ billingOrigin: event.target.value || undefined })}
         />

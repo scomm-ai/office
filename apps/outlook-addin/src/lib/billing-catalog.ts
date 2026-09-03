@@ -3,6 +3,9 @@ import type { OfferingCatalog } from "@2key/browser-sdk/billing";
 /** Catalog code for premium AI (cloud BYOAI / local IDR). */
 export const BILLING_ADDON_AI_ASSISTANT = "ai_assistant";
 
+/** Catalog code for OpenPGP encrypt, sign, and key publish (same SKU as secMail). */
+export const BILLING_ADDON_PGP = "pgp";
+
 /**
  * Offerings this Outlook binary knows how to gate.
  * Intersected with the verified license JWT by `@2key/browser-sdk`.

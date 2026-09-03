@@ -13,6 +13,7 @@ import {
   saveComposeTogglesToItem,
 } from "../../lib/compose-security-state";
 import { lookupRecipientStatuses } from "../../lib/mail-crypto-actions";
+import { assertPgpAddon, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
 import type { RecipientDirectoryStatus } from "../../lib/directory-key";
 import { restoreOfficeVault, type OfficePubkeySession } from "../../lib/pubkey-session";
 import { resolvePubkeyReadBaseUrl } from "../../lib/settings";
@@ -73,6 +74,7 @@ export function useComposeSecurity(session: OfficePubkeySession | null, userEmai
     setStatus(null);
     setResolved(null);
     try {
+      await assertPgpAddon();
       await restoreOfficeVault(session);
       await persistToggles({ sign, encrypt });
       const current = message ?? (await mailHost.getCurrentMessage());
@@ -140,24 +142,30 @@ export function ComposeSecurityControls(props: {
   userEmail: string | undefined;
   engineReady: boolean;
   composeMode: boolean;
+  pgpEntitled: boolean;
 }) {
   const security = useComposeSecurity(props.session, props.userEmail);
   const pubkeyBase = resolvePubkeyReadBaseUrl(useHostContext().settings);
+  const paidReady = props.engineReady && props.pgpEntitled;
+  const canUncheckSign = !props.pgpEntitled && security.sign;
+  const canUncheckEncrypt = !props.pgpEntitled && security.encrypt;
 
   return (
     <section>
       <h2>Message protection</h2>
       <p className="note">
         Same actions as the Scomm.AI ribbon: Sign and Encrypt use classical OpenPGP from pubkey.scomm.ai.
-        S/MIME stays in native Outlook. PQC is Scomm.AI mail only.
+        S/MIME stays in native Outlook. PQC is Scomm.AI mail only. Paid <code>pgp</code> add-on required
+        to apply protection.
       </p>
+      {!props.pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
       <div className="actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <label>
           <input
             type="checkbox"
             checked={security.sign}
             onChange={(e) => security.setSign(e.target.checked)}
-            disabled={!props.composeMode || !props.engineReady}
+            disabled={!props.composeMode || (!paidReady && !canUncheckSign)}
           />{" "}
           Sign
         </label>
@@ -166,7 +174,7 @@ export function ComposeSecurityControls(props: {
             type="checkbox"
             checked={security.encrypt}
             onChange={(e) => security.setEncrypt(e.target.checked)}
-            disabled={!props.composeMode || !props.engineReady}
+            disabled={!props.composeMode || (!paidReady && !canUncheckEncrypt)}
           />{" "}
           Encrypt
         </label>
@@ -207,7 +215,12 @@ export function ComposeSecurityControls(props: {
         <button
           type="button"
           className="primary"
-          disabled={security.busy || !props.engineReady || !props.composeMode || (!security.sign && !security.encrypt)}
+          disabled={
+            security.busy ||
+            !paidReady ||
+            !props.composeMode ||
+            (!security.sign && !security.encrypt)
+          }
           onClick={() => void security.applyProtection()}
         >
           Apply protection

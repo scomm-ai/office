@@ -18,6 +18,7 @@ import {
   signComposeBody,
 } from "../lib/mail-crypto-actions";
 import { getOfficePubkeySession, restoreOfficeVault } from "../lib/pubkey-session";
+import { assertPgpAddon, loadPgpEntitlement } from "../lib/billing-pgp";
 
 const DEFAULT_READ = "https://pubkey.scomm.ai";
 const DEFAULT_WRITE = "https://api.pubkey.scomm.ai";
@@ -113,6 +114,7 @@ async function completeCommand(event: Office.AddinCommands.Event, work: () => Pr
 
 function encryptMessage(event: Office.AddinCommands.Event): void {
   void completeCommand(event, async () => {
+    await assertPgpAddon();
     const item = Office.context.mailbox.item as Office.MessageCompose;
     const prev = await loadComposeTogglesFromItem(item);
     const next: ComposeProtectionToggles = { ...prev, encrypt: true };
@@ -132,6 +134,7 @@ function encryptMessage(event: Office.AddinCommands.Event): void {
 
 function signMessage(event: Office.AddinCommands.Event): void {
   void completeCommand(event, async () => {
+    await assertPgpAddon();
     const item = Office.context.mailbox.item as Office.MessageCompose;
     const prev = await loadComposeTogglesFromItem(item);
     const next: ComposeProtectionToggles = { ...prev, sign: true };
@@ -182,7 +185,8 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
       const toggles = await loadComposeTogglesFromItem(item);
       const pubkey = session();
       const recipients = await lookupRecipientStatuses(pubkey, emails);
-      const gate = evaluateSendForToggles(toggles, text, body, recipients);
+      const pgpEntitled = await loadPgpEntitlement();
+      const gate = evaluateSendForToggles(toggles, text, body, recipients, pgpEntitled);
       if (!gate.allow) {
         event.completed({
           allowEvent: false,

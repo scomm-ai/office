@@ -8,9 +8,10 @@ import {
   type OAuthProvidersDocument,
 } from "@2key/browser-sdk/auth";
 import type { LicensePayload, Plan } from "@2key/browser-sdk/billing";
-import { BILLING_ADDON_AI_ASSISTANT } from "../../lib/billing-catalog";
+import { BILLING_ADDON_AI_ASSISTANT, BILLING_ADDON_PGP } from "../../lib/billing-catalog";
 import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
+import { DEFAULT_SETTINGS } from "../../lib/settings";
 
 const ACCOUNT_KEY = "default";
 
@@ -26,6 +27,7 @@ export function AccountBillingPanel() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [deviceSki, setDeviceSki] = useState<string | null>(null);
   const [aiOk, setAiOk] = useState(false);
+  const [pgpOk, setPgpOk] = useState(false);
 
   const billingOrigin = settings.billingOrigin?.trim() ?? "";
 
@@ -41,6 +43,7 @@ export function AccountBillingPanel() {
       setPayload(null);
       setDeviceSki(null);
       setAiOk(false);
+      setPgpOk(false);
       return;
     }
     const device = await billing.ensureDeviceId({
@@ -53,8 +56,10 @@ export function AccountBillingPanel() {
     try {
       const e = billing.entitlements();
       setAiOk(e.hasAddon(BILLING_ADDON_AI_ASSISTANT) || e.hasOffering(BILLING_ADDON_AI_ASSISTANT));
+      setPgpOk(e.hasAddon(BILLING_ADDON_PGP) || e.hasOffering(BILLING_ADDON_PGP));
     } catch {
       setAiOk(false);
+      setPgpOk(false);
     }
   }, [billing]);
 
@@ -184,6 +189,7 @@ export function AccountBillingPanel() {
       }
       setPayload(null);
       setAiOk(false);
+      setPgpOk(false);
       setStatus("Signed out of billing profile.");
     } finally {
       setBusy(false);
@@ -209,6 +215,8 @@ export function AccountBillingPanel() {
         <dd>{deviceSki ?? "—"}</dd>
         <dt>AI add-on</dt>
         <dd>{aiOk ? "entitled" : "not entitled"}</dd>
+        <dt>PGP add-on</dt>
+        <dd>{pgpOk ? "entitled" : "not entitled"}</dd>
       </dl>
 
       <div className="field">
@@ -216,7 +224,7 @@ export function AccountBillingPanel() {
         <input
           id="billing-origin-inline"
           type="url"
-          placeholder="https://billing.example.com"
+          placeholder={DEFAULT_SETTINGS.billingOrigin ?? ""}
           value={settings.billingOrigin ?? ""}
           onChange={(event) => updateSettings({ billingOrigin: event.target.value || undefined })}
         />

@@ -87,11 +87,26 @@ export function decideSendGate(input: {
   encrypt: boolean;
   sign: boolean;
   recipients: RecipientDirectoryStatus[];
+  /** Verified `pgp` add-on. Without it, do not force encrypt; paid actions still block. */
+  pgpEntitled: boolean;
 }): { allow: boolean; needsProtect: boolean; errorMessage?: string } {
-  const { bodyProtected, encrypt, sign, recipients } = input;
+  const { bodyProtected, encrypt, sign, recipients, pgpEntitled } = input;
   const pgpEncryptable = recipients.filter((row) => row.addInCanEncrypt);
 
   if (bodyProtected) {
+    return { allow: true, needsProtect: false };
+  }
+
+  if (!pgpEntitled && (encrypt || sign)) {
+    return {
+      allow: false,
+      needsProtect: false,
+      errorMessage:
+        'OpenPGP encrypt and sign require the "pgp" add-on. Sync Account & Billing, then try again.',
+    };
+  }
+
+  if (!pgpEntitled) {
     return { allow: true, needsProtect: false };
   }
 

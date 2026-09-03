@@ -5,6 +5,7 @@ import { WebCryptoKeyStore } from "@scomm-office/storage";
 import { useHostContext } from "../../lib/host-context";
 import { collectRecipientEmails } from "../../lib/semantic-policy";
 import { extractScommEnvelopeCiphertext, isEcdhP256Algorithm } from "../../lib/ecdh-envelope";
+import { assertPgpAddon, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
 
 const keyStore = new WebCryptoKeyStore();
 const encryptor = new ScommMessageEncryptor();
@@ -12,9 +13,11 @@ const encryptor = new ScommMessageEncryptor();
 export function EcdhEnvelopeControls({
   directory,
   userEmail,
+  pgpEntitled,
 }: {
   directory: PublicKeyDirectory | null;
   userEmail: string | undefined;
+  pgpEntitled: boolean;
 }) {
   const { mailHost, message } = useHostContext();
   const [busy, setBusy] = useState(false);
@@ -36,6 +39,7 @@ export function EcdhEnvelopeControls({
     setBusy(true);
     setStatus(null);
     try {
+      await assertPgpAddon();
       const pair = await keyStore.generate({
         algorithm: "ECDH-P256",
         purpose: "encryption",
@@ -53,6 +57,7 @@ export function EcdhEnvelopeControls({
     setBusy(true);
     setStatus("Reading current message...");
     try {
+      await assertPgpAddon();
       const freshMessage = await mailHost.getCurrentMessage();
       if (!freshMessage) {
         setStatus("No message available.");
@@ -185,20 +190,22 @@ export function EcdhEnvelopeControls({
       <h2>Experimental ECDH envelope</h2>
       <p className="note">
         Separate from OpenPGP. Local ECDH P-256 keys stay in IndexedDB. Encrypt wraps the compose
-        body in a Scomm.AI envelope; decrypt shows plaintext in this pane.
+        body in a Scomm.AI envelope; decrypt shows plaintext in this pane. Generate and encrypt
+        require the paid <code>pgp</code> add-on.
       </p>
+      {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
       <dl className="meta-grid">
         <dt>Local ECDH key</dt>
         <dd>{generatedKeyId ?? "none — generate below"}</dd>
       </dl>
       <div className="actions">
-        <button type="button" disabled={busy} onClick={() => void handleGenerateKey()}>
+        <button type="button" disabled={busy || !pgpEntitled} onClick={() => void handleGenerateKey()}>
           Generate ECDH key
         </button>
         <button
           type="button"
           className="primary"
-          disabled={busy || message?.mode !== "compose"}
+          disabled={busy || !pgpEntitled || message?.mode !== "compose"}
           onClick={() => void handleEncrypt()}
         >
           Encrypt ECDH envelope

@@ -10,6 +10,7 @@ import {
   normalizeEmail,
 } from "@scomm-office/pubkeys";
 import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../lib/settings";
+import { loadPgpEntitlement, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
 import type { TaskPaneCryptoAction } from "../../lib/taskpane-launch";
 import {
   decryptCurrentBody,
@@ -56,6 +57,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
   const [decryptedBody, setDecryptedBody] = useState<string | null>(null);
   const launchRan = useRef(false);
   const [engineReady, setEngineReady] = useState(false);
+  const [pgpEntitled, setPgpEntitled] = useState(false);
   const [vaultPassphrase, setVaultPassphrase] = useState("");
   const [vaultBackup, setVaultBackup] = useState("");
   const [vaultTiles, setVaultTiles] = useState<Array<Record<string, unknown>>>([]);
@@ -89,10 +91,13 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       setHasPgp(state.hasPgp);
       if (session.vault.unlocked) setVaultTiles(listVaultTiles(session));
     });
+    void loadPgpEntitlement(settings.billingOrigin).then((ok) => {
+      if (!cancelled) setPgpEntitled(ok);
+    });
     return () => {
       cancelled = true;
     };
-  }, [sessionFor]);
+  }, [sessionFor, settings.billingOrigin]);
 
   const handleRequestOtp = useCallback(async () => {
     if (!userEmail || !pubkeyBase) return;
@@ -494,9 +499,17 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
               Show devices
             </button>
             {!hasPgp ? (
-              <button type="button" className="primary" disabled={busy || !engineReady} onClick={() => void handlePublishPgp()}>
-                Publish OpenPGP key
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy || !engineReady || !pgpEntitled}
+                  onClick={() => void handlePublishPgp()}
+                >
+                  Publish OpenPGP key
+                </button>
+                {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
+              </>
             ) : (
               <p className="note">OpenPGP encryption key is in the local Vault and the directory.</p>
             )}
@@ -511,6 +524,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         userEmail={userEmail}
         engineReady={engineReady}
         composeMode={composeMode}
+        pgpEntitled={pgpEntitled}
       />
 
       <section>
@@ -518,14 +532,16 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         <p className="note">
           Encrypt and sign the Outlook body as armored OpenPGP. Recipients are resolved on
           pubkey.scomm.ai. Decrypt and verify stay in this pane so plaintext is not written back
-          to the mailbox. Attachments need Mailbox 1.8+.
+          to the mailbox. Attachments need Mailbox 1.8+. Encrypt, sign, and key publish require
+          the paid <code>pgp</code> add-on.
         </p>
+        {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
         {composeMode && attachmentNotice ? <p className="note">{attachmentNotice}</p> : null}
         <div className="actions">
           <button
             type="button"
             className="primary"
-            disabled={busy || !engineReady || !composeMode}
+            disabled={busy || !engineReady || !composeMode || !pgpEntitled}
             onClick={() => void handleEncrypt()}
           >
             Encrypt
@@ -543,7 +559,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       </section>
 
       {settings.experimentalEncryptionEnabled ? (
-        <EcdhEnvelopeControls directory={directory} userEmail={userEmail} />
+        <EcdhEnvelopeControls directory={directory} userEmail={userEmail} pgpEntitled={pgpEntitled} />
       ) : null}
 
       <section>
