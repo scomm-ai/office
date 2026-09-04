@@ -19,9 +19,10 @@ import {
 } from "../lib/mail-crypto-actions";
 import { getOfficePubkeySession, restoreOfficeVault } from "../lib/pubkey-session";
 import { assertPgpAddon, loadPgpEntitlement } from "../lib/billing-pgp";
+import { DEFAULT_SETTINGS, isLoopbackHostname, normalizePubkeyWriteBaseUrl, resolvePubkeyReadBaseUrl } from "../lib/settings";
 
 const DEFAULT_READ = "https://pubkey.scomm.ai";
-const DEFAULT_WRITE = "https://api.pubkey.scomm.ai";
+const DEFAULT_WRITE = "https://pubkey.scomm.ai";
 
 function envUrl(name: string, fallback: string): string {
   const value =
@@ -32,9 +33,18 @@ function envUrl(name: string, fallback: string): string {
 }
 
 function session() {
+  const writeConfigured = normalizePubkeyWriteBaseUrl(
+    envUrl("VITE_PUBKEY_WRITE_BASE_URL", DEFAULT_WRITE),
+  );
+  const onLoopback = typeof location !== "undefined" && isLoopbackHostname(location.hostname);
+  const readConfigured = envUrl("VITE_PUBKEY_READ_BASE_URL", DEFAULT_READ);
   return getOfficePubkeySession({
-    readBaseUrl: envUrl("VITE_PUBKEY_READ_BASE_URL", DEFAULT_READ),
-    writeBaseUrl: envUrl("VITE_PUBKEY_WRITE_BASE_URL", DEFAULT_WRITE),
+    readBaseUrl: resolvePubkeyReadBaseUrl({
+      ...DEFAULT_SETTINGS,
+      pubkeyReadBaseUrl: readConfigured,
+      pubkeyWriteBaseUrl: writeConfigured,
+    }),
+    writeBaseUrl: onLoopback ? `${location.origin}/pubkey-write` : writeConfigured,
   });
 }
 
