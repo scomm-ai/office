@@ -6,6 +6,7 @@ import { useHostContext } from "../../lib/host-context";
 import { collectRecipientEmails } from "../../lib/semantic-policy";
 import { extractScommEnvelopeCiphertext, isEcdhP256Algorithm } from "../../lib/ecdh-envelope";
 import { assertPgpAddon, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
+import { Button } from "../ui/layout";
 
 const keyStore = new WebCryptoKeyStore();
 const encryptor = new ScommMessageEncryptor();
@@ -199,20 +200,20 @@ export function EcdhEnvelopeControls({
         <dd>{generatedKeyId ?? "none — generate below"}</dd>
       </dl>
       <div className="actions">
-        <button type="button" disabled={busy || !pgpEntitled} onClick={() => void handleGenerateKey()}>
+        <Button appearance="secondary" size="small" disabled={busy || !pgpEntitled} onClick={() => void handleGenerateKey()}>
           Generate ECDH key
-        </button>
-        <button
-          type="button"
-          className="primary"
+        </Button>
+        <Button
+          appearance="primary"
+          size="small"
           disabled={busy || !pgpEntitled || message?.mode !== "compose"}
           onClick={() => void handleEncrypt()}
         >
           Encrypt ECDH envelope
-        </button>
-        <button type="button" disabled={busy} onClick={() => void handleDecrypt()}>
+        </Button>
+        <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleDecrypt()}>
           Decrypt ECDH envelope
-        </button>
+        </Button>
       </div>
       {status ? <p className="note">{status}</p> : null}
       {decryptedContent ? (

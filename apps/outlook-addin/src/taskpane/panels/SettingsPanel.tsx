@@ -1,4 +1,6 @@
+import { Switch } from "@fluentui/react-components";
 import type { ResolvedConfiguration } from "@scomm-office/protocol";
+import { Field, Input, Note, PageTitle, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
 import { DEFAULT_SETTINGS } from "../../lib/settings";
 
@@ -20,97 +22,88 @@ const BOOL_SETTINGS: Array<{ key: BoolSetting; label: string }> = [
 ];
 
 export function SettingsPanel() {
+  const styles = usePaneStyles();
   const { settings, updateSettings } = useHostContext();
 
   return (
-    <section>
-      <h2>Settings</h2>
-      <p className="note">
-        Product paths use billing + pubkey hosts (no Office server). Fixture Fastify URL is optional.
-      </p>
-
-      <div className="field">
-        <label htmlFor="billing-origin">Billing origin</label>
-        <input
-          id="billing-origin"
+    <>
+      <PageTitle
+        title="Settings"
+        description="Product paths use billing + pubkey hosts (no Office server). Fixture Fastify URL is optional."
+      />
+      <Note>
+        Outlook sign-in requires an HTTPS billing origin. http://localhost:3000 cannot open the
+        Office dialog (error 12005). Use https://billing.scomm.ai or serve billing over TLS.
+      </Note>
+      <Note>
+        After changing VITE_PUBKEY_READ_BASE_URL or VITE_PUBKEY_WRITE_BASE_URL, restart the add-in
+        Vite server. On localhost the pane calls /pubkey-read and /pubkey-write (HTTPS cannot talk
+        to http://localhost:3030 directly); those proxies use the .env URLs.
+      </Note>
+      <Field label="Billing origin">
+        <Input
           type="url"
-          placeholder={DEFAULT_SETTINGS.billingOrigin ?? ""}
+          placeholder={DEFAULT_SETTINGS.billingOrigin ?? "https://billing.scomm.ai"}
           value={settings.billingOrigin ?? ""}
-          onChange={(event) => updateSettings({ billingOrigin: event.target.value || undefined })}
+          onChange={(_, data) => updateSettings({ billingOrigin: data.value || undefined })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="billing-portal">Billing portal URL</label>
-        <input
-          id="billing-portal"
+      </Field>
+      <Field label="Billing portal URL">
+        <Input
           type="url"
-          placeholder="defaults to billing origin"
+          placeholder="used by Open billing portal"
           value={settings.billingPortalUrl ?? ""}
-          onChange={(event) => updateSettings({ billingPortalUrl: event.target.value || undefined })}
+          onChange={(_, data) => updateSettings({ billingPortalUrl: data.value || undefined })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="pubkey-read">Pubkey read base URL</label>
-        <input
-          id="pubkey-read"
+      </Field>
+      <Field label="Pubkey read base URL">
+        <Input
           type="url"
           placeholder="https://pubkey.example.com"
           value={settings.pubkeyReadBaseUrl ?? settings.pubkeyServerUrl ?? ""}
-          onChange={(event) => updateSettings({ pubkeyReadBaseUrl: event.target.value || undefined })}
+          onChange={(_, data) => updateSettings({ pubkeyReadBaseUrl: data.value || undefined })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="pubkey-write">Pubkey write base URL</label>
-        <input
-          id="pubkey-write"
+      </Field>
+      <Field label="Pubkey write base URL">
+        <Input
           type="url"
-          placeholder="https://api.pubkey.example.com"
+          placeholder="https://pubkey.scomm.ai"
           value={settings.pubkeyWriteBaseUrl ?? ""}
-          onChange={(event) => updateSettings({ pubkeyWriteBaseUrl: event.target.value || undefined })}
+          onChange={(_, data) => updateSettings({ pubkeyWriteBaseUrl: data.value || undefined })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="scomm-server">Fixture server URL (optional)</label>
-        <input
-          id="scomm-server"
+      </Field>
+      <Field label="Fixture server URL (optional)">
+        <Input
           type="url"
           placeholder="http://localhost:8787 — fixture only"
           value={settings.scommServerUrl ?? ""}
-          onChange={(event) => updateSettings({ scommServerUrl: event.target.value || undefined })}
+          onChange={(_, data) => updateSettings({ scommServerUrl: data.value || undefined })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="settings-idr-host">IDR host</label>
-        <input
-          id="settings-idr-host"
-          type="text"
+      </Field>
+      <Field label="IDR host">
+        <Input
           value={settings.idrTargetHost ?? ""}
-          onChange={(event) => updateSettings({ idrTargetHost: event.target.value })}
+          onChange={(_, data) => updateSettings({ idrTargetHost: data.value })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="settings-idr-service">IDR service</label>
-        <input
-          id="settings-idr-service"
-          type="text"
+      </Field>
+      <Field label="IDR service">
+        <Input
           value={settings.idrDefaultService ?? "ollama"}
-          onChange={(event) => updateSettings({ idrDefaultService: event.target.value })}
+          onChange={(_, data) => updateSettings({ idrDefaultService: data.value })}
         />
-      </div>
-
-      {BOOL_SETTINGS.map(({ key, label }) => (
-        <div className="field-row" key={key}>
-          <input
-            id={key}
-            type="checkbox"
+      </Field>
+      <div className={styles.stack}>
+        {BOOL_SETTINGS.map(({ key, label }) => (
+          <Switch
+            key={key}
+            label={label}
             checked={Boolean(settings[key])}
-            onChange={(event) =>
-              updateSettings({ [key]: event.target.checked } as Partial<ResolvedConfiguration>)
+            onChange={(_, data) =>
+              updateSettings({ [key]: data.checked } as Partial<ResolvedConfiguration>)
             }
           />
-          <label htmlFor={key}>{label}</label>
-        </div>
-      ))}
-    </section>
+        ))}
+      </div>
+    </>
   );
 }

@@ -5,13 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com; connect-src 'self' https://localhost:8787 http://localhost:8787 http://localhost:3000 https://localhost:3000 https://idr.to wss://idr.to https://*.idr.to https://graph.microsoft.com https://login.microsoftonline.com https://api.openai.com https://*.openai.com https://*.scomm.ai https://office.scomm.ai https://pubkey.scomm.ai https://api.pubkey.scomm.ai; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' https://idr.to; object-src 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com; connect-src 'self' https://localhost:5173 wss://localhost:5173 https://localhost:5175 wss://localhost:5175 http://localhost:3000 https://localhost:3000 http://localhost:8787 https://localhost:8787 https://127.0.0.1:5175 wss://127.0.0.1:5175 https://idr.to wss://idr.to https://*.idr.to https://graph.microsoft.com https://login.microsoftonline.com https://api.openai.com https://*.openai.com https://*.scomm.ai; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; frame-src 'self' https://idr.to; object-src 'none'"
     />
     <title>SComm Office</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/taskpane/main.tsx"></script>
+    <div id="root">Starting Scomm.AI…</div>
+    <script>
+      (function () {
+        function loadApp() {
+          var s = document.createElement("script");
+          s.type = "module";
+          s.src = "/src/taskpane/main.tsx";
+          s.onerror = function () {
+            var root = document.getElementById("root");
+            if (root) root.textContent = "Could not load the add-in script from the Vite server.";
+          };
+          document.body.appendChild(s);
+        }
+        if (typeof Office !== "undefined" && Office.onReady) {
+          Office.onReady(function () {
+            loadApp();
+          });
+        } else {
+          loadApp();
+        }
+      })();
+    </script>
   </body>
 </html>

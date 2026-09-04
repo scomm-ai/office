@@ -1,23 +1,20 @@
-import { CryptoFamily } from "@scomm-office/crypto";
 import { useCallback, useEffect, useState } from "react";
-import { OfficeSubmissionAdapter } from "@scomm-office/office";
-import { captureComposeSnapshot } from "@scomm-office/message-core";
 import { useHostContext } from "../../lib/host-context";
-import {
-  defaultSecurityPolicy,
-  protectComposeSnapshot,
-  type ComposeSecurityOptions,
-} from "../../lib/mail-security-bridge";
 import {
   loadComposeTogglesFromItem,
   saveComposeTogglesToItem,
 } from "../../lib/compose-security-state";
-import { lookupRecipientStatuses } from "../../lib/mail-crypto-actions";
+import {
+  encryptComposeBody,
+  lookupRecipientStatuses,
+  signComposeBody,
+} from "../../lib/mail-crypto-actions";
 import { assertPgpAddon, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
 import type { RecipientDirectoryStatus } from "../../lib/directory-key";
 import { restoreOfficeVault, type OfficePubkeySession } from "../../lib/pubkey-session";
 import { resolvePubkeyReadBaseUrl } from "../../lib/settings";
 import { collectRecipientEmails } from "../../lib/semantic-policy";
+import { Button } from "../ui/layout";
 
 function composeItem(): Office.MessageCompose | undefined {
   if (typeof Office === "undefined") return undefined;
@@ -29,10 +26,9 @@ function composeItem(): Office.MessageCompose | undefined {
 }
 
 export function useComposeSecurity(session: OfficePubkeySession | null, userEmail: string | undefined) {
-  const { mailHost, message, refreshMessage } = useHostContext();
+  const { mailHost, message, refreshMessage, capabilities } = useHostContext();
   const [sign, setSign] = useState(false);
   const [encrypt, setEncrypt] = useState(false);
-  const [protocol, setProtocol] = useState<"automatic" | CryptoFamily>("automatic");
   const [status, setStatus] = useState<string | null>(null);
   const [resolved, setResolved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,44 +73,25 @@ export function useComposeSecurity(session: OfficePubkeySession | null, userEmai
       await assertPgpAddon();
       await restoreOfficeVault(session);
       await persistToggles({ sign, encrypt });
-      const current = message ?? (await mailHost.getCurrentMessage());
-      const snapshot = captureComposeSnapshot({
-        subject: current.subject,
-        bodyText: current.bodyText,
-        bodyHtml: current.bodyHtml,
-        from: current.from ?? { emailAddress: userEmail },
-        to: current.to,
-        cc: current.cc,
-        bcc: current.bcc,
-        headers: current.headers,
-      });
-
-      const options: ComposeSecurityOptions = { sign, encrypt, protocol };
-      const result = await protectComposeSnapshot(session, snapshot, userEmail, options, defaultSecurityPolicy);
-
-      if (!result.decision.allowed) {
-        setStatus(result.decision.blockedReason ?? "Cannot apply protection");
-        return;
-      }
-
-      if (result.protectedMessage) {
-        const adapter = new OfficeSubmissionAdapter(mailHost);
-        await adapter.submit(result.protectedMessage);
-        await refreshMessage();
-      }
-
-      setResolved(result.decision.negotiation.resolvedProtocol);
-      setStatus(
-        `Applied ${result.decision.mode} via ${result.decision.family}. ` +
-          `Recipients: ${result.decision.negotiation.compatibleRecipients}/${result.decision.negotiation.totalRecipients} compatible. ` +
-          OfficeSubmissionAdapter.limitationNote(),
-      );
+      // Office.js cannot set RFC 3156 Content-Type. Never paste MIME trees into the body.
+      const note = encrypt
+        ? await encryptComposeBody({
+            session,
+            mailHost,
+            userEmail,
+            sign,
+            capabilities,
+          })
+        : await signComposeBody({ session, mailHost });
+      await refreshMessage();
+      setResolved("openpgp-armored");
+      setStatus(note);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [session, userEmail, message, mailHost, refreshMessage, sign, encrypt, protocol, persistToggles]);
+  }, [session, userEmail, mailHost, refreshMessage, sign, encrypt, persistToggles, capabilities]);
 
   return {
     sign,
@@ -127,8 +104,6 @@ export function useComposeSecurity(session: OfficePubkeySession | null, userEmai
       setEncrypt(value);
       void persistToggles({ sign, encrypt: value });
     },
-    protocol,
-    setProtocol,
     status,
     resolved,
     busy,
@@ -154,9 +129,9 @@ export function ComposeSecurityControls(props: {
     <section>
       <h2>Message protection</h2>
       <p className="note">
-        Same actions as the Scomm.AI ribbon: Sign and Encrypt use classical OpenPGP from pubkey.scomm.ai.
-        S/MIME stays in native Outlook. PQC is Scomm.AI mail only. Paid <code>pgp</code> add-on required
-        to apply protection.
+        Sign and Encrypt write armored OpenPGP into the Outlook body. Outlook cannot send a real
+        RFC 3156 MIME envelope through Office.js, so Sign must not dump <code>multipart/signed</code>
+        headers into the message. S/MIME stays in native Outlook. Paid <code>pgp</code> add-on required.
       </p>
       {!props.pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
       <div className="actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -195,26 +170,9 @@ export function ComposeSecurityControls(props: {
         ) : (
           <p className="note">Add To/Cc/Bcc to look up keys on pubkey.scomm.ai.</p>
         )}
-        <details>
-          <summary>Advanced</summary>
-          <label>
-            Protocol{" "}
-            <select
-              value={security.protocol}
-              onChange={(e) =>
-                security.setProtocol(e.target.value as "automatic" | CryptoFamily)
-              }
-              disabled={!props.composeMode}
-            >
-              <option value="automatic">Automatic</option>
-              <option value={CryptoFamily.OpenPGP}>OpenPGP</option>
-              <option value={CryptoFamily.SMIME}>S/MIME (native Outlook)</option>
-            </select>
-          </label>
-        </details>
-        <button
-          type="button"
-          className="primary"
+        <Button
+          appearance="primary"
+          size="small"
           disabled={
             security.busy ||
             !paidReady ||
@@ -224,7 +182,7 @@ export function ComposeSecurityControls(props: {
           onClick={() => void security.applyProtection()}
         >
           Apply protection
-        </button>
+        </Button>
       </div>
       {security.resolved ? (
         <p className="note">

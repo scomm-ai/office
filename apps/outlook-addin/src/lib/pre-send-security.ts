@@ -1,12 +1,10 @@
-import { captureComposeSnapshot } from "@scomm-office/message-core";
-import { OfficeSubmissionAdapter, type MailHost } from "@scomm-office/office";
+import type { MailHost } from "@scomm-office/office";
 import { collectRecipientEmails } from "./semantic-policy.js";
+import { getMailSecurityService, type ComposeSecurityOptions } from "./mail-security-bridge.js";
 import {
-  defaultSecurityPolicy,
-  getMailSecurityService,
-  protectComposeSnapshot,
-  type ComposeSecurityOptions,
-} from "./mail-security-bridge.js";
+  encryptComposeBody,
+  signComposeBody,
+} from "./mail-crypto-actions.js";
 import type { OfficePubkeySession } from "./pubkey-session.js";
 
 export interface PreSendSecurityResult {
@@ -16,6 +14,10 @@ export interface PreSendSecurityResult {
   recipientCompatibility?: string;
 }
 
+/**
+ * Outlook cannot submit RFC 3156 MIME via Office.js. Protect the body with armored
+ * OpenPGP instead of pasting a MIME tree into the compose editor.
+ */
 export async function evaluatePreSendSecurity(
   session: OfficePubkeySession,
   mailHost: MailHost,
@@ -23,23 +25,6 @@ export async function evaluatePreSendSecurity(
   options: ComposeSecurityOptions,
 ): Promise<PreSendSecurityResult> {
   const message = await mailHost.getCurrentMessage();
-  const snapshot = captureComposeSnapshot({
-    subject: message.subject,
-    bodyText: message.bodyText,
-    bodyHtml: message.bodyHtml,
-    from: message.from,
-    to: message.to,
-    cc: message.cc,
-    bcc: message.bcc,
-    attachments: message.attachments?.map((a) => ({
-      id: a.id,
-      name: a.name,
-      contentType: a.contentType,
-      size: a.size,
-      isInline: a.isInline,
-    })),
-    headers: message.headers,
-  });
 
   if (!options.sign && !options.encrypt) {
     const emails = collectRecipientEmails(message);
@@ -60,25 +45,27 @@ export async function evaluatePreSendSecurity(
     return { allowed: true };
   }
 
-  const result = await protectComposeSnapshot(session, snapshot, userEmail, options, defaultSecurityPolicy);
-  if (!result.decision.allowed) {
+  try {
+    if (options.encrypt) {
+      await encryptComposeBody({
+        session,
+        mailHost,
+        userEmail,
+        sign: options.sign,
+      });
+    } else {
+      await signComposeBody({ session, mailHost });
+    }
+  } catch (err) {
     return {
       allowed: false,
-      errorMessage: result.decision.blockedReason ?? "Security requirements cannot be met",
-      resolvedProtocol: result.decision.negotiation.resolvedProtocol,
-      recipientCompatibility: `${result.decision.negotiation.compatibleRecipients}/${result.decision.negotiation.totalRecipients} compatible`,
+      errorMessage: err instanceof Error ? err.message : "Security requirements cannot be met",
     };
-  }
-
-  if (result.protectedMessage) {
-    const adapter = new OfficeSubmissionAdapter(mailHost);
-    await adapter.submit(result.protectedMessage);
   }
 
   return {
     allowed: true,
-    resolvedProtocol: result.decision.negotiation.resolvedProtocol,
-    recipientCompatibility: `${result.decision.negotiation.compatibleRecipients}/${result.decision.negotiation.totalRecipients} compatible`,
+    resolvedProtocol: "openpgp-armored",
   };
 }
 

@@ -3,6 +3,7 @@ import { attachmentEncryptionNotice } from "@scomm-office/office";
 import { ComposeSecurityControls } from "../components/ComposeSecurityControls";
 import { EcdhEnvelopeControls } from "../components/EcdhEnvelopeControls";
 import { useHostContext } from "../../lib/host-context";
+import { Button } from "../ui/layout";
 import {
   ProductionPubkeyDirectory,
   extractPgpMessage,
@@ -19,6 +20,7 @@ import {
 } from "../../lib/mail-crypto-actions";
 import {
   getOfficePubkeySession,
+  mskPublicKeyBytes,
   persistMsk,
   publishPgpContentKey,
   restoreOfficeVault,
@@ -41,6 +43,15 @@ type BootstrapStep =
   | "recover"
   | "recover-otp"
   | "verified";
+
+function enrollOtpStatus(email: string, result: unknown): string {
+  const otp =
+    result && typeof result === "object" && "otp" in result && typeof result.otp === "string"
+      ? result.otp
+      : "";
+  if (otp) return `Verification code for ${email}: ${otp}`;
+  return `Verification code sent to ${email}. If SMTP is off, set DEV_RETURN_OTP=1 on the local pubkey server and retry.`;
+}
 
 export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPaneCryptoAction }) {
   const { settings, currentUserEmail, isMockHost, mailHost, message, refreshMessage, capabilities } =
@@ -125,12 +136,12 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       if (!msk.publicKey) throw new Error("MSK public key missing");
       session.pendingMsk = msk;
       session.msk = msk;
-      await session.client.enrollMsk({
+      const result = await session.client.enrollMsk({
         email: normalizeEmail(userEmail),
         mskPublicKey: msk.publicKey,
       });
       setBootstrapStep("otp-sent");
-      setBootstrapStatus(`Verification code sent to ${userEmail}.`);
+      setBootstrapStatus(enrollOtpStatus(userEmail, result));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("already") || message.includes("replace") || message.includes("transfer")) {
@@ -139,6 +150,36 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       } else {
         setBootstrapStatus(`Could not start identity setup: ${message}`);
       }
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, pubkeyBase, sessionFor]);
+
+  const handleRegisterOnThisDirectory = useCallback(async () => {
+    if (!userEmail || !pubkeyBase) return;
+    const session = sessionFor();
+    if (!session) return;
+    if (!session.msk) {
+      await restoreOfficeVault(session);
+    }
+    const publicKey = mskPublicKeyBytes(session);
+    if (!publicKey) {
+      setBootstrapStatus("Unlock the local Vault MSK first, then register it on this directory.");
+      return;
+    }
+    setBusy(true);
+    setBootstrapStatus(null);
+    try {
+      const result = await session.client.enrollMsk({
+        email: normalizeEmail(userEmail),
+        mskPublicKey: publicKey,
+      });
+      setBootstrapStep("otp-sent");
+      setBootstrapStatus(enrollOtpStatus(userEmail, result));
+    } catch (err) {
+      setBootstrapStatus(
+        `Could not register this identity on the directory: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -185,11 +226,20 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       setHasPgp(true);
       setBootstrapStatus("OpenPGP content key published.");
     } catch (err) {
-      setBootstrapStatus(`Publish failed: ${err instanceof Error ? err.message : String(err)}`);
+      const message = err instanceof Error ? err.message : String(err);
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code: unknown }).code)
+          : "";
+      if (code === "master_key_not_armed" || message.includes("No armed MSK")) {
+        await handleRegisterOnThisDirectory();
+        return;
+      }
+      setBootstrapStatus(`Publish failed: ${message} (${session.client.writeBaseUrl})`);
     } finally {
       setBusy(false);
     }
-  }, [userEmail, sessionFor]);
+  }, [userEmail, sessionFor, handleRegisterOnThisDirectory]);
 
   const handleBeginTransfer = useCallback(async () => {
     if (!userEmail) return;
@@ -418,12 +468,12 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         ) : bootstrapStep === "idle" ? (
           <div className="actions">
             <p className="note">Set up Scomm.AI on this device for {userEmail}.</p>
-            <button type="button" className="primary" disabled={busy} onClick={() => void handleRequestOtp()}>
+            <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleRequestOtp()}>
               Create Scomm.AI identity
-            </button>
-            <button type="button" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
+            </Button>
+            <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
               I already have Scomm.AI on another device
-            </button>
+            </Button>
           </div>
         ) : bootstrapStep === "otp-sent" ? (
           <div className="actions">
@@ -438,24 +488,24 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
               onChange={(e) => setOtpInput(e.target.value.replace(/[-\s]/g, ""))}
               style={{ padding: "4px 8px", fontSize: "16px", width: "220px", marginBottom: "8px", fontFamily: "monospace" }}
             />
-            <button
-              type="button"
-              className="primary"
+            <Button
+              appearance="primary"
+              size="small"
               disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11}
               onClick={() => void handleVerifyOtp()}
             >
               Verify code
-            </button>
+            </Button>
           </div>
         ) : bootstrapStep === "unauthorized" ? (
           <div className="actions">
             <p className="note">To add this device normally, approve it from an existing SComm device.</p>
-            <button type="button" className="primary" disabled={busy} onClick={() => void handleBeginTransfer()}>
+            <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleBeginTransfer()}>
               Transfer from another SComm device
-            </button>
-            <button type="button" disabled={busy} onClick={() => setBootstrapStep("recover")}>
+            </Button>
+            <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("recover")}>
               Recover identity
-            </button>
+            </Button>
           </div>
         ) : bootstrapStep === "transfer" ? (
           <div className="actions">
@@ -468,12 +518,12 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
               Recovery creates a new Master Identity Key and retires the previous one. It does not restore
               encryption keys that existed only on lost devices.
             </p>
-            <button type="button" className="primary" disabled={busy} onClick={() => void handleBeginRecovery()}>
+            <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleBeginRecovery()}>
               Continue with recovery
-            </button>
-            <button type="button" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
+            </Button>
+            <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
               Cancel
-            </button>
+            </Button>
           </div>
         ) : bootstrapStep === "recover-otp" ? (
           <div className="actions">
@@ -488,26 +538,38 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
               onChange={(e) => setOtpInput(e.target.value.replace(/[-\s]/g, ""))}
               style={{ padding: "4px 8px", fontSize: "16px", width: "220px", marginBottom: "8px", fontFamily: "monospace" }}
             />
-            <button type="button" className="primary" disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11} onClick={() => void handleVerifyRecovery()}>
+            <Button appearance="primary" size="small" disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11} onClick={() => void handleVerifyRecovery()}>
               Verify
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="actions">
             <p className="note status ok">This device is authorized. Master Identity Key is protected.</p>
-            <button type="button" disabled={busy} onClick={() => void handleListDevices()}>
+            <p className="note">
+              A restored Vault is not the same as an armed identity on this pubkey directory. If publish
+              fails with “No armed MSK”, register the existing key here, then verify the OTP.
+            </p>
+            <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleListDevices()}>
               Show devices
-            </button>
+            </Button>
+            <Button
+              appearance="secondary"
+              size="small"
+              disabled={busy}
+              onClick={() => void handleRegisterOnThisDirectory()}
+            >
+              Register identity on this directory
+            </Button>
             {!hasPgp ? (
               <>
-                <button
-                  type="button"
-                  className="primary"
+                <Button
+                  appearance="primary"
+                  size="small"
                   disabled={busy || !engineReady || !pgpEntitled}
                   onClick={() => void handlePublishPgp()}
                 >
                   Publish OpenPGP key
-                </button>
+                </Button>
                 {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
               </>
             ) : (
@@ -538,20 +600,20 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
         {composeMode && attachmentNotice ? <p className="note">{attachmentNotice}</p> : null}
         <div className="actions">
-          <button
-            type="button"
-            className="primary"
+          <Button
+            appearance="primary"
+            size="small"
             disabled={busy || !engineReady || !composeMode || !pgpEntitled}
             onClick={() => void handleEncrypt()}
           >
             Encrypt
-          </button>
-          <button type="button" disabled={busy || !engineReady} onClick={() => void handleDecrypt()}>
+          </Button>
+          <Button appearance="secondary" size="small" disabled={busy || !engineReady} onClick={() => void handleDecrypt()}>
             Decrypt
-          </button>
-          <button type="button" disabled={busy || !engineReady} onClick={() => void handleVerify()}>
+          </Button>
+          <Button appearance="secondary" size="small" disabled={busy || !engineReady} onClick={() => void handleVerify()}>
             Verify signature
-          </button>
+          </Button>
         </div>
         {pgpPresent ? <p className="note">Current item looks like OpenPGP.</p> : null}
         {mailStatus ? <p className="note">{mailStatus}</p> : null}
@@ -582,8 +644,9 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         )}
         {inventoryNote ? <p className="note">{inventoryNote}</p> : null}
         <div className="actions">
-          <button
-            type="button"
+          <Button
+            appearance="secondary"
+            size="small"
             disabled={busy || !userEmail}
             onClick={() => {
               const session = sessionFor();
@@ -618,9 +681,10 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
             }}
           >
             Check coverage
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            appearance="secondary"
+            size="small"
             disabled={busy || !userEmail}
             onClick={() => {
               const session = sessionFor();
@@ -638,7 +702,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
             }}
           >
             Sync with Scomm.AI
-          </button>
+          </Button>
         </div>
         <input
           type="password"
@@ -655,8 +719,9 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
           style={{ width: "100%", fontFamily: "monospace", fontSize: "12px", marginBottom: "8px" }}
         />
         <div className="actions">
-          <button
-            type="button"
+          <Button
+            appearance="secondary"
+            size="small"
             disabled={busy || !keyPackagePass.trim() || vaultTiles.length === 0}
             onClick={() => {
               const session = sessionFor();
@@ -674,9 +739,10 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
             }}
           >
             Export key package
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            appearance="secondary"
+            size="small"
             disabled={busy || !keyPackagePass.trim() || !keyPackageJson.trim()}
             onClick={() => {
               const session = sessionFor();
@@ -692,7 +758,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
             }}
           >
             Import key package
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -717,12 +783,12 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
           style={{ width: "100%", fontFamily: "monospace", fontSize: "12px", marginBottom: "8px" }}
         />
         <div className="actions">
-          <button type="button" disabled={busy || !vaultPassphrase.trim()} onClick={() => void handleExportVault()}>
+          <Button appearance="secondary" size="small" disabled={busy || !vaultPassphrase.trim()} onClick={() => void handleExportVault()}>
             Export Vault
-          </button>
-          <button type="button" disabled={busy || !vaultPassphrase.trim() || !vaultBackup.trim()} onClick={() => void handleImportVault()}>
+          </Button>
+          <Button appearance="secondary" size="small" disabled={busy || !vaultPassphrase.trim() || !vaultBackup.trim()} onClick={() => void handleImportVault()}>
             Import Vault
-          </button>
+          </Button>
         </div>
       </section>
     </section>

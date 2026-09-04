@@ -10,6 +10,8 @@ import {
 import { DevMemoryKeyStore } from "@scomm-office/storage";
 import { UnsupportedFeatureError } from "@scomm-office/core";
 import type { PublicKeyRecord } from "@scomm-office/protocol";
+import { MessageBar, MessageBarBody } from "@fluentui/react-components";
+import { Button, Note, PageTitle, StatusBadge, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
 import { collectRecipientEmails } from "../../lib/semantic-policy";
 import { formatAddresses, resolvePubkeyReadBaseUrl } from "../../lib/settings";
@@ -28,8 +30,10 @@ function createDirectory(settings: {
   pubkeyServerUrl?: string;
   scommServerUrl?: string;
 }): { directory: PublicKeyDirectory; mode: "production" | "fixture" | "unset"; base: string } {
+  const configured =
+    settings.pubkeyReadBaseUrl || settings.pubkeyServerUrl || settings.scommServerUrl || "";
   const readBase = resolvePubkeyReadBaseUrl(settings);
-  if (!readBase) {
+  if (!configured && !readBase) {
     return {
       directory: new ProductionPubkeyDirectory("https://invalid.local"),
       mode: "unset",
@@ -37,8 +41,8 @@ function createDirectory(settings: {
     };
   }
   const looksLikeFixture =
-    /localhost:8787/i.test(readBase) ||
-    Boolean(settings.scommServerUrl && readBase === settings.scommServerUrl);
+    /localhost:8787/i.test(configured) ||
+    Boolean(settings.scommServerUrl && configured === settings.scommServerUrl);
   if (looksLikeFixture && !settings.pubkeyReadBaseUrl) {
     return { directory: new HttpPublicKeyDirectory(readBase), mode: "fixture", base: readBase };
   }
@@ -46,6 +50,7 @@ function createDirectory(settings: {
 }
 
 export function IdentityPanel() {
+  const styles = usePaneStyles();
   const { message, settings, isMockHost, currentUserEmail, capabilities } = useHostContext();
   const [senderStatus, setSenderStatus] = useState<KeyStatus | null>(null);
   const [recipientStatuses, setRecipientStatuses] = useState<KeyStatus[]>([]);
@@ -151,38 +156,36 @@ export function IdentityPanel() {
   };
 
   return (
-    <section>
-      <h2>Identity</h2>
-      <p className="note">
-        Keys are discovered on pubkey.scomm.ai — the same directory as the Scomm.AI mail client.
-      </p>
-      <dl className="meta-grid">
-        <dt>Current user (mailbox)</dt>
+    <>
+      <PageTitle
+        title="Identity"
+        description="Keys are discovered on pubkey.scomm.ai — the same directory as the Scomm.AI mail client."
+      />
+      <dl className={styles.metaGrid}>
+        <dt className={styles.metaLabel}>Current user (mailbox)</dt>
         <dd>{userEmail ?? "Unknown (Outlook profile not exposed in MVP)"}</dd>
-        <dt>Pubkey directory</dt>
+        <dt className={styles.metaLabel}>Pubkey directory</dt>
         <dd>
           {pubkeyBase || "— (set pubkey read URL in Settings)"} ({mode})
         </dd>
       </dl>
 
-      <section>
-        <h2>Sender keys</h2>
-        {!pubkeyBase ? (
-          <p className="empty">Configure pubkey read base URL to discover keys.</p>
-        ) : !message?.from ? (
-          <p className="empty">No sender on current message.</p>
-        ) : senderStatus ? (
-          <KeyStatusRow status={senderStatus} label="GET signing keys" />
-        ) : null}
-      </section>
+      <PageTitle title="Sender keys" />
+      {!pubkeyBase ? (
+        <Note>Configure pubkey read base URL to discover keys.</Note>
+      ) : !message?.from ? (
+        <Note>No sender on current message.</Note>
+      ) : senderStatus ? (
+        <KeyStatusRow status={senderStatus} label="GET signing keys" />
+      ) : null}
 
       {message?.mode === "compose" ? (
-        <section>
-          <h2>Recipient encryption keys</h2>
+        <>
+          <PageTitle title="Recipient encryption keys" />
           {recipientStatuses.length === 0 ? (
-            <p className="empty">No recipients or not in compose mode.</p>
+            <Note>No recipients or not in compose mode.</Note>
           ) : (
-            <ul className="list-plain">
+            <ul className={styles.list}>
               {recipientStatuses.map((status) => (
                 <li key={status.email}>
                   <KeyStatusRow status={status} label={status.email} />
@@ -190,46 +193,38 @@ export function IdentityPanel() {
               ))}
             </ul>
           )}
-        </section>
+        </>
       ) : (
-        <p className="note">
+        <Note>
           Recipient key lookup runs in compose mode. Current mode: {message?.mode ?? "—"} (
           {formatAddresses(message?.to)}).
-        </p>
+        </Note>
       )}
 
-      <section>
-        <h2>Dev key publish</h2>
-        <p className="note">
-          Fixture mode only: generates a fake key via DevMemoryKeyStore and PUTs to Fastify MVP routes.
-          Production write/bootstrap is P1.
-        </p>
-        <div className="actions">
-          <button
-            type="button"
-            className="primary"
-            disabled={busy || mode !== "fixture"}
-            onClick={() => void publishDevKey()}
-          >
-            SET dev public key
-          </button>
-          <button type="button" className="secondary" onClick={() => void refreshKeys()}>
-            Refresh lookup
-          </button>
-        </div>
-        {publishState ? <p className="note">{publishState}</p> : null}
-        {!capabilities.internetHeaders ? (
-          <p className="error-text">
-            Internet headers unavailable — Mailbox 1.8+ required for header stamping.
-          </p>
-        ) : null}
-      </section>
-    </section>
+      <PageTitle
+        title="Dev key publish"
+        description="Fixture mode only: generates a fake key via DevMemoryKeyStore and PUTs to Fastify MVP routes."
+      />
+      <div className={styles.actions}>
+        <Button appearance="primary" size="small" disabled={busy || mode !== "fixture"} onClick={() => void publishDevKey()}>
+          SET dev public key
+        </Button>
+        <Button appearance="secondary" size="small" onClick={() => void refreshKeys()}>
+          Refresh lookup
+        </Button>
+      </div>
+      {publishState ? <Note>{publishState}</Note> : null}
+      {!capabilities.internetHeaders ? (
+        <MessageBar intent="error">
+          <MessageBarBody>Internet headers unavailable — Mailbox 1.8+ required for header stamping.</MessageBarBody>
+        </MessageBar>
+      ) : null}
+    </>
   );
 }
 
 function KeyStatusRow({ status, label }: { status: KeyStatus; label: string }) {
-  const badge =
+  const tone =
     status.status === "found"
       ? "ok"
       : status.status === "missing"
@@ -241,7 +236,7 @@ function KeyStatusRow({ status, label }: { status: KeyStatus; label: string }) {
   return (
     <div>
       <strong>{label}</strong>{" "}
-      <span className={`status ${badge}`}>
+      <StatusBadge tone={tone}>
         {status.status === "loading"
           ? "loading…"
           : status.status === "found"
@@ -249,8 +244,12 @@ function KeyStatusRow({ status, label }: { status: KeyStatus; label: string }) {
             : status.status === "missing"
               ? "not found"
               : "error"}
-      </span>
-      {status.error ? <div className="error-text">{status.error}</div> : null}
+      </StatusBadge>
+      {status.error ? (
+        <MessageBar intent="error">
+          <MessageBarBody>{status.error}</MessageBarBody>
+        </MessageBar>
+      ) : null}
     </div>
   );
 }
