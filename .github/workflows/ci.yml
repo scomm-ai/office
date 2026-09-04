@@ -41,7 +41,7 @@ jobs:
           SDK_TOKEN: ${{ secrets.TWOKEY_BILLING_SDKS_TOKEN }}
         run: |
           dest="$GITHUB_WORKSPACE/../2key-billing-sdks"
-          branch="feat/unified-sdk-license-parity"
+          branch="main"
           if [ -n "$SDK_TOKEN" ]; then
             git clone --depth 1 --branch "$branch" \
               "https://x-access-token:${SDK_TOKEN}@github.com/2keyapp/2key-billing-sdks.git" \
