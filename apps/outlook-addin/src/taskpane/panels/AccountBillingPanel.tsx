@@ -372,7 +372,7 @@ export function AccountBillingPanel() {
           "ok",
         );
       } else {
-        field instanceof HTMLTextAreaElement && field.select();
+        if (field instanceof HTMLTextAreaElement) field.select();
         announce(
           "device",
           "Clipboard is blocked in this Outlook WebView. The JSON is selected — press Ctrl+C (Cmd+C on Mac).",

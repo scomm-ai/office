@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import http from "node:http";
+import type http from "node:http";
 import net from "node:net";
 import tls from "node:tls";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
