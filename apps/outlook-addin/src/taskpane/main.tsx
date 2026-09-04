@@ -4,11 +4,7 @@ import { App } from "./App";
 import { FluentApp } from "./ui/fluent-app";
 import "./styles.css";
 
-/**
- * Mount the task pane. `taskpane.html` calls `Office.onReady` first so Outlook
- * does not time out while Vite/Fluent are still loading.
- */
-export function mountTaskPane(): void {
+function mountTaskPane(): void {
   const root = document.getElementById("root");
   if (!root) {
     return;
@@ -22,4 +18,10 @@ export function mountTaskPane(): void {
   );
 }
 
-mountTaskPane();
+if (typeof Office !== "undefined" && Office.onReady) {
+  Office.onReady(() => {
+    mountTaskPane();
+  });
+} else {
+  mountTaskPane();
+}

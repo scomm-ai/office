@@ -12,26 +12,6 @@
   </head>
   <body>
     <div id="root">Starting Scomm.AI…</div>
-    <script>
-      (function () {
-        function loadApp() {
-          var s = document.createElement("script");
-          s.type = "module";
-          s.src = "/src/taskpane/main.tsx";
-          s.onerror = function () {
-            var root = document.getElementById("root");
-            if (root) root.textContent = "Could not load the add-in script from the Vite server.";
-          };
-          document.body.appendChild(s);
-        }
-        if (typeof Office !== "undefined" && Office.onReady) {
-          Office.onReady(function () {
-            loadApp();
-          });
-        } else {
-          loadApp();
-        }
-      })();
-    </script>
+    <script type="module" src="/src/taskpane/main.tsx"></script>
   </body>
 </html>
