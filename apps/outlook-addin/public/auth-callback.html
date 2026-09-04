@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Signing in…</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        color: #242424;
+      }
+      .card { text-align: center; padding: 2rem; max-width: 28rem; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p id="msg">Completing sign-in…</p>
+    </div>
+    <script>
+      (function () {
+        var STORAGE_KEY = "scomm-office.oauth.handoff";
+        var CHANNEL = "scomm-office-oauth";
+        var params = new URLSearchParams(window.location.search);
+        var error = params.get("error");
+        var ott = params.get("ott") || "";
+        var msg = document.getElementById("msg");
+        var payload = error
+          ? { status: "error", error: error, message: "Sign-in did not complete.", ts: Date.now() }
+          : { status: "success", ott: ott, ts: Date.now() };
+        var raw = JSON.stringify(payload);
+        var sent = false;
+
+        function setMsg(text) {
+          if (msg) msg.textContent = text;
+        }
+
+        function publish() {
+          try {
+            window.localStorage.setItem(STORAGE_KEY, raw);
+          } catch (e) {}
+          try {
+            var ch = new BroadcastChannel(CHANNEL);
+            ch.postMessage(raw);
+            ch.close();
+          } catch (e) {}
+          try {
+            if (window.opener) {
+              window.opener.postMessage(raw, window.location.origin);
+            }
+          } catch (e) {}
+          try {
+            if (typeof Office !== "undefined" && Office.context && Office.context.ui) {
+              Office.context.ui.messageParent(raw, { targetOrigin: window.location.origin });
+            }
+          } catch (e) {
+            try {
+              Office.context.ui.messageParent(raw);
+            } catch (e2) {}
+          }
+        }
+
+        function finishUi() {
+          if (sent) return;
+          sent = true;
+          if (error || !ott) {
+            setMsg(
+              error
+                ? "Sign-in did not complete. You can close this window and try again."
+                : "Signed in, but no handoff token came back. Close this window and try again.",
+            );
+            return;
+          }
+          setMsg("Signed in. You can close this window if Outlook does not close it.");
+        }
+
+        if (!error && !ott) {
+          setMsg("This page opened without a sign-in token. Close it and try Sign in again.");
+        }
+
+        publish();
+
+        if (typeof Office !== "undefined" && Office.onReady) {
+          Office.onReady(function () {
+            publish();
+            finishUi();
+          });
+        }
+
+        window.setTimeout(function () {
+          publish();
+          finishUi();
+        }, 1500);
+      })();
+    </script>
+  </body>
+</html>

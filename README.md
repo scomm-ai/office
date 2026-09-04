@@ -105,7 +105,7 @@ Workspace discovery: `pnpm-workspace.yaml` includes `apps/*`, `packages/*`, and 
 pnpm install
 cp .env.example .env   # adjust URLs as needed
 
-# Run add-in (HTTPS :5173) + dev-console (:5174)
+# Run add-in (HTTPS, `ADDIN_PORT` default 5173) + dev-console (:5174)
 pnpm --filter @scomm-office/outlook-addin dev
 pnpm --filter @scomm-office/dev-console dev
 
@@ -113,7 +113,7 @@ pnpm --filter @scomm-office/dev-console dev
 pnpm dev
 ```
 
-Open **https://localhost:5173/taskpane.html** in a browser (accept the self-signed cert) to use **MockMailHost** without Outlook.
+Open **https://localhost:5173/taskpane.html** (or `https://localhost:$ADDIN_PORT/taskpane.html`) in a browser (accept the self-signed cert) to use **MockMailHost** without Outlook.
 
 ## Configuration
 
@@ -121,8 +121,11 @@ Copy `.env.example` to `.env` at the repo root. Vite apps read `VITE_*` variable
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
+| `ADDIN_PORT` | `5173` | Outlook add-in Vite HTTPS port; also rewrites `manifest.local.xml` |
 | `VITE_SCOMM_SERVER_URL` | `http://localhost:8787` | SComm server base URL |
-| `VITE_PUBKEY_SERVER_URL` | same as above | Public key directory |
+| `VITE_PUBKEY_SERVER_URL` | same as above | Fixture pubkey URL (optional local Fastify) |
+| `VITE_PUBKEY_READ_BASE_URL` | `https://pubkey.scomm.ai` | Production pubkey read host |
+| `VITE_PUBKEY_WRITE_BASE_URL` | `https://pubkey.scomm.ai` | Production pubkey write host (same server as read; not `api.pubkey.scomm.ai`) |
 | `VITE_IDR_HOST` | *(empty)* | Your IDR tunnel host |
 | `VITE_IDR_SERVICE` | `ollama` | IDR service name for BYOM |
 | `VITE_BILLING_ORIGIN` | *(empty)* | Billing API origin (`https://…`) |
@@ -135,7 +138,7 @@ Task pane **Settings** also persist to `localStorage` via `MemoryUserSettingsSto
 
 **Production:** Microsoft disabled **Add from URL**. Download **https://office.scomm.ai/manifest.xml**, then **Add from File** via **https://aka.ms/olksideload** (or classic Outlook **File → Manage Add-ins**). Details: **[docs/sideload.md](./docs/sideload.md)**.
 
-**Local:** trust the Vite cert, then **Add from file** `apps/outlook-addin/manifest/manifest.xml` against `https://localhost:5173`. Do not share the localhost manifest as an install link.
+**Local:** trust the Vite cert, then **Add from file** `apps/outlook-addin/manifest/manifest.local.xml` (generated on `pnpm dev` from `ADDIN_PORT`). Do not share the localhost manifest as an install link.
 
 ## Development scripts
 
@@ -151,7 +154,7 @@ Task pane **Settings** also persist to `localStorage` via `MemoryUserSettingsSto
 Per app:
 
 ```bash
-pnpm --filter @scomm-office/outlook-addin dev      # https://localhost:5173
+pnpm --filter @scomm-office/outlook-addin dev      # https://localhost:$ADDIN_PORT (default 5173)
 pnpm --filter @scomm-office/dev-console dev        # http://localhost:5174
 ```
 

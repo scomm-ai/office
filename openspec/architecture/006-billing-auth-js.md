@@ -50,9 +50,12 @@ await billing.ensureDeviceId();
 await billing.restore();
 await billing.syncLicense({ accessToken });
 billing.hasAddon("ai_assistant");
+billing.hasAddon("pgp");
 ```
 
 `@scomm-office/byoai` receives an `AddonGate` (`hasAddon` / `hasOffering`). It must not parse JWTs.
+
+OpenPGP encrypt, sign, and key publish call `hasAddon("pgp")` (same SecMail SKU). Decrypt / verify stay ungated.
 
 ## Decision
 
@@ -65,5 +68,6 @@ billing.hasAddon("ai_assistant");
 | Pin `@2key/browser-sdk` | Done |
 | Account/Billing UI on DeviceID + sync + gates | Done |
 | BYOAI `hasAddon("ai_assistant")` / `hasOffering` | Done |
+| OpenPGP encrypt/sign/key publish `hasAddon("pgp")` | Done |
 | Delete `@scomm-office/billing` | Done |
 | CI forbid `better-auth` and local JWT parsers | Done |

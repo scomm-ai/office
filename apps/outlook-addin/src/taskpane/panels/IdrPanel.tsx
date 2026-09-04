@@ -1,8 +1,10 @@
 import { useRef, useState } from "react";
 import { detectIdrRuntimeSupport, IdrBrowserTransport, OllamaViaIdrProvider } from "@scomm-office/idr";
+import { Button, Field, Input, Note, PageTitle, StatusBadge, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
 
 export function IdrPanel() {
+  const styles = usePaneStyles();
   const { settings, idrRuntime, idrConnected, setIdrRuntime, setIdrConnected, updateSettings } =
     useHostContext();
   const authMountRef = useRef<HTMLDivElement>(null);
@@ -75,92 +77,78 @@ export function IdrPanel() {
   };
 
   return (
-    <section>
-      <h2>AI / IDR</h2>
-      <p className="note">
-        IDR is a third-party subscription at idr.to. SComm Office embeds @idrto/idr_browser_sdk only —
-        there is no Office IDR proxy. WebRTC may be unavailable on some Outlook hosts; use HTTPS relay
-        when offered by the SDK.
-      </p>
-
-      <div className="field">
-        <label htmlFor="idr-host">IDR host</label>
-        <input
-          id="idr-host"
-          type="text"
+    <>
+      <PageTitle
+        title="AI / IDR"
+        description="IDR is a third-party subscription at idr.to. SComm Office embeds @idrto/idr_browser_sdk only — there is no Office IDR proxy. WebRTC may be unavailable on some Outlook hosts; use HTTPS relay when offered by the SDK."
+      />
+      <Field label="IDR host">
+        <Input
           value={settings.idrTargetHost ?? ""}
           placeholder="your-machine.idr.to"
-          onChange={(event) => updateSettings({ idrTargetHost: event.target.value })}
+          onChange={(_, data) => updateSettings({ idrTargetHost: data.value })}
         />
-      </div>
-      <div className="field">
-        <label htmlFor="idr-service">Service</label>
-        <input
-          id="idr-service"
-          type="text"
+      </Field>
+      <Field label="Service">
+        <Input
           value={settings.idrDefaultService ?? "ollama"}
-          onChange={(event) => updateSettings({ idrDefaultService: event.target.value })}
+          onChange={(_, data) => updateSettings({ idrDefaultService: data.value })}
         />
+      </Field>
+      <div ref={authMountRef} aria-label="IDR auth mount">
+        <Note>IDR auth widget mounts here during interactive authenticate.</Note>
       </div>
-
-      <div ref={authMountRef} className="note" aria-label="IDR auth mount">
-        IDR auth widget mounts here during interactive authenticate.
-      </div>
-
-      <div className="actions">
-        <button type="button" className="primary" disabled={busy} onClick={() => void authenticate()}>
+      <div className={styles.actions}>
+        <Button appearance="primary" size="small" disabled={busy} onClick={() => void authenticate()}>
           Authenticate
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={() => void testConnection()}>
+        </Button>
+        <Button appearance="secondary" size="small" disabled={busy} onClick={() => void testConnection()}>
           Test connection
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={() => void listModels()}>
+        </Button>
+        <Button appearance="secondary" size="small" disabled={busy} onClick={() => void listModels()}>
           List models
-        </button>
-        <button type="button" className="secondary" disabled={busy} onClick={() => void refreshRuntime()}>
+        </Button>
+        <Button appearance="secondary" size="small" disabled={busy} onClick={() => void refreshRuntime()}>
           Detect runtime
-        </button>
+        </Button>
       </div>
-
       {idrRuntime ? (
-        <dl className="meta-grid">
-          <dt>Runtime status</dt>
+        <dl className={styles.metaGrid}>
+          <dt className={styles.metaLabel}>Runtime status</dt>
           <dd>
-            <span
-              className={`status ${
+            <StatusBadge
+              tone={
                 idrRuntime.status === "supported"
                   ? "ok"
                   : idrRuntime.status === "unsupported"
                     ? "warn"
                     : "error"
-              }`}
+              }
             >
               {idrRuntime.status}
-            </span>
+            </StatusBadge>
           </dd>
-          <dt>WebRTC</dt>
+          <dt className={styles.metaLabel}>WebRTC</dt>
           <dd>{idrRuntime.webRtc ? "available" : "unavailable"}</dd>
-          <dt>Ed25519</dt>
+          <dt className={styles.metaLabel}>Ed25519</dt>
           <dd>{idrRuntime.webCryptoEd25519 ? "available" : "unavailable"}</dd>
         </dl>
       ) : (
-        <p className="empty">Runtime support not probed yet.</p>
+        <Note>Runtime support not probed yet.</Note>
       )}
-
       {!idrConnected ? (
-        <p className="note">No AI provider configured — authenticate and connect to IDR first.</p>
+        <Note>No AI provider configured — authenticate and connect to IDR first.</Note>
       ) : models.length > 0 ? (
-        <section>
-          <h2>Ollama models</h2>
-          <ul className="list-plain">
+        <>
+          <PageTitle title="Ollama models" />
+          <ul className={styles.list}>
             {models.map((model) => (
               <li key={model}>{model}</li>
             ))}
           </ul>
-        </section>
+        </>
       ) : null}
-
-      {status ? <p className="note">{status}</p> : null}
-    </section>
+      {status ? <Note>{status}</Note> : null}
+    </>
   );
 }

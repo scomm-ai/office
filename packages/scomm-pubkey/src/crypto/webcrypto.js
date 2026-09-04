@@ -31,6 +31,12 @@ const ED25519_PKCS8_PREFIX = Uint8Array.from([
 	0x22, 0x04, 0x20,
 ]);
 
+/** PKCS8 PrivateKeyInfo prefix for X25519 (OID 1.3.101.110). Same layout as Ed25519. */
+const X25519_PKCS8_PREFIX = Uint8Array.from([
+	0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x04,
+	0x22, 0x04, 0x20,
+]);
+
 async function probeGenerate(algorithm, extractable, usages) {
 	try {
 		await crypto.subtle.generateKey(algorithm, extractable, usages);
@@ -128,7 +134,10 @@ export class WebCryptoProvider extends CryptoProvider {
 				if (algo === MSK_ALGORITHM || algo === "ed25519") {
 					return caps.sign.includes(MSK_ALGORITHM);
 				}
-				if (operation === CRYPTO_OPERATIONS.generateKey) {
+				if (
+					operation === CRYPTO_OPERATIONS.generateKey ||
+					operation === CRYPTO_OPERATIONS.importKey
+				) {
 					return (
 						caps.keyAgreement.includes(algo) ||
 						algo === "aes-256-gcm" ||
@@ -228,6 +237,13 @@ export class WebCryptoProvider extends CryptoProvider {
 			const rawPublic = new Uint8Array(
 				await crypto.subtle.exportKey("raw", pair.publicKey),
 			);
+			let rawPrivate;
+			if (extractable) {
+				const pkcs8 = new Uint8Array(
+					await crypto.subtle.exportKey("pkcs8", pair.privateKey),
+				);
+				rawPrivate = pkcs8.subarray(pkcs8.length - 32);
+			}
 			return this._store({
 				privateKey: pair.privateKey,
 				publicKey: pair.publicKey,
@@ -235,6 +251,7 @@ export class WebCryptoProvider extends CryptoProvider {
 				purpose: purpose ?? PURPOSES.keyAgreement,
 				extractable,
 				protection,
+				rawPrivate,
 				rawPublic,
 			});
 		}
@@ -366,7 +383,11 @@ export class WebCryptoProvider extends CryptoProvider {
 		const extractable = options.extractable ?? portable.extractable ?? true;
 		const protection = options.protection ?? KEY_PROTECTION.software;
 		this._rejectHardware(protection);
-		if (portable.algorithm !== MSK_ALGORITHM && portable.algorithm !== "ed25519") {
+		const algorithm = String(portable.algorithm ?? "").toLowerCase();
+		if (algorithm === "x25519") {
+			return this._importX25519(portable, extractable, protection);
+		}
+		if (algorithm !== MSK_ALGORITHM && algorithm !== "ed25519") {
 			throw new PubkeyError(
 				ERROR_CODES.unsupported_algorithm,
 				`Cannot import ${portable.algorithm}`,
@@ -415,6 +436,71 @@ export class WebCryptoProvider extends CryptoProvider {
 			publicKey,
 			algorithm: MSK_ALGORITHM,
 			purpose: portable.purpose,
+			extractable,
+			protection,
+			rawPrivate: extractable ? rawPrivate : undefined,
+			rawPublic,
+		});
+		if (!extractable) {
+			wipeBytes(rawPrivate);
+		}
+		return handle;
+	}
+
+	/**
+	 * Imports a raw 32-byte X25519 scalar for ECDH (encryption proof-of-possession).
+	 */
+	async _importX25519(portable, extractable, protection) {
+		const probed = await this._probe();
+		if (!probed.x25519) {
+			throw new PubkeyError(
+				ERROR_CODES.unsupported_algorithm,
+				"WebCrypto X25519 is not available in this host",
+			);
+		}
+		if (!portable.bytes || portable.bytes.length !== 32) {
+			throw new PubkeyError(
+				ERROR_CODES.key_import_failure,
+				"X25519 scalar must be 32 bytes",
+			);
+		}
+		const rawPrivate = new Uint8Array(portable.bytes);
+		const pkcs8 = concatBytes(X25519_PKCS8_PREFIX, rawPrivate);
+		let privateKey;
+		try {
+			privateKey = await crypto.subtle.importKey(
+				"pkcs8",
+				pkcs8,
+				"X25519",
+				extractable,
+				["deriveBits"],
+			);
+		} catch (cause) {
+			wipeBytes(rawPrivate);
+			throw new PubkeyError(
+				ERROR_CODES.key_import_failure,
+				"WebCrypto rejected the X25519 scalar",
+				{ cause },
+			);
+		}
+		const rawPublic = portable.publicKey
+			? new Uint8Array(portable.publicKey)
+			: undefined;
+		let publicKey;
+		if (rawPublic) {
+			publicKey = await crypto.subtle.importKey(
+				"raw",
+				rawPublic,
+				"X25519",
+				true,
+				[],
+			);
+		}
+		const handle = this._store({
+			privateKey,
+			publicKey,
+			algorithm: "x25519",
+			purpose: portable.purpose ?? PURPOSES.keyAgreement,
 			extractable,
 			protection,
 			rawPrivate: extractable ? rawPrivate : undefined,

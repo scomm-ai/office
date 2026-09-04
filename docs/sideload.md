@@ -27,8 +27,9 @@ Admins can deploy the XML in **Microsoft 365 admin center → Integrated apps** 
 
 ## Local development
 
-Dev manifest: `apps/outlook-addin/manifest/manifest.xml` (points at **https://localhost:5173**).  
-Do **not** share that file or URL for production installs.
+Committed template: `apps/outlook-addin/manifest/manifest.xml` (default **https://localhost:5173**).  
+After `pnpm dev`, sideload **`manifest.local.xml`** — it is rewritten from `ADDIN_PORT` in the repo-root `.env` (default `5173`).  
+Do **not** share those files or URLs for production installs.
 
 ### 1. Start the add-in dev server
 
@@ -36,18 +37,18 @@ Do **not** share that file or URL for production installs.
 pnpm --filter @scomm-office/outlook-addin dev
 ```
 
-Visit **https://localhost:5173/taskpane.html** once and accept the self-signed certificate.
+If 5173 is taken (for example the billing portal), set `ADDIN_PORT=5175` in `.env`. Visit `https://localhost:<ADDIN_PORT>/taskpane.html` once and accept the self-signed certificate.
 
 ### 2. Trust HTTPS locally
 
 Outlook loads the task pane over HTTPS. If the certificate is untrusted, the pane will be blank.
 
-- **Browser:** proceed past the warning for `localhost:5173`
+- **Browser:** proceed past the warning for `localhost:<ADDIN_PORT>`
 - **Classic Outlook:** WebView2 often ignores a browser click-through. Import the Vite cert into **Trusted Root Certification Authorities** (Current User), then restart Outlook.
 
 ### 3. Sideload the localhost manifest
 
-**Outlook on the web / New Outlook / Classic:** **My add-ins → Add a custom add-in → Add from file** → `apps/outlook-addin/manifest/manifest.xml`.
+**Outlook on the web / New Outlook / Classic:** **My add-ins → Add a custom add-in → Add from file** → `apps/outlook-addin/manifest/manifest.local.xml` (generated when the Vite server starts). Re-install that file whenever `ADDIN_PORT` changes.
 
 Keep the Vite server running.
 
@@ -55,7 +56,7 @@ Keep the Vite server running.
 
 1. Open a message (read or compose), not Calendar.
 2. Ribbon: **Scomm.AI**
-3. Task pane loads `https://localhost:5173/taskpane.html`
+3. Task pane loads `https://localhost:<ADDIN_PORT>/taskpane.html`
 
 ### 5. Event handlers
 
@@ -66,6 +67,7 @@ Keep the Vite server running.
 | Symptom | Check |
 |---------|--------|
 | Blank task pane | Dev server running? Cert trusted in WebView2? |
+| “Add-in may not load properly” | Sideloaded `manifest.local.xml` (not the 5173 template)? `ADDIN_PORT` matches the running Vite server? |
 | Add-in not in ribbon | Sideloaded? Mail item (not calendar)? Restart Outlook |
 | Add from URL dimmed | Microsoft removed that option. Download the XML and **Add from File** |
 | Pubkey errors | Production default is `https://pubkey.scomm.ai` |
@@ -73,4 +75,4 @@ Keep the Vite server running.
 
 ### 7. Browser-only (no Outlook)
 
-Open **https://localhost:5173/taskpane.html** — **MockMailHost** and a **Mock host** banner. Real encrypt/decrypt against a mailbox still needs Outlook + a sideloaded manifest.
+Open `https://localhost:<ADDIN_PORT>/taskpane.html` (default 5173) — **MockMailHost** and a **Mock host** banner. Real encrypt/decrypt against a mailbox still needs Outlook + a sideloaded manifest.

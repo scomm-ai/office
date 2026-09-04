@@ -16,6 +16,7 @@
   <SupportUrl DefaultValue="https://office.scomm.ai/taskpane.html" />
   <AppDomains>
     <AppDomain>https://office.scomm.ai</AppDomain>
+    <AppDomain>https://billing.scomm.ai</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox" />

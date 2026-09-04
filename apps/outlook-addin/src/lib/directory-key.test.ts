@@ -43,6 +43,7 @@ describe("decideSendGate", () => {
       encrypt: false,
       sign: false,
       recipients: [alice],
+      pgpEntitled: true,
     });
     expect(gate.allow).toBe(false);
     expect(gate.errorMessage).toMatch(/Encrypt/);
@@ -54,6 +55,7 @@ describe("decideSendGate", () => {
       encrypt: false,
       sign: false,
       recipients: [alice],
+      pgpEntitled: true,
     });
     expect(gate.allow).toBe(true);
     expect(gate.needsProtect).toBe(false);
@@ -65,6 +67,7 @@ describe("decideSendGate", () => {
       encrypt: true,
       sign: false,
       recipients: [alice],
+      pgpEntitled: true,
     });
     expect(gate.allow).toBe(true);
     expect(gate.needsProtect).toBe(true);
@@ -81,7 +84,32 @@ describe("decideSendGate", () => {
       encrypt: false,
       sign: false,
       recipients: [bob],
+      pgpEntitled: true,
     });
     expect(gate.allow).toBe(true);
+  });
+
+  it("does not force encrypt when the pgp add-on is missing", () => {
+    const gate = decideSendGate({
+      bodyProtected: false,
+      encrypt: false,
+      sign: false,
+      recipients: [alice],
+      pgpEntitled: false,
+    });
+    expect(gate.allow).toBe(true);
+    expect(gate.needsProtect).toBe(false);
+  });
+
+  it("blocks explicit Encrypt/Sign when the pgp add-on is missing", () => {
+    const gate = decideSendGate({
+      bodyProtected: false,
+      encrypt: true,
+      sign: false,
+      recipients: [alice],
+      pgpEntitled: false,
+    });
+    expect(gate.allow).toBe(false);
+    expect(gate.errorMessage).toMatch(/pgp/i);
   });
 });

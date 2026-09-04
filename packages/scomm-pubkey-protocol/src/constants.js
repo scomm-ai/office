@@ -1,5 +1,11 @@
 export const PROTOCOL_VERSION = 1;
 export const PROTOCOL_NAME = "SComm/Pubkey";
+/**
+ * `operation` a signing artifact's `self_signature` is computed over.
+ * Distinct from the outer MSK-signed envelope, but bound to the same
+ * timestamp/nonce so the two cannot be mixed and matched.
+ */
+export const ARTIFACT_POP_OPERATION = "artifact_pop";
 export const TIMESTAMP_WINDOW_MS = 5 * 60 * 1000;
 export const NONCE_REPLAY_TTL_MS = TIMESTAMP_WINDOW_MS + 60 * 1000;
 export const MSK_ALGORITHM = "ed25519";
@@ -11,6 +17,9 @@ export const OPERATIONS = Object.freeze({
 	replace_msk: "replace_msk",
 	arm_replacement_msk: "arm_replacement_msk",
 	set_keys: "set_keys",
+	set_signing_key: "set_signing_key",
+	request_key_challenge: "request_key_challenge",
+	set_encryption_key: "set_encryption_key",
 	retire_key: "retire_key",
 	update_preferences: "update_preferences",
 	get_best_key: "get_best_key",
