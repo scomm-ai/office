@@ -11,6 +11,7 @@ import {
 } from "@scomm-office/pubkeys";
 import { IndexedDbDeviceSecretStore, IndexedDbVaultStore } from "@scomm-office/storage";
 import { assertPgpAddon } from "./billing-pgp";
+import { DEFAULT_SETTINGS, resolvePubkeyWriteBaseUrl } from "./settings";
 
 type PubkeyBundle = ReturnType<typeof createPubkeyClient>;
 
@@ -27,11 +28,15 @@ export function getOfficePubkeySession(options: {
   readBaseUrl: string;
   writeBaseUrl?: string;
 }): OfficePubkeySession {
-  const key = `${options.readBaseUrl}|${options.writeBaseUrl ?? ""}`;
+  const writeBaseUrl = resolvePubkeyWriteBaseUrl({
+    ...DEFAULT_SETTINGS,
+    pubkeyWriteBaseUrl: options.writeBaseUrl,
+  });
+  const key = `${options.readBaseUrl}|${writeBaseUrl}`;
   if (!cached || cacheKey !== key) {
     const created = createPubkeyClient({
       readBaseUrl: options.readBaseUrl,
-      writeBaseUrl: options.writeBaseUrl,
+      writeBaseUrl,
       store: new IndexedDbVaultStore(),
     });
     cached = {
@@ -45,19 +50,48 @@ export function getOfficePubkeySession(options: {
   return cached;
 }
 
+/**
+ * Raw Ed25519 public key for the restored MSK (handle and/or vault envelope).
+ */
+export function mskPublicKeyBytes(session: OfficePubkeySession): Uint8Array | null {
+  if (session.msk?.publicKey && session.msk.publicKey.length > 0) {
+    return session.msk.publicKey;
+  }
+  const entry = session.vault.getMsk() as {
+    envelope?: { public_key?: string };
+  } | null;
+  const encoded = entry?.envelope?.public_key;
+  if (!encoded) return null;
+  try {
+    const bytes = decodeBase64Url(encoded);
+    return bytes.length > 0 ? bytes : null;
+  } catch {
+    return null;
+  }
+}
+
 async function importMskFromVault(session: OfficePubkeySession): Promise<void> {
   const entry = session.vault.getMsk() as {
     private_material?: Uint8Array;
-    envelope?: { encrypted_msk?: string };
+    envelope?: { encrypted_msk?: string; public_key?: string };
   } | null;
   const bytes = entry?.envelope?.encrypted_msk
     ? decodeBase64Url(String(entry.envelope.encrypted_msk))
     : entry?.private_material;
   if (!bytes) return;
+  let publicKey: Uint8Array | undefined;
+  if (entry?.envelope?.public_key) {
+    try {
+      publicKey = decodeBase64Url(entry.envelope.public_key);
+    } catch {
+      publicKey = undefined;
+    }
+  }
   session.msk = await session.crypto.importPrivateKey({
     algorithm: MSK_ALGORITHM,
     encoding: "raw-32",
     bytes,
+    publicKey,
     purpose: PURPOSES.masterSigning,
   });
 }
@@ -88,9 +122,7 @@ export async function restoreOfficeVault(session: OfficePubkeySession): Promise<
     .listKeys()
     .some(
       (entry) =>
-        entry.kind === "content" &&
-        entry.family === "pgp" &&
-        entry.purpose === "encryption",
+        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
     );
   return {
     restored: Boolean(session.msk),
@@ -128,6 +160,9 @@ export async function persistMsk(session: OfficePubkeySession, email: string): P
   session.pendingMsk = null;
 }
 
+/**
+ * Generates a local OpenPGP encryption key and publishes it with decrypt proof-of-possession.
+ */
 export async function publishPgpContentKey(
   session: OfficePubkeySession,
   email: string,
@@ -149,16 +184,15 @@ export async function publishPgpContentKey(
     name: canonical,
     email: canonical,
   });
-  const result = (await session.client.setKeys({
+  const result = (await session.client.publishEncryptionKey({
     email: canonical,
-    artifacts: [
-      {
-        family: "pgp",
-        purpose: "encryption",
-        algorithm: "openpgp-cv25519",
-        public_material: encodeBase64Url(generated.publicKey),
-      },
-    ],
+    artifact: {
+      family: "pgp",
+      purpose: "encryption",
+      algorithm: "openpgp-cv25519",
+      public_material: encodeBase64Url(generated.publicKey),
+    },
+    privateKey: generated.privateKey,
     mskKey: msk,
   })) as { key_id?: number };
   session.vault.addKey({
@@ -246,10 +280,7 @@ export async function importKeyPackageBackup(
   await session.vault.persist(secret);
 }
 
-export async function fetchVaultInventory(
-  session: OfficePubkeySession,
-  email: string,
-) {
+export async function fetchVaultInventory(session: OfficePubkeySession, email: string) {
   if (!session.msk) {
     const restored = await restoreOfficeVault(session);
     if (!restored.restored || !session.msk) {
@@ -259,10 +290,7 @@ export async function fetchVaultInventory(
   return session.client.getMe({ email, mskKey: session.msk });
 }
 
-export async function syncHostedVault(
-  session: OfficePubkeySession,
-  email: string,
-) {
+export async function syncHostedVault(session: OfficePubkeySession, email: string) {
   if (!session.msk) {
     const restored = await restoreOfficeVault(session);
     if (!restored.restored || !session.msk) {

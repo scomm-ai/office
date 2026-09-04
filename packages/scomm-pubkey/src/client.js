@@ -4,6 +4,9 @@ import {
 	MSK_ALGORITHM,
 	OPERATIONS,
 	PROTOCOL_VERSION,
+	ARTIFACT_POP_OPERATION,
+	PURPOSES,
+	ERROR_CODES,
 	applyCapabilityPolicy,
 	canonicalSignedBytes,
 	decodeBase64Url,
@@ -16,10 +19,13 @@ import {
 	resolveIdentityUxState,
 	emailSha256Hex,
 	sha256ToUuidV8,
+	sha256Bytes,
+	bytesToHex,
 } from "@scomm/pubkey-protocol";
 import { pubkeyFetch, joinUrl } from "./http.js";
 import { PubkeyError } from "./errors.js";
 import { protocolCapabilitiesFromProvider } from "./crypto/registry.js";
+import { solveDecryptChallenge, unwrapDecryptChallenge } from "./crypto/encryption-pop.js";
 import {
 	buildEnrollmentQr,
 	encryptEnrollmentPayload,
@@ -50,7 +56,7 @@ function randomNonce() {
 export class PubkeyClient {
 	constructor({
 		readBaseUrl = "https://pubkey.scomm.ai",
-		writeBaseUrl = "https://api.pubkey.scomm.ai",
+		writeBaseUrl = "https://pubkey.scomm.ai",
 		crypto,
 		vault,
 		pgpEngine,
@@ -192,6 +198,196 @@ export class PubkeyClient {
 			email,
 			operation: OPERATIONS.set_keys,
 			payload: { artifacts },
+			mskKey,
+		});
+	}
+
+	/**
+	 * Uploads a signing artifact with per-artifact proof-of-possession.
+	 * POSTs to `/v1/keys/signing`. `self_signature` is over `artifact_pop`
+	 * canonical bytes, signed with the artifact's own private key.
+	 */
+	async setSigningKeyWithProof({
+		email,
+		artifact,
+		mskKey,
+		contentSigningKey,
+		compositePopSigner,
+	}) {
+		if (!contentSigningKey && typeof compositePopSigner !== "function") {
+			throw new PubkeyError(
+				ERROR_CODES.key_not_found,
+				"contentSigningKey or compositePopSigner is required",
+			);
+		}
+		const canonical = requireCanonicalEmail(normalizeEmail(email));
+		const principal = await principalFromEmail(canonical);
+		const timestamp = Date.now();
+		const nonce = randomNonce();
+		const material = decodeBase64Url(artifact.public_material);
+		const popBytes = await canonicalSignedBytes({
+			protocolVersion: PROTOCOL_VERSION,
+			operation: ARTIFACT_POP_OPERATION,
+			principal,
+			timestamp,
+			nonce,
+			payload: {
+				algorithm: artifact.algorithm,
+				family: artifact.family,
+				purpose: artifact.purpose,
+				public_material_sha256: bytesToHex(await sha256Bytes(material)),
+			},
+		});
+		let selfSignature;
+		if (typeof compositePopSigner === "function") {
+			const dual = compositePopSigner(popBytes);
+			selfSignature = {
+				algorithm: artifact.algorithm,
+				value: encodeBase64Url(dual.mldsa),
+				ed25519_value: encodeBase64Url(dual.ed25519),
+			};
+		} else {
+			const sig = await this.crypto.sign(contentSigningKey, popBytes);
+			selfSignature = {
+				algorithm: artifact.algorithm,
+				value: encodeBase64Url(sig),
+			};
+		}
+		const envelope = await this._signOperation({
+			operation: OPERATIONS.set_signing_key,
+			principal,
+			payload: {
+				artifacts: [{ ...artifact, self_signature: selfSignature }],
+			},
+			key: mskKey,
+			timestamp,
+			nonce,
+		});
+		return pubkeyFetch(joinUrl(this.writeBaseUrl, "/v1/keys/signing"), {
+			method: "POST",
+			body: envelope,
+			fetch: this.fetchImpl,
+		});
+	}
+
+	/**
+	 * Requests a decrypt challenge for an encryption artifact.
+	 * Must be followed by {@link setEncryptionKeyWithProof} with the recovered nonce.
+	 */
+	async requestEncryptionKeyChallenge({
+		email,
+		family,
+		algorithm,
+		publicMaterial,
+		mskKey,
+	}) {
+		const canonical = requireCanonicalEmail(normalizeEmail(email));
+		const principal = await principalFromEmail(canonical);
+		const envelope = await this._signOperation({
+			operation: OPERATIONS.request_key_challenge,
+			principal,
+			payload: {
+				family,
+				algorithm,
+				public_material: publicMaterial,
+			},
+			key: mskKey,
+		});
+		return pubkeyFetch(joinUrl(this.writeBaseUrl, "/v1/keys/encryption/challenge"), {
+			method: "POST",
+			body: envelope,
+			fetch: this.fetchImpl,
+			retries: 1,
+		});
+	}
+
+	/**
+	 * Completes an encryption-key upload with decrypt proof-of-possession.
+	 */
+	async setEncryptionKeyWithProof({ email, artifact, decryptProof, mskKey }) {
+		const canonical = requireCanonicalEmail(normalizeEmail(email));
+		const principal = await principalFromEmail(canonical);
+		const envelope = await this._signOperation({
+			operation: OPERATIONS.set_encryption_key,
+			principal,
+			payload: {
+				artifacts: [{ ...artifact, decrypt_proof: decryptProof }],
+			},
+			key: mskKey,
+		});
+		return pubkeyFetch(joinUrl(this.writeBaseUrl, "/v1/keys/encryption"), {
+			method: "POST",
+			body: envelope,
+			fetch: this.fetchImpl,
+			retries: 1,
+		});
+	}
+
+	/**
+	 * Publishes an OpenPGP (or raw X25519) encryption artifact: challenge, decrypt, upload.
+	 *
+	 * @param {{
+	 *   email: string,
+	 *   artifact: Record<string, unknown>,
+	 *   privateKey: Uint8Array | string,
+	 *   mskKey: import("./crypto/provider.js").KeyHandle,
+	 *   contentKey?: import("./crypto/provider.js").KeyHandle,
+	 * }} input
+	 */
+	async publishEncryptionKey({
+		email,
+		artifact,
+		privateKey,
+		mskKey,
+		contentKey,
+	}) {
+		let agreementKey = contentKey;
+		if (!agreementKey) {
+			if (artifact.family === "pgp") {
+				if (!this.pgpEngine?.available) {
+					throw new PubkeyError(
+						ERROR_CODES.unsupported_algorithm,
+						"OpenPGP engine is not available",
+					);
+				}
+				const subkey = await this.pgpEngine.extractX25519EncryptionSubkey(privateKey);
+				agreementKey = await this.crypto.importPrivateKey({
+					algorithm: "x25519",
+					encoding: "raw-32",
+					bytes: subkey.scalar,
+					publicKey: subkey.publicKey,
+					purpose: PURPOSES.encryption,
+				});
+			} else {
+				throw new PubkeyError(
+					ERROR_CODES.unsupported_algorithm,
+					"publishEncryptionKey requires contentKey for non-PGP artifacts",
+				);
+			}
+		}
+		const challenge = unwrapDecryptChallenge(
+			await this.requestEncryptionKeyChallenge({
+				email,
+				family: artifact.family,
+				algorithm: artifact.algorithm,
+				publicMaterial: artifact.public_material,
+				mskKey,
+			}),
+		);
+		if (challenge.kem_ciphertext) {
+			throw new PubkeyError(
+				ERROR_CODES.unsupported_algorithm,
+				"Hybrid PQC decrypt challenges are not supported in this SDK yet",
+			);
+		}
+		const plaintext = await solveDecryptChallenge(this.crypto, agreementKey, challenge);
+		return this.setEncryptionKeyWithProof({
+			email,
+			artifact,
+			decryptProof: {
+				challenge_id: challenge.challenge_id,
+				plaintext: encodeBase64Url(plaintext),
+			},
 			mskKey,
 		});
 	}
@@ -599,21 +795,21 @@ export class PubkeyClient {
 		});
 	}
 
-	async _signOperation({ operation, principal, payload, key }) {
+	async _signOperation({ operation, principal, payload, key, timestamp, nonce }) {
 		if (!key) {
 			throw new PubkeyError(
 				"master_key_not_armed",
 				"MSK KeyRef is required to sign this request",
 			);
 		}
-		const timestamp = Date.now();
-		const nonce = randomNonce();
+		const ts = timestamp ?? Date.now();
+		const n = nonce ?? randomNonce();
 		const bytes = await canonicalSignedBytes({
 			protocolVersion: PROTOCOL_VERSION,
 			operation,
 			principal,
-			timestamp,
-			nonce,
+			timestamp: ts,
+			nonce: n,
 			payload,
 		});
 		const signature = await this.crypto.sign(key, bytes);
@@ -622,8 +818,8 @@ export class PubkeyClient {
 			sdk: { name: this.sdkName, version: this.sdkVersion },
 			principal,
 			operation,
-			timestamp,
-			nonce,
+			timestamp: ts,
+			nonce: n,
 			payload,
 			signature: {
 				algorithm: MSK_ALGORITHM,

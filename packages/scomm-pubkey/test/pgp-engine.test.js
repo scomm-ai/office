@@ -139,4 +139,27 @@ describe("PgpEngine", () => {
 		const caps = await withEngine.discoveryCapabilities();
 		assert.deepEqual(caps.families.pgp, ["openpgp-cv25519", "openpgp-ed25519"]);
 	});
+
+	it("extracts a native X25519 scalar that agrees with WebCrypto ECDH", async () => {
+		const crypto = new WebCryptoProvider();
+		const caps = await crypto.capabilities();
+		if (!caps.keyAgreement.includes("x25519")) {
+			return;
+		}
+		const engine = new PgpEngine(crypto);
+		const generated = await engine.generateKey({ email: "alice@example.com" });
+		const subkey = await engine.extractX25519EncryptionSubkey(generated.privateKey);
+		assert.equal(subkey.scalar.length, 32);
+		assert.equal(subkey.publicKey.length, 32);
+		const imported = await crypto.importPrivateKey({
+			algorithm: "x25519",
+			encoding: "raw-32",
+			bytes: subkey.scalar,
+			publicKey: subkey.publicKey,
+		});
+		const eph = await crypto.generateKey({ algorithm: "x25519" });
+		const ab = await crypto.deriveSecret(imported, eph.publicKey);
+		const ba = await crypto.deriveSecret(eph, subkey.publicKey);
+		assert.deepEqual(ab, ba);
+	});
 });
