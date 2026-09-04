@@ -42,6 +42,12 @@ export class UnsupportedMicrosoftGraphClient implements MicrosoftGraphClient {
       `Microsoft Graph client is not configured. See ${GRAPH_BOUNDARY_SPEC}`,
     );
   }
+
+  async sendMimeMessage(_mime: Uint8Array): Promise<void> {
+    throw new UnsupportedFeatureError(
+      `Microsoft Graph client is not configured. See ${GRAPH_BOUNDARY_SPEC}`,
+    );
+  }
 }
 
 export class UnsupportedMicrosoftIdentityProvider implements MicrosoftIdentityProvider {

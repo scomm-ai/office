@@ -5,6 +5,8 @@ import {
 	ENROLLMENT_KEM_FALLBACK,
 	MSK_WRAP_INFO,
 	VRK_WRAP_INFO,
+	PAIRING_TEK_HKDF_INFO,
+	PAIRING_SESSION_CODE_LENGTH,
 	canonicalizeEnrollmentQr,
 	canonicalizeJson,
 	decodeBase64Url,
@@ -176,6 +178,98 @@ export async function unwrapVrkForDevice(crypto, wrap, deviceWrapPrivate) {
 		deviceWrapPrivate,
 		info: VRK_WRAP_INFO,
 	});
+}
+
+// CKVF device pairing (`/v1/pairing/*`). Wire-compatible with secMail10's
+// `DevicePairing` (packages/scomm_pubkey/lib/src/vault/device_pairing.dart):
+// a single ephemeral X25519 key pair per session (exchanged once via the
+// pairing session's b_ephemeral_public_key / a_ephemeral_public_key fields,
+// not per wrapped key), one HKDF-derived TEK, then AES-GCM wrapping VRK
+// (and AEK, when the session grants "full" tier). Unlike wrapKeyForDevice
+// above, the wrap itself carries no embedded ephemeral key or algorithm tag
+// — the server's pairing endpoints only ever store/relay {iv, ciphertext}.
+
+const PAIRING_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/** Generates an 8-character Crockford base32 pairing code (~40 bits of CSPRNG), matching secMail10's `DevicePairing.generateSessionCode`. */
+export function generatePairingSessionCode(crypto) {
+	const bytes = crypto.random(5);
+	let bitBuffer = 0;
+	let bitsInBuffer = 0;
+	let byteIndex = 0;
+	let out = "";
+	while (out.length < PAIRING_SESSION_CODE_LENGTH) {
+		if (bitsInBuffer < 5) {
+			bitBuffer = (bitBuffer << 8) | bytes[byteIndex++];
+			bitsInBuffer += 8;
+		}
+		const shift = bitsInBuffer - 5;
+		const index = (bitBuffer >> shift) & 0x1f;
+		out += PAIRING_CODE_ALPHABET[index];
+		bitsInBuffer -= 5;
+	}
+	return out;
+}
+
+export async function generatePairingEphemeral(crypto) {
+	return generateEnrollmentEphemeral(crypto);
+}
+
+/** `shared_secret = ECDH(local_private, peer_public)`, `TEK = HKDF(shared_secret)`. */
+export async function derivePairingTek(crypto, localEphemeral, peerEphemeralPublicKey) {
+	const shared = await crypto.deriveSecret(localEphemeral, peerEphemeralPublicKey);
+	return crypto.hkdfSha256(shared, utf8(PAIRING_TEK_HKDF_INFO), 32);
+}
+
+/** `vek_envelope = AEAD_Encrypt(TEK, vrk)`, and `aek_envelope` only when granting full tier. */
+export async function wrapPairingTransfer(crypto, tek, vrk, aek) {
+	const wrappedVrk = await crypto.encryptAead(tek, vrk);
+	const vekEnvelope = {
+		iv: encodeBase64Url(wrappedVrk.iv),
+		ciphertext: encodeBase64Url(wrappedVrk.ciphertext),
+	};
+	let aekEnvelope;
+	if (aek) {
+		const wrappedAek = await crypto.encryptAead(tek, aek);
+		aekEnvelope = {
+			iv: encodeBase64Url(wrappedAek.iv),
+			ciphertext: encodeBase64Url(wrappedAek.ciphertext),
+		};
+	}
+	return { vekEnvelope, aekEnvelope };
+}
+
+/** Inverse of wrapPairingTransfer. Throws on tampering or a mismatched TEK — no weaker fallback. */
+export async function unwrapPairingTransfer(crypto, tek, vekEnvelope, aekEnvelope) {
+	let vrk;
+	try {
+		vrk = await crypto.decryptAead(
+			tek,
+			decodeBase64Url(vekEnvelope.iv),
+			decodeBase64Url(vekEnvelope.ciphertext),
+		);
+	} catch {
+		throw new PubkeyError(
+			"envelope_authentication_failure",
+			"Failed to unwrap pairing transfer envelope (VEK): wrong TEK or tampering",
+		);
+	}
+	let aek;
+	if (aekEnvelope) {
+		try {
+			aek = await crypto.decryptAead(
+				tek,
+				decodeBase64Url(aekEnvelope.iv),
+				decodeBase64Url(aekEnvelope.ciphertext),
+			);
+		} catch {
+			throw new PubkeyError(
+				"envelope_authentication_failure",
+				"Failed to unwrap pairing transfer envelope (AEK): wrong TEK or tampering",
+			);
+		}
+	}
+	return { vrk, aek };
 }
 
 export const VAULT_RECORD_IV_BYTES = 12;

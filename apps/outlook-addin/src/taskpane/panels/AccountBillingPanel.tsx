@@ -185,7 +185,7 @@ export function AccountBillingPanel() {
 
       <dl className="meta-grid">
         <dt>Mailbox (host)</dt>
-        <dd>{currentUserEmail ?? (isMockHost ? "you@example.com" : "Unknown")}</dd>
+        <dd>{currentUserEmail ?? (isMockHost ? "muzamiltest9@gmail.com" : "Unknown")}</dd>
         <dt>Billing profile</dt>
         <dd>{profileEmail ?? "Not signed in"}</dd>
         <dt>Billing origin</dt>

@@ -1,8 +1,10 @@
+import type { ResolvedConfiguration } from "@scomm-office/protocol";
 import {
   bodyHasOpenPgpProtection,
   decodePublicMaterial,
   extractPgpMessage,
   extractPgpSignedMessage,
+  matchDecryptionKeys,
   messagePlaintext,
   normalizeEmail,
 } from "@scomm-office/pubkeys";
@@ -14,6 +16,7 @@ import {
   type RecipientDirectoryStatus,
 } from "./directory-key";
 import type { ComposeProtectionToggles } from "./compose-security-state";
+import { ensureCryptoDecryptionEntitlement } from "./crypto-entitlement";
 import {
   restoreOfficeVault,
   vaultPgpPrivateKeys,
@@ -174,16 +177,27 @@ export async function signComposeBody(options: {
 export async function decryptCurrentBody(options: {
   session: OfficePubkeySession;
   mailHost: MailHost;
+  settings: ResolvedConfiguration;
 }): Promise<{ plaintext: string; note: string }> {
-  const { session, mailHost } = options;
+  const { session, mailHost, settings } = options;
+  // All decryption (RSA, EC, PQC alike) is paid — checked before any vault
+  // or private-key access, regardless of the ciphertext's algorithm family.
+  ensureCryptoDecryptionEntitlement(settings);
   const privateKeys = [await requireUnlockedPgp(session), ...vaultPgpPrivateKeys(session).slice(1)];
   const current = await mailHost.getCurrentMessage();
   const armored = extractPgpMessage(current.bodyText) ?? extractPgpMessage(current.bodyHtml);
   if (!armored) {
     throw new Error("No OpenPGP message in the current item");
   }
+
+  // Prefer keys whose ID actually matches the ciphertext's recipient key
+  // ID(s) — falls back to trying every vault key only when no match is
+  // found (e.g. a ciphertext with no PKESK key-ID hints).
+  const matched = await matchDecryptionKeys(armored, privateKeys);
+  const candidates = matched.length > 0 ? matched : privateKeys;
+
   let lastError: unknown;
-  for (const privateKey of privateKeys) {
+  for (const privateKey of candidates) {
     try {
       const plain = await session.pgpEngine.decrypt({ ciphertext: armored, privateKey });
       return {
@@ -193,6 +207,9 @@ export async function decryptCurrentBody(options: {
     } catch (err) {
       lastError = err;
     }
+  }
+  if (matched.length === 0 && privateKeys.length > 0) {
+    throw new Error("No Vault key matches this message's recipient key ID(s).");
   }
   throw lastError instanceof Error ? lastError : new Error("No Vault key decrypted this message");
 }

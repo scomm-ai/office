@@ -25,6 +25,7 @@ const ORG_FIELD_ENV: Record<ConfigurationFieldKey, string> = {
   experimentalEncryptionEnabled: "SCOMM_ORG_EXPERIMENTAL_ENCRYPTION_ENABLED",
   diagnosticsEnabled: "SCOMM_ORG_DIAGNOSTICS_ENABLED",
   requireAiAddonEntitlement: "SCOMM_ORG_REQUIRE_AI_ADDON_ENTITLEMENT",
+  requireCryptoAddonEntitlement: "SCOMM_ORG_REQUIRE_CRYPTO_ADDON_ENTITLEMENT",
 };
 
 function readBoolean(value: string | undefined): boolean | undefined {
@@ -58,7 +59,8 @@ function loadOrganizationConfig(): OrganizationConfiguration | undefined {
       field === "complianceEnabled" ||
       field === "experimentalEncryptionEnabled" ||
       field === "diagnosticsEnabled" ||
-      field === "requireAiAddonEntitlement"
+      field === "requireAiAddonEntitlement" ||
+      field === "requireCryptoAddonEntitlement"
     ) {
       const parsed = readBoolean(raw);
       if (parsed !== undefined) {

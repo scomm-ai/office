@@ -344,16 +344,19 @@
           <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on pubkey.scomm.ai." />
         </bt:LongStrings>
       </Resources>
-      <!-- WebApplicationInfo enabled after sideload validation
+      <!-- Replace YOUR_AZURE_CLIENT_ID below with the Entra app registration's
+           Application (client) ID — the same value as VITE_AZURE_CLIENT_ID in
+           apps/outlook-addin/.env. Required for Nested App Authentication (NAA),
+           which GraphSubmissionAdapter needs to send PGP/MIME-correct mail. -->
       <WebApplicationInfo>
-        <Id>a8ca8077-589e-4e77-a104-f3c534b5df59</Id>
-        <Resource>api://localhost:5173/a8ca8077-589e-4e77-a104-f3c534b5df59</Resource>
+        <Id>7555f958-ecf8-47d2-b088-b903001e3cbc</Id>
+        <Resource>api://localhost:5173/7555f958-ecf8-47d2-b088-b903001e3cbc</Resource>
         <Scopes>
           <Scope>User.Read</Scope>
-          <Scope>Mail.Read</Scope>
+          <Scope>Mail.ReadWrite</Scope>
+          <Scope>Mail.Send</Scope>
         </Scopes>
       </WebApplicationInfo>
-      -->
     </VersionOverrides>
   </VersionOverrides>
 </OfficeApp>

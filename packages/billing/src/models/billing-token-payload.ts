@@ -69,3 +69,11 @@ export function payloadIsExpired(payload: BillingTokenPayload): boolean {
 
 /** Well-known add-on codes aligned with secMail marketplace. */
 export const BILLING_ADDON_AI_ASSISTANT = "ai_assistant";
+
+/**
+ * PGP/crypto add-on. Matches secMail10's CRYPTO_ADDON_PLAN_ID default
+ * ("pgp") so the same billing backend recognizes the entitlement. All
+ * decryption (RSA, EC, PQC alike) requires this add-on; encrypt/verify
+ * stay free.
+ */
+export const BILLING_ADDON_CRYPTO = "pgp";

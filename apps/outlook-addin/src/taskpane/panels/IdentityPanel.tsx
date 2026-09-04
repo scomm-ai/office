@@ -52,7 +52,7 @@ export function IdentityPanel() {
   const [publishState, setPublishState] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const userEmail = currentUserEmail ?? (isMockHost ? "you@example.com" : undefined);
+  const userEmail = currentUserEmail ?? (isMockHost ? "muzamiltest9@gmail.com" : undefined);
   const { directory, mode, base: pubkeyBase } = useMemo(() => createDirectory(settings), [settings]);
 
   const refreshKeys = useCallback(async () => {

@@ -389,3 +389,37 @@ export class PgpEngine {
 export function createPgpEngine(provider) {
 	return new PgpEngine(provider);
 }
+
+/**
+ * Selects which of several candidate OpenPGP private keys actually match the
+ * ciphertext's recipient key ID(s), instead of blind trial-and-error.
+ *
+ * Reads the message's PKESK key IDs and each candidate's full key set
+ * (primary + subkeys, as openpgp.js already correctly distinguishes them)
+ * via `PrivateKey.getKeys()`, and returns only the candidates whose primary
+ * key or an encryption subkey ID appears in the ciphertext. Never inspects
+ * or mutates raw packet bytes — comparison is done entirely through
+ * openpgp.js's parsed key/message objects.
+ *
+ * @param {Uint8Array | string} ciphertext
+ * @param {Array<Uint8Array | string>} candidatePrivateKeys
+ * @returns {Promise<Array<Uint8Array | string>>} the subset of
+ *   candidatePrivateKeys (same references) whose key ID matches the message
+ */
+export async function matchDecryptionKeys(ciphertext, candidatePrivateKeys) {
+	const message = await readMessage(ciphertext);
+	const wantedIds = new Set(message.getEncryptionKeyIDs().map((id) => id.toHex()));
+	if (wantedIds.size === 0) return [];
+	const matches = [];
+	for (const candidate of candidatePrivateKeys) {
+		try {
+			const key = await readPrivateKey(candidate);
+			if (key.getKeys().some((k) => wantedIds.has(k.getKeyID().toHex()))) {
+				matches.push(candidate);
+			}
+		} catch {
+			// Unreadable candidate — not a match, keep checking the rest.
+		}
+	}
+	return matches;
+}

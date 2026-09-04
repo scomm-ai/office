@@ -45,6 +45,9 @@ function workspaceAliases(): Record<string, string> {
 }
 
 export default defineConfig({
+  // The monorepo's shared .env (see .env.example at repo root) lives one level
+  // above every app; Vite otherwise only looks in this package's own directory.
+  envDir: path.resolve(rootDir, "../.."),
   plugins: [react(), basicSsl()],
   resolve: {
     alias: workspaceAliases(),
@@ -58,6 +61,7 @@ export default defineConfig({
       input: {
         taskpane: path.resolve(rootDir, "taskpane.html"),
         commands: path.resolve(rootDir, "commands.html"),
+        "popup-relay": path.resolve(rootDir, "popup-relay.html"),
       },
     },
   },

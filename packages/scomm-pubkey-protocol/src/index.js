@@ -36,6 +36,8 @@ export {
 	ENROLLMENT_HKDF_INFO,
 	MSK_WRAP_INFO,
 	VRK_WRAP_INFO,
+	PAIRING_TEK_HKDF_INFO,
+	PAIRING_SESSION_CODE_LENGTH,
 	ENROLLMENT_STATE,
 	RECOVERY_STATE,
 	IDENTITY_UX_STATES,
@@ -74,6 +76,9 @@ export {
 	payloadSha256Hex,
 	canonicalSignedBytes,
 	canonicalSignedUtf8,
+	VAULT_RECORD_OPERATION,
+	canonicalVaultRecordUtf8,
+	canonicalVaultRecordBytes,
 	encodeBase64Url,
 	decodeBase64Url,
 } from "./canonical.js";

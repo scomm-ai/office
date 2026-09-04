@@ -9,9 +9,12 @@ export * from "./create-client.js";
 export * from "./pgp-mail.js";
 export {
   PgpEngine,
+  matchDecryptionKeys,
   encodeBase64Url,
   decodeBase64Url,
   Vault,
+  wrapMskWithAek,
+  unwrapMskWithAek,
   principalFromEmail,
   bytesToHex,
   normalizeEmail,

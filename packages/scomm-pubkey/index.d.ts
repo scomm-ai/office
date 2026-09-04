@@ -179,6 +179,11 @@ export class PgpEngine {
 
 export function createPgpEngine(provider?: CryptoProvider): PgpEngine;
 
+export function matchDecryptionKeys(
+	ciphertext: Uint8Array | string,
+	candidatePrivateKeys: Array<Uint8Array | string>,
+): Promise<Array<Uint8Array | string>>;
+
 export class SmimeEngine {
 	constructor(provider?: CryptoProvider);
 	available: boolean;
@@ -210,6 +215,17 @@ export interface VaultEntry {
 	private_material?: Uint8Array;
 }
 
+export function wrapMskWithAek(
+	crypto: CryptoProvider,
+	aek: Uint8Array,
+	mskPrivateKeyBytes: Uint8Array,
+): Promise<{ iv: string; encrypted_msk: string }>;
+export function unwrapMskWithAek(
+	crypto: CryptoProvider,
+	aek: Uint8Array,
+	envelope: { iv?: string; encrypted_msk?: string },
+): Promise<Uint8Array>;
+
 export class Vault {
 	constructor(options: { crypto: CryptoProvider; store?: VaultStore; principal?: string });
 	crypto: CryptoProvider;
@@ -218,6 +234,9 @@ export class Vault {
 	unlocked: boolean;
 	entries: VaultEntry[];
 	vrk: Uint8Array | null;
+	aek: Uint8Array | null;
+	generation: number;
+	lastCiphertextHash: Uint8Array | null;
 	createVault(principal: string): Promise<this>;
 	unlockVault(passphrase: string): Promise<this>;
 	ensureVrk(): Uint8Array;
@@ -237,6 +256,25 @@ export class Vault {
 	importVault(exported: unknown, passphrase: string): Promise<this>;
 	exportKeyPackage(fingerprint: string, passphrase: string): Promise<unknown>;
 	importKeyPackage(exported: unknown, passphrase: string): Promise<VaultEntry>;
+	exportVaultCiphertext(vrk: Uint8Array): Promise<{ iv: Uint8Array; ciphertext: Uint8Array }>;
+	decryptVaultCiphertext(
+		vrk: Uint8Array,
+		iv: Uint8Array,
+		ciphertext: Uint8Array,
+	): Promise<{
+		principal?: string;
+		createdAt: number;
+		updatedAt: number;
+		mskEnvelope: MskEnvelope | null;
+		entries: VaultEntry[];
+	}>;
+	applyRemoteSnapshot(
+		snapshot: {
+			mskEnvelope?: MskEnvelope | null;
+			entries?: VaultEntry[];
+		},
+		options?: { merge?: boolean },
+	): void;
 }
 
 export class PubkeyClient {
@@ -275,11 +313,40 @@ export class PubkeyClient {
 		localMsk: boolean;
 		explicitRecovery: boolean;
 	}): void;
-	beginDeviceEnrollment(input: {
+	createPairingSession(input: {
 		email: string;
-		device?: DeviceEnrollmentDevice;
-		rendezvous?: Record<string, unknown>;
-	}): Promise<{ pairingCode?: string; qr?: Record<string, unknown> }>;
+		deviceName: string;
+		requestedTier?: "full" | "limited";
+		sessionId?: string;
+		expiresIn?: number;
+	}): Promise<{
+		sessionId: string;
+		pairingCode: string;
+		ephemeral: KeyHandle;
+		deviceId: string;
+		state: string;
+		expires_at: string;
+	}>;
+	getPairingSession(input: {
+		sessionId: string;
+		emailSha256: string;
+		retrieverDeviceId?: string;
+	}): Promise<Record<string, unknown>>;
+	respondToPairingSession(input: {
+		email: string;
+		sessionId: string;
+		peerEphemeralPublicKey: Uint8Array | string;
+		vrk: Uint8Array;
+		aek?: Uint8Array;
+	}): Promise<unknown>;
+	completePairingAsNewDevice(input: {
+		email: string;
+		sessionId: string;
+		ephemeral: KeyHandle;
+		deviceId: string;
+		pollIntervalMs?: number;
+		timeoutMs?: number;
+	}): Promise<{ vrk: Uint8Array; aek?: Uint8Array }>;
 	listDevices(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
 	beginIdentityRecovery(input: { email: string; mskPublicKey: Uint8Array }): Promise<unknown>;
 	replaceMasterSigningKey(input: {
@@ -306,12 +373,32 @@ export class PubkeyClient {
 		locators?: string[];
 		fingerprints?: string[];
 	}): Promise<unknown>;
+	uploadVault(input: {
+		email: string;
+		mskKey: KeyHandle;
+		vault?: Vault;
+		vrk?: Uint8Array;
+		uploadingDevice?: string;
+		mutationKind?: "device_add" | "signing_key_rotation" | "authority_grant";
+		targetDeviceId?: string;
+	}): Promise<{ generation: number; created_at: string }>;
+	downloadCurrentVault(input: {
+		email: string;
+		vault?: Vault;
+		vrk?: Uint8Array;
+		merge?: boolean;
+	}): Promise<number | null>;
+	downloadVaultGeneration(input: {
+		email: string;
+		generation: number;
+		vault?: Vault;
+		vrk?: Uint8Array;
+	}): Promise<VaultEntry[] | null>;
 	syncVault(input: {
 		email: string;
 		mskKey: KeyHandle;
-		records?: Array<Record<string, unknown>>;
 		vault?: Vault;
 		vrk?: Uint8Array;
 		persistSecret?: string;
-	}): Promise<{ pulled: unknown[]; listed: unknown; applied: string[] }>;
+	}): Promise<{ downloadedGeneration: number | null; uploaded: unknown; generation: number }>;
 }

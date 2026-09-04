@@ -14,6 +14,7 @@ export const configurationFieldKeySchema = z.enum([
   "experimentalEncryptionEnabled",
   "diagnosticsEnabled",
   "requireAiAddonEntitlement",
+  "requireCryptoAddonEntitlement",
 ]);
 
 export type ConfigurationFieldKey = z.infer<typeof configurationFieldKeySchema>;
@@ -39,6 +40,7 @@ export const resolvedConfigurationSchema = z.object({
   experimentalEncryptionEnabled: boolField,
   diagnosticsEnabled: boolField,
   requireAiAddonEntitlement: boolField,
+  requireCryptoAddonEntitlement: boolField,
 });
 
 export type ResolvedConfiguration = z.infer<typeof resolvedConfigurationSchema>;

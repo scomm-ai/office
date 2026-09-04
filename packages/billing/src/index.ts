@@ -38,6 +38,7 @@ export {
 export { TokenVerifier, type VerifyResult } from "./verification/token-verifier.js";
 export {
   BILLING_ADDON_AI_ASSISTANT,
+  BILLING_ADDON_CRYPTO,
   billingTokenPayloadFromJson,
   payloadHasAddon,
   payloadHasPlan,

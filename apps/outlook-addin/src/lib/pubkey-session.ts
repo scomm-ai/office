@@ -7,6 +7,7 @@ import {
   formatOpenPgpLocator,
   normalizeEmail,
   principalFromEmail,
+  unwrapMskWithAek,
   type KeyHandle,
 } from "@scomm-office/pubkeys";
 import { IndexedDbDeviceSecretStore, IndexedDbVaultStore } from "@scomm-office/storage";
@@ -47,11 +48,23 @@ export function getOfficePubkeySession(options: {
 async function importMskFromVault(session: OfficePubkeySession): Promise<void> {
   const entry = session.vault.getMsk() as {
     private_material?: Uint8Array;
-    envelope?: { encrypted_msk?: string };
+    envelope?: { iv?: string; encrypted_msk?: string };
   } | null;
-  const bytes = entry?.envelope?.encrypted_msk
-    ? decodeBase64Url(String(entry.envelope.encrypted_msk))
-    : entry?.private_material;
+  const envelope = entry?.envelope;
+  let bytes: Uint8Array | undefined;
+  if (envelope?.iv && envelope?.encrypted_msk) {
+    // CKVF-spec shape (e.g. a vault pulled from secMail10 via device
+    // pairing): encrypted_msk is AEK-wrapped, not raw. Only a "full" tier
+    // pairing grant leaves this device holding an AEK — a "limited" tier
+    // device correctly cannot recover MSK signing capability here.
+    if (!session.vault.aek) return;
+    bytes = await unwrapMskWithAek(session.crypto, session.vault.aek, envelope);
+  } else if (envelope?.encrypted_msk) {
+    // office's own legacy local shape: already-raw MSK bytes, no AEK wrap.
+    bytes = decodeBase64Url(String(envelope.encrypted_msk));
+  } else {
+    bytes = entry?.private_material;
+  }
   if (!bytes) return;
   session.msk = await session.crypto.importPrivateKey({
     algorithm: MSK_ALGORITHM,
@@ -255,6 +268,43 @@ export async function fetchVaultInventory(
     }
   }
   return session.client.getMe({ email, mskKey: session.msk });
+}
+
+/**
+ * Applies the VRK (and, for a "full" tier grant, AEK) received from
+ * `PubkeyClient.completePairingAsNewDevice` (see SecurityPanel.tsx's
+ * "Add device" flow): creates a local vault if this device has none yet,
+ * stores the keys, pulls the real vault content from `/v1/vault/*` (pairing
+ * itself only transfers key material, not the vault ciphertext), and
+ * recovers MSK signing capability when an AEK was granted.
+ */
+export async function completeDeviceTransfer(
+  session: OfficePubkeySession,
+  email: string,
+  { vrk, aek }: { vrk: Uint8Array; aek?: Uint8Array },
+): Promise<{ hasPgp: boolean; hasMsk: boolean }> {
+  const secret = await ensureDeviceSecret(session);
+  if (!session.vault.unlocked) {
+    const record = await session.vault.store.load();
+    if (record) {
+      await session.vault.unlockVault(secret);
+    } else {
+      const principal = await principalFromEmail(normalizeEmail(email));
+      await session.vault.createVault(principal);
+    }
+  }
+  session.vault.vrk = vrk;
+  if (aek) session.vault.aek = aek;
+  await session.client.downloadCurrentVault({ email, vault: session.vault, merge: false });
+  await session.vault.persist(secret);
+  await importMskFromVault(session);
+  const hasPgp = session.vault
+    .listKeys()
+    .some(
+      (entry) =>
+        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
+    );
+  return { hasPgp, hasMsk: Boolean(session.msk) };
 }
 
 export async function syncHostedVault(

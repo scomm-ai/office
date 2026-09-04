@@ -8,6 +8,7 @@ type BoolSetting = Extract<
   | "experimentalEncryptionEnabled"
   | "diagnosticsEnabled"
   | "requireAiAddonEntitlement"
+  | "requireCryptoAddonEntitlement"
 >;
 
 const BOOL_SETTINGS: Array<{ key: BoolSetting; label: string }> = [
@@ -16,6 +17,7 @@ const BOOL_SETTINGS: Array<{ key: BoolSetting; label: string }> = [
   { key: "experimentalEncryptionEnabled", label: "Experimental ECDH envelope (Security pane)" },
   { key: "diagnosticsEnabled", label: "Diagnostics panel" },
   { key: "requireAiAddonEntitlement", label: "Require AI add-on entitlement" },
+  { key: "requireCryptoAddonEntitlement", label: "Require Crypto add-on entitlement (decryption)" },
 ];
 
 export function SettingsPanel() {

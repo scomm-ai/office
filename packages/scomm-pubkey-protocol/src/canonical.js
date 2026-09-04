@@ -43,6 +43,43 @@ export async function canonicalSignedUtf8(input) {
 	return new TextDecoder().decode(await canonicalSignedBytes(input));
 }
 
+export const VAULT_RECORD_OPERATION = "vault_record";
+
+/**
+ * `msk_signature = Sign(MSK_private, canonical(identity_id, generation,
+ * ciphertext_hash, previous_generation_hash, timestamp, nonce))`. Independent
+ * of `canonicalSignedBytes` (the generic mutation envelope signature) — this
+ * covers only the VaultRecord's own fields, so any future downloading device
+ * can re-verify it from the stored record alone. Must match the server's
+ * `canonicalVaultRecordUtf8` (pubkey/src/lib/protocol/canonical.ts) and
+ * secMail10's `canonicalVaultRecordBytes` byte-for-byte.
+ */
+export function canonicalVaultRecordUtf8({
+	protocolVersion,
+	identityId,
+	generation,
+	ciphertextHash,
+	previousGenerationHash,
+	timestamp,
+	nonce,
+}) {
+	return (
+		`${domainSeparator(protocolVersion, VAULT_RECORD_OPERATION)}\n` +
+		`identity=${identityId}\n` +
+		`generation=${generation}\n` +
+		`ciphertext_hash=${bytesToHex(ciphertextHash)}\n` +
+		`previous_generation_hash=${
+			previousGenerationHash ? bytesToHex(previousGenerationHash) : "none"
+		}\n` +
+		`timestamp=${timestamp}\n` +
+		`nonce=${encodeBase64Url(nonce)}\n`
+	);
+}
+
+export function canonicalVaultRecordBytes(input) {
+	return new TextEncoder().encode(canonicalVaultRecordUtf8(input));
+}
+
 export function encodeBase64Url(bytes) {
 	let binary = "";
 	for (const byte of bytes) {

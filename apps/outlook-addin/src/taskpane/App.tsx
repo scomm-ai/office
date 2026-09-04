@@ -12,8 +12,9 @@ import { detectIdrRuntimeSupport } from "@scomm-office/idr";
 import type { ResolvedConfiguration } from "@scomm-office/protocol";
 import type { SemanticMailDocument } from "@scomm-office/semantics";
 import type { PolicyEvaluation, SendDecision } from "@scomm-office/policy";
-import { HostContext } from "../lib/host-context";
-import { NaaIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
+import { HttpMicrosoftGraphClient, GraphSubmissionAdapter } from "@scomm-office/microsoft-graph";
+import { HostContext, type GraphDiagnostics } from "../lib/host-context";
+import { ResilientIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
 import {
   DEFAULT_SETTINGS,
   loadSettingsFromStorage,
@@ -39,37 +40,54 @@ async function bootstrapHost(): Promise<{
   capabilities: ReturnType<typeof detectOutlookCapabilities>;
   isMockHost: boolean;
   userEmail?: string;
+  graphSubmissionAdapter: GraphSubmissionAdapter | null;
+  graphDiagnostics: GraphDiagnostics;
 }> {
   if (typeof Office !== "undefined" && Office.onReady) {
-    await new Promise<void>((resolve) => {
-      Office.onReady(() => resolve());
-    });
-    const capabilities = detectOutlookCapabilities({ Office });
-    const mailHost = new OutlookMailHost(Office as never, capabilities);
+    const info = await Office.onReady();
+    if (info.host) {
+      const capabilities = detectOutlookCapabilities({ Office });
+      const mailHost = new OutlookMailHost(Office as never, capabilities);
 
-    // Get user email from Office.js mailbox profile (most reliable)
-    let userEmail: string | undefined;
-    try {
-      const profile = (Office as unknown as {
-        context?: { mailbox?: { userProfile?: { emailAddress?: string; displayName?: string } } };
-      }).context?.mailbox?.userProfile;
-      userEmail = profile?.emailAddress ?? undefined;
-    } catch {
-      // userProfile may not be available on all hosts
-    }
-
-    // Fallback: try NAA (MSAL) + Microsoft Graph
-    if (!userEmail && isNaaConfigured()) {
+      // Get user email from Office.js mailbox profile (most reliable)
+      let userEmail: string | undefined;
       try {
-        const naa = new NaaIdentityProvider();
-        const user = await naa.getUser();
-        userEmail = user.mail ?? user.userPrincipalName ?? undefined;
+        const profile = (Office as unknown as {
+          context?: { mailbox?: { userProfile?: { emailAddress?: string; displayName?: string } } };
+        }).context?.mailbox?.userProfile;
+        userEmail = profile?.emailAddress ?? undefined;
       } catch {
-        // NAA may not be available on all hosts — silently continue
+        // userProfile may not be available on all hosts
       }
-    }
 
-    return { mailHost, capabilities, isMockHost: false, userEmail };
+      // Graph submission requires auth (NAA, falling back to popup); it's also
+      // our fallback for user email. Interactive auth is deferred to the actual
+      // send (a real button click) — never triggered here at boot, since a
+      // background/init popup attempt would just get blocked by the browser.
+      let graphSubmissionAdapter: GraphSubmissionAdapter | null = null;
+      const graphDiagnostics: GraphDiagnostics = {
+        clientIdConfigured: isNaaConfigured(),
+        probedSuccessfully: null,
+      };
+
+      if (isNaaConfigured()) {
+        const identity = new ResilientIdentityProvider();
+        graphSubmissionAdapter = new GraphSubmissionAdapter(new HttpMicrosoftGraphClient(identity));
+
+        // Silent-only best-effort: only succeeds if a session is already
+        // cached (e.g. NAA SSO through the host) — never prompts.
+        const user = await identity.trySilentUser();
+        if (user && !userEmail) {
+          userEmail = user.mail ?? user.userPrincipalName ?? undefined;
+        }
+      } else {
+        graphDiagnostics.error = "VITE_AZURE_CLIENT_ID not set in the build that produced this bundle.";
+      }
+
+      return { mailHost, capabilities, isMockHost: false, userEmail, graphSubmissionAdapter, graphDiagnostics };
+    }
+    // info.host is falsy — office.js loaded standalone outside any Office
+    // host (e.g. a plain browser tab). Fall through to MockMailHost below.
   }
 
   const mailHost = new MockMailHost({
@@ -77,10 +95,17 @@ async function bootstrapHost(): Promise<{
     subject: "Mock message — browser dev",
     bodyHtml: simpleFixtureHtml,
     from: { emailAddress: "sender@example.com", displayName: "Sender" },
-    to: [{ emailAddress: "you@example.com", displayName: "You" }],
+    to: [{ emailAddress: "muzamiltest9@gmail.com", displayName: "You" }],
   });
   const capabilities = detectOutlookCapabilities();
-  return { mailHost, capabilities, isMockHost: true, userEmail: "you@example.com" };
+  return {
+    mailHost,
+    capabilities,
+    isMockHost: true,
+    userEmail: "muzamiltest9@gmail.com",
+    graphSubmissionAdapter: null,
+    graphDiagnostics: { clientIdConfigured: false, probedSuccessfully: null, error: "Mock host — Graph not applicable." },
+  };
 }
 
 export function App() {
@@ -101,6 +126,12 @@ export function App() {
   const [idrConnected, setIdrConnected] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
+  const [graphSubmissionAdapter, setGraphSubmissionAdapter] =
+    useState<GraphSubmissionAdapter | null>(null);
+  const [graphDiagnostics, setGraphDiagnostics] = useState<GraphDiagnostics>({
+    clientIdConfigured: false,
+    probedSuccessfully: null,
+  });
 
   const refreshMessage = useCallback(async () => {
     if (!mailHost) {
@@ -126,6 +157,8 @@ export function App() {
         setCapabilities(boot.capabilities);
         setIsMockHost(boot.isMockHost);
         setUserEmail(boot.userEmail);
+        setGraphSubmissionAdapter(boot.graphSubmissionAdapter);
+        setGraphDiagnostics(boot.graphDiagnostics);
         setSettings(stored);
         setIdrRuntime(runtime);
         const initialMessage = await boot.mailHost.getCurrentMessage();
@@ -171,6 +204,8 @@ export function App() {
       capabilities,
       isMockHost,
       currentUserEmail: userEmail,
+      graphSubmissionAdapter,
+      graphDiagnostics,
       message,
       semanticDoc,
       policyEvaluation,
@@ -184,12 +219,15 @@ export function App() {
       updateSettings,
       setIdrRuntime,
       setIdrConnected,
+      setGraphDiagnostics,
     };
   }, [
     mailHost,
     capabilities,
     isMockHost,
     userEmail,
+    graphSubmissionAdapter,
+    graphDiagnostics,
     message,
     semanticDoc,
     policyEvaluation,

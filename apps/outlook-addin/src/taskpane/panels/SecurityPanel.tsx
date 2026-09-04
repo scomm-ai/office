@@ -21,6 +21,7 @@ import {
   persistMsk,
   publishPgpContentKey,
   restoreOfficeVault,
+  completeDeviceTransfer,
   exportVaultBackup,
   importVaultBackup,
   exportKeyPackageBackup,
@@ -46,7 +47,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     useHostContext();
   const [busy, setBusy] = useState(false);
   const pubkeyBase = resolvePubkeyReadBaseUrl(settings);
-  const userEmail = currentUserEmail ?? (isMockHost ? "you@example.com" : undefined);
+  const userEmail = currentUserEmail ?? (isMockHost ? "muzamiltest9@gmail.com" : undefined);
 
   const [bootstrapStep, setBootstrapStep] = useState<BootstrapStep>("idle");
   const [otpInput, setOtpInput] = useState("");
@@ -192,12 +193,34 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     if (!session) return;
     setBusy(true);
     try {
-      const started = await session.client.beginDeviceEnrollment({
+      const started = await session.client.createPairingSession({
         email: normalizeEmail(userEmail),
+        deviceName: "Outlook",
+        requestedTier: "full",
       });
-      setPairingCode(started.pairingCode ?? JSON.stringify(started.qr ?? {}));
+      setPairingCode(started.pairingCode);
       setBootstrapStep("transfer");
-      setBootstrapStatus("On your existing SComm device, choose Add device and paste this pairing code.");
+      setBootstrapStatus("On your existing SComm device, choose Add device and enter this pairing code.");
+      void session.client
+        .completePairingAsNewDevice({
+          email: normalizeEmail(userEmail),
+          sessionId: started.sessionId,
+          ephemeral: started.ephemeral,
+          deviceId: started.deviceId,
+        })
+        .then(async ({ vrk, aek }: { vrk: Uint8Array; aek?: Uint8Array }) => {
+          const { hasPgp, hasMsk } = await completeDeviceTransfer(session, userEmail, { vrk, aek });
+          setHasPgp(hasPgp);
+          setBootstrapStep("verified");
+          setBootstrapStatus(
+            hasMsk
+              ? "Paired and synced — this device can now sign and decrypt with your identity."
+              : "Paired and synced, but no signing authority was granted (limited tier) — content keys only.",
+          );
+        })
+        .catch((err: unknown) => {
+          setBootstrapStatus(`Pairing failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
     } catch (err) {
       setBootstrapStatus(`Transfer failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -305,7 +328,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     setMailStatus(null);
     setDecryptedBody(null);
     try {
-      const result = await decryptCurrentBody({ session, mailHost });
+      const result = await decryptCurrentBody({ session, mailHost, settings });
       setDecryptedBody(result.plaintext);
       setMailStatus(result.note);
     } catch (err) {
@@ -313,7 +336,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     } finally {
       setBusy(false);
     }
-  }, [sessionFor, mailHost]);
+  }, [sessionFor, mailHost, settings]);
 
   const handleVerify = useCallback(async () => {
     const session = sessionFor();

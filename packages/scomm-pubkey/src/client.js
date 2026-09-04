@@ -1,11 +1,10 @@
 import {
-	DEVICE_KEY_ALGORITHM,
-	ENROLLMENT_STATE,
 	MSK_ALGORITHM,
 	OPERATIONS,
 	PROTOCOL_VERSION,
 	applyCapabilityPolicy,
 	canonicalSignedBytes,
+	canonicalVaultRecordBytes,
 	decodeBase64Url,
 	deviceAuthorizationPayload,
 	encodeBase64Url,
@@ -15,23 +14,18 @@ import {
 	requireCanonicalEmail,
 	resolveIdentityUxState,
 	emailSha256Hex,
+	sha256Bytes,
 	sha256ToUuidV8,
 } from "@scomm/pubkey-protocol";
 import { pubkeyFetch, joinUrl } from "./http.js";
 import { PubkeyError } from "./errors.js";
 import { protocolCapabilitiesFromProvider } from "./crypto/registry.js";
 import {
-	buildEnrollmentQr,
-	encryptEnrollmentPayload,
-	decryptEnrollmentPayload,
-	deriveEnrollmentSessionKeys,
-	encodeVaultRecord,
-	decodeVaultRecord,
-	generateDeviceKey,
-	generateEnrollmentEphemeral,
-	generateMSK,
-	wrapMSKForDevice,
-	wrapVrkForDevice,
+	generatePairingEphemeral,
+	generatePairingSessionCode,
+	derivePairingTek,
+	wrapPairingTransfer,
+	unwrapPairingTransfer,
 } from "./crypto/enrollment.js";
 
 function decodePeer(value) {
@@ -42,6 +36,13 @@ function randomNonce() {
 	const bytes = new Uint8Array(16);
 	crypto.getRandomValues(bytes);
 	return encodeBase64Url(bytes);
+}
+
+function bytesEqual(a, b) {
+	if (a.length !== b.length) return false;
+	let diff = 0;
+	for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+	return diff === 0;
 }
 
 /**
@@ -307,155 +308,155 @@ export class PubkeyClient {
 		}
 	}
 
-	async beginDeviceEnrollment({ email, device, rendezvous }) {
-		const deviceKey = device?.identityKey ?? (await generateDeviceKey(this.crypto));
-		const ephemeral = await generateEnrollmentEphemeral(this.crypto);
-		const sessionId = encodeBase64Url(this.crypto.random(16));
-		const deviceId = await this._deviceIdFromPublicKey(deviceKey.publicKey);
+	// Device pairing (`/v1/pairing/*`, CKVF spec Section 10/15). This is
+	// pairing, not genesis: the identity must already have an armed MSK on
+	// the server, or `createPairingSession` 404s. Wire-compatible with
+	// secMail10's `PubkeyClient.createPairingSession` /
+	// `getPairingSession` / `respondToPairingSession` (packages/scomm_pubkey/
+	// lib/src/client/pubkey_client.dart) — these previously targeted
+	// `/v1/device-enrollments*`, which the server has never implemented
+	// (it only ever exposed `/v1/pairing/:sessionId[/response]`).
+
+	/**
+	 * Device B (the new device) creates a pairing mailbox and returns the
+	 * session id — display it (or the returned `pairingCode`, the same
+	 * value) for the user to type into their existing SComm device.
+	 */
+	async createPairingSession({
+		email,
+		deviceName,
+		requestedTier = "limited",
+		sessionId,
+		expiresIn = 300,
+	}) {
 		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
-		const emailSha256 = await emailSha256Hex(canonicalEmail);
-		const qr = await buildEnrollmentQr(this.crypto, {
-			sessionId,
-			deviceId,
-			devicePublicKey: deviceKey.publicKey,
-			ephemeral,
-			rendezvous: {
-				...(rendezvous ?? {}),
-				write_base: rendezvous?.write_base ?? this.writeBaseUrl,
-				email_sha256: emailSha256,
-			},
-		});
+		const ephemeral = await generatePairingEphemeral(this.crypto);
+		const id = sessionId ?? generatePairingSessionCode(this.crypto);
+		const deviceId = await this._deviceIdFromPublicKey(ephemeral.publicKey);
 		const created = await pubkeyFetch(
-			joinUrl(this.writeBaseUrl, "/v1/device-enrollments"),
+			joinUrl(this.writeBaseUrl, `/v1/pairing/${id}`),
 			{
 				method: "POST",
 				body: {
 					email: canonicalEmail,
-					qr,
-					device_public_key: encodeBase64Url(deviceKey.publicKey),
-					device_key_algorithm: DEVICE_KEY_ALGORITHM,
+					device_name: deviceName,
+					requested_tier: requestedTier,
+					b_ephemeral_public_key: encodeBase64Url(ephemeral.publicKey),
+					device_id: deviceId,
+					expires_in: expiresIn,
 				},
 				fetch: this.fetchImpl,
 			},
 		);
-		return {
-			...created,
-			deviceId,
-			state: ENROLLMENT_STATE.qrCreated,
-			qr,
-			deviceKey,
-			ephemeral,
-			pairingCode: JSON.stringify(qr),
-		};
+		return { ...created, sessionId: id, pairingCode: id, ephemeral, deviceId };
 	}
 
-	async approveDeviceEnrollment({
-		email,
-		mskKey,
-		qr,
-		approverDeviceId,
-		approverWrapPublicKey,
-		mskCek,
-		vrk,
-		deviceName,
-	}) {
-		const ephemeral = await generateEnrollmentEphemeral(this.crypto);
-		const transcript = `${qr.session_id}:${qr.commitment}:${encodeBase64Url(ephemeral.publicKey)}`;
-		const sessionKey = await deriveEnrollmentSessionKeys(this.crypto, {
-			localEphemeral: ephemeral,
-			peerEphemeralPublic: decodePeer(qr.ephemeral_public_key),
-			transcript,
-		});
-		const authorization = await this._signDeviceAuthorization({
-			email,
-			mskKey,
-			device: {
-				deviceId: qr.device_id,
-				publicKey: decodePeer(qr.device_public_key),
-				name: deviceName,
-			},
-		});
-		const bootstrap = {
-			authorization,
-			msk_wrap: await wrapMSKForDevice(
-				this.crypto,
-				mskCek,
-				decodePeer(qr.device_public_key),
-			),
-			vrk_wrap: vrk
-				? await wrapVrkForDevice(
-						this.crypto,
-						vrk,
-						decodePeer(qr.device_public_key),
-					)
-				: null,
-			approver_device_id: approverDeviceId,
-			approver_wrap_public_key: approverWrapPublicKey
-				? encodeBase64Url(approverWrapPublicKey)
-				: undefined,
-		};
-		const box = await encryptEnrollmentPayload(this.crypto, sessionKey, bootstrap);
-		await pubkeyFetch(
-			joinUrl(this.writeBaseUrl, `/v1/device-enrollments/${qr.session_id}/relay`),
-			{
-				method: "POST",
-				body: {
-					sha256: await emailSha256Hex(
-						requireCanonicalEmail(normalizeEmail(email)),
-					),
-					ephemeral_public_key: encodeBase64Url(ephemeral.publicKey),
-					...box,
-				},
-				fetch: this.fetchImpl,
-			},
-		);
-		return this.completeDeviceEnrollment({
-			email,
-			sessionId: qr.session_id,
-			authorization,
-			mskKey,
-		});
-	}
-
-	async completeDeviceEnrollment({ email, sessionId, authorization, mskKey }) {
-		const envelope = await this._signOperation({
-			operation: OPERATIONS.complete_device_enrollment,
-			principal: await principalFromEmail(requireCanonicalEmail(normalizeEmail(email))),
-			payload: { session_id: sessionId, authorization: authorization.payload },
-			key: mskKey,
-		});
+	/**
+	 * Polls a pairing mailbox. Used by both roles: device A (fetching the
+	 * pending request, then just checking for COMPLETED) and device B
+	 * (polling for A's response). Only B's own poll should pass
+	 * `retrieverDeviceId` (its own device id from `createPairingSession`) —
+	 * that is what lets the server distinguish B's one-time retrieval of
+	 * the RESPONDED envelope from A's routine "did B finish?" status check.
+	 */
+	async getPairingSession({ sessionId, emailSha256, retrieverDeviceId }) {
+		const params = new URLSearchParams({ email_sha256: emailSha256 });
+		if (retrieverDeviceId) params.set("retriever_device_id", retrieverDeviceId);
 		return pubkeyFetch(
-			joinUrl(this.writeBaseUrl, `/v1/device-enrollments/${sessionId}/complete`),
-			{
-				method: "POST",
-				body: { ...envelope, authorization },
-				fetch: this.fetchImpl,
-			},
-		);
-	}
-
-	async pullEnrollmentBootstrap({ sessionId, ephemeral, qr }) {
-		const sha256 = String(qr?.rendezvous?.email_sha256 || "");
-		if (!sha256) {
-			throw new PubkeyError(
-				"principal_mismatch",
-				"Enrollment QR is missing its email hash",
-			);
-		}
-		const relay = await pubkeyFetch(
-			joinUrl(
-				this.writeBaseUrl,
-				`/v1/device-enrollments/${sessionId}/relay?sha256=${encodeURIComponent(sha256)}`,
-			),
+			joinUrl(this.writeBaseUrl, `/v1/pairing/${sessionId}?${params.toString()}`),
 			{ fetch: this.fetchImpl },
 		);
-		const transcript = `${qr.session_id}:${qr.commitment}:${relay.ephemeral_public_key}`;
-		const sessionKey = await deriveEnrollmentSessionKeys(this.crypto, {
-			localEphemeral: ephemeral,
-			peerEphemeralPublic: decodePeer(relay.ephemeral_public_key),
-			transcript,
-		});
-		return decryptEnrollmentPayload(this.crypto, sessionKey, relay);
+	}
+
+	/**
+	 * Device A (already holds an unlocked Vault) delivers the wrapped
+	 * envelope(s) to device B. `peerEphemeralPublicKey` is B's
+	 * `b_ephemeral_public_key` from the PENDING session. Envelope contents
+	 * are opaque to the server — this only relays ciphertext and an
+	 * ephemeral public key, never raw VRK/AEK (never mistake this for a
+	 * `set_keys`/`mutate` call; the server does not validate or inspect it).
+	 */
+	async respondToPairingSession({ email, sessionId, peerEphemeralPublicKey, vrk, aek }) {
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const emailSha256 = await emailSha256Hex(canonicalEmail);
+		const ephemeral = await generatePairingEphemeral(this.crypto);
+		const tek = await derivePairingTek(
+			this.crypto,
+			ephemeral,
+			decodePeer(peerEphemeralPublicKey),
+		);
+		const { vekEnvelope, aekEnvelope } = await wrapPairingTransfer(
+			this.crypto,
+			tek,
+			vrk,
+			aek,
+		);
+		return pubkeyFetch(
+			joinUrl(this.writeBaseUrl, `/v1/pairing/${sessionId}/response`),
+			{
+				method: "PUT",
+				body: {
+					email_sha256: emailSha256,
+					a_ephemeral_public_key: encodeBase64Url(ephemeral.publicKey),
+					vek_envelope: vekEnvelope,
+					aek_envelope: aekEnvelope,
+				},
+				fetch: this.fetchImpl,
+			},
+		);
+	}
+
+	/**
+	 * Device B side: poll until A responds, then unwrap VRK (and AEK, if
+	 * granted). The server flips PENDING -> RESPONDED -> COMPLETED as a
+	 * side effect of this device's own `retrieverDeviceId`-tagged GET, so
+	 * there is no separate "complete" call — unlike the old
+	 * `/v1/device-enrollments/:id/complete` endpoint this replaces.
+	 */
+	async completePairingAsNewDevice({
+		email,
+		sessionId,
+		ephemeral,
+		deviceId,
+		pollIntervalMs = 2000,
+		timeoutMs = 5 * 60 * 1000,
+	}) {
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const emailSha256 = await emailSha256Hex(canonicalEmail);
+		const deadline = Date.now() + timeoutMs;
+		for (;;) {
+			const status = await this.getPairingSession({
+				sessionId,
+				emailSha256,
+				retrieverDeviceId: deviceId,
+			});
+			if (status.state === "RESPONDED" && status.vek_envelope) {
+				const tek = await derivePairingTek(
+					this.crypto,
+					ephemeral,
+					decodePeer(status.a_ephemeral_public_key),
+				);
+				return unwrapPairingTransfer(
+					this.crypto,
+					tek,
+					status.vek_envelope,
+					status.aek_envelope ?? undefined,
+				);
+			}
+			if (status.state === "COMPLETED") {
+				throw new PubkeyError(
+					"pairing_session_already_responded",
+					"Pairing envelope was already retrieved by this device",
+				);
+			}
+			if (Date.now() >= deadline) {
+				throw new PubkeyError(
+					"pairing_session_expired",
+					"Timed out waiting for the other device to respond",
+				);
+			}
+			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+		}
 	}
 
 	async listDevices({ email, mskKey }) {
@@ -484,78 +485,272 @@ export class PubkeyClient {
 		return this.verifyReplace({ email, otp, captcha, mskKey, device });
 	}
 
-	async syncVault({
+	// Server-synced vault (`/v1/vault/*`, CKVF spec Section 8). Wire-compatible
+	// with secMail10's `PubkeyClient.uploadVault` / `downloadCurrentVault` /
+	// `downloadVaultGeneration` (packages/scomm_pubkey/lib/src/client/
+	// pubkey_client.dart) — this previously called `vault_list` /
+	// `vault_get_records` / `vault_put_record` mutate operations that
+	// `mutateService.ts`'s `applyMutation` switch has never recognized (every
+	// call 400'd). The real protocol uploads the whole encrypted vault as one
+	// immutable, hash-chained generation via `vault_upload`, and reads it back
+	// with plain (unauthenticated but self-verifying) GETs.
+
+	/**
+	 * Uploads the current Vault content as the next generation. Requires the
+	 * Vault to be unlocked and hold a VRK (add this device via pairing, or
+	 * `vault.ensureVrk()` on the very first device, before calling this).
+	 */
+	async uploadVault({
 		email,
 		mskKey,
-		records = [],
 		vault,
 		vrk,
-		persistSecret,
+		uploadingDevice,
+		mutationKind,
+		targetDeviceId,
 	} = {}) {
 		const target = vault ?? this.vault;
-		let key = vrk ?? target?.vrk ?? null;
-		let localRecords = records;
-		const listed = await this.mutate({
-			email,
-			operation: OPERATIONS.vault_list,
-			payload: {},
-			mskKey,
-		});
-		const remoteIds = new Set((listed.record_ids ?? []).map(String));
-		if (target?.unlocked && !key) {
-			if (remoteIds.size) {
-				throw new PubkeyError(
-					"vault_locked",
-					"This device has no Vault Root Key. Add this device before Sync with Scomm.AI.",
-				);
-			}
-			key = target.ensureVrk();
+		if (!target?.unlocked) {
+			throw new PubkeyError("vault_locked", "Vault must be unlocked to upload");
 		}
-		if (target?.unlocked && key && !localRecords.length) {
-			localRecords = [];
-			for (const entry of target.entries) {
-				localRecords.push(await encodeVaultRecord(this.crypto, key, entry));
-			}
-		}
-		const localIds = new Set(localRecords.map((record) => String(record.record_id)));
-		const missing = [...remoteIds].filter((id) => !localIds.has(id));
-		let pulled = [];
-		if (missing.length) {
-			const got = await this.mutate({
-				email,
-				operation: OPERATIONS.vault_get_records,
-				payload: { record_ids: missing },
-				mskKey,
-			});
-			pulled = got.records ?? [];
-		}
-		const applied = [];
-		if (target?.unlocked && key) {
-			for (const record of pulled) {
-				const entry = await decodeVaultRecord(this.crypto, key, record);
-				target.addKey(entry);
-				if (entry.fingerprint) applied.push(entry.fingerprint);
-			}
-		} else if (pulled.length) {
+		const key = vrk ?? target.vrk;
+		if (!key) {
 			throw new PubkeyError(
 				"vault_locked",
-				"Pulled vault records were not applied",
+				"This device has no Vault Root Key. Add this device before Sync with Scomm.AI.",
 			);
 		}
-		for (const record of localRecords) {
-			if (!remoteIds.has(String(record.record_id))) {
-				await this.mutate({
-					email,
-					operation: OPERATIONS.vault_put_record,
-					payload: record,
-					mskKey,
-				});
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const principal = await principalFromEmail(canonicalEmail);
+		// Genesis already leaves generation at 0 with no lastCiphertextHash, so
+		// the very first upload sends generation 1 as-is; every later upload is
+		// a real mutation on top of an already-confirmed generation.
+		const nextGeneration =
+			target.lastCiphertextHash == null ? Math.max(target.generation, 1) : target.generation + 1;
+		const previousGeneration = target.generation;
+		target.generation = nextGeneration;
+		let box;
+		try {
+			box = await target.exportVaultCiphertext(key);
+		} catch (err) {
+			target.generation = previousGeneration;
+			throw err;
+		}
+		const ciphertextHash = await sha256Bytes(box.ciphertext);
+		const timestamp = Date.now();
+		const previousGenerationHash = target.lastCiphertextHash;
+		const recordBytes = canonicalVaultRecordBytes({
+			protocolVersion: PROTOCOL_VERSION,
+			identityId: principal,
+			generation: nextGeneration,
+			ciphertextHash,
+			previousGenerationHash,
+			timestamp,
+			nonce: box.iv,
+		});
+		const recordSignature = await this.crypto.sign(mskKey, recordBytes);
+
+		let result;
+		try {
+			result = await this.mutate({
+				email,
+				operation: OPERATIONS.vault_upload,
+				payload: {
+					generation: nextGeneration,
+					previous_generation_hash: previousGenerationHash
+						? encodeBase64Url(previousGenerationHash)
+						: null,
+					ciphertext_hash: encodeBase64Url(ciphertextHash),
+					ciphertext: encodeBase64Url(box.ciphertext),
+					nonce: encodeBase64Url(box.iv),
+					uploading_device: uploadingDevice ?? null,
+					msk_signature: encodeBase64Url(recordSignature),
+					timestamp,
+					...(mutationKind ? { mutation_kind: mutationKind } : {}),
+					...(targetDeviceId ? { target_device_id: targetDeviceId } : {}),
+				},
+				mskKey,
+			});
+		} catch (err) {
+			target.generation = previousGeneration;
+			throw err;
+		}
+		target.lastCiphertextHash = ciphertextHash;
+		return result;
+	}
+
+	/**
+	 * Fetches and applies the server's latest vault generation onto `vault`
+	 * (default `this.vault`). Verifies `ciphertext_hash` and `msk_signature`
+	 * before ever decrypting — deliberately unauthenticated (no MSK-signed
+	 * request envelope): a freshly-paired device holds VRK but no live MSK
+	 * signing capability yet, since the MSK envelope lives *inside* the vault
+	 * content this call fetches. Returns `null` if nothing has been uploaded
+	 * for this identity yet.
+	 */
+	async downloadCurrentVault({ email, vault, vrk, merge = true } = {}) {
+		const target = vault ?? this.vault;
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const principal = await principalFromEmail(canonicalEmail);
+		const hash = await emailSha256Hex(canonicalEmail);
+		const record = await this._fetchAndVerifyVaultRecord({
+			path: `/v1/vault/${hash}/current`,
+			principal,
+			acceptedPublicKeys: (result) => {
+				if (typeof result?.msk_public_key !== "string") {
+					throw new PubkeyError(
+						"master_key_not_armed",
+						"Server did not return an armed MSK public key for this identity",
+					);
+				}
+				return [decodeBase64Url(result.msk_public_key)];
+			},
+		});
+		if (!record) return null;
+
+		const key = vrk ?? target?.vrk;
+		if (target?.unlocked && key) {
+			if (target.lastCiphertextHash && bytesEqual(target.lastCiphertextHash, record.ciphertextHash)) {
+				// Already holds this exact generation (most commonly because it
+				// just uploaded it itself) — nothing to apply.
+				target.generation = record.generation;
+				return record.generation;
+			}
+			if (target.lastCiphertextHash && record.generation < target.generation) {
+				throw new PubkeyError(
+					"vault_revision_conflict",
+					`Server reported generation ${record.generation}, older than this device's already-applied generation ${target.generation}`,
+				);
+			}
+			const snapshot = await target.decryptVaultCiphertext(key, record.nonce, record.ciphertext);
+			target.applyRemoteSnapshot(snapshot, { merge });
+			target.generation = record.generation;
+			target.lastCiphertextHash = record.ciphertextHash;
+		} else if (target?.unlocked) {
+			throw new PubkeyError(
+				"vault_locked",
+				"This device has no Vault Root Key to decrypt the downloaded vault",
+			);
+		}
+		return record.generation;
+	}
+
+	/**
+	 * Fetches one specific, immutable historical vault generation and decrypts
+	 * it with `vrk` (the *old* VRK a re-importing device already holds
+	 * locally — never derived or fetched here). Does not mutate `vault`
+	 * state; returns the decrypted entries for the caller to merge. The MSK
+	 * that signed this generation may since have been replaced, so this
+	 * verifies against ANY key the identity has ever armed
+	 * (`msk_public_keys`), not just the current one.
+	 */
+	async downloadVaultGeneration({ email, generation, vault, vrk } = {}) {
+		const target = vault ?? this.vault;
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const principal = await principalFromEmail(canonicalEmail);
+		const hash = await emailSha256Hex(canonicalEmail);
+		const record = await this._fetchAndVerifyVaultRecord({
+			path: `/v1/vault/${hash}/generation/${generation}`,
+			principal,
+			acceptedPublicKeys: (result) => {
+				const keys = (Array.isArray(result?.msk_public_keys) ? result.msk_public_keys : [])
+					.filter((entry) => typeof entry === "string")
+					.map(decodeBase64Url);
+				if (!keys.length) {
+					throw new PubkeyError(
+						"master_key_not_armed",
+						"Server did not return any MSK public key to verify this historical generation against",
+					);
+				}
+				return keys;
+			},
+		});
+		if (!record) return null;
+		const key = vrk ?? target?.vrk;
+		if (!key) {
+			throw new PubkeyError("vault_locked", "A Vault Root Key is required to decrypt this generation");
+		}
+		return (await target.decryptVaultCiphertext(key, record.nonce, record.ciphertext)).entries;
+	}
+
+	/**
+	 * Shared by downloadCurrentVault/downloadVaultGeneration: fetches `path`,
+	 * checks `ciphertext_hash`, and verifies `msk_signature` against whichever
+	 * public key(s) `acceptedPublicKeys` extracts from the raw response.
+	 * Deliberately does not decrypt.
+	 */
+	async _fetchAndVerifyVaultRecord({ path, principal, acceptedPublicKeys }) {
+		const result = await pubkeyFetch(joinUrl(this.readBaseUrl, path), {
+			fetch: this.fetchImpl,
+		});
+		const record = result?.vault;
+		if (!record) return null;
+
+		const ciphertext = decodeBase64Url(record.ciphertext);
+		const ciphertextHash = decodeBase64Url(record.ciphertext_hash);
+		if (!bytesEqual(await sha256Bytes(ciphertext), ciphertextHash)) {
+			throw new PubkeyError(
+				"vault_corrupt",
+				"Downloaded vault ciphertext does not match its claimed hash",
+			);
+		}
+		const nonce = decodeBase64Url(record.nonce);
+		const previousGenerationHash = record.previous_generation_hash
+			? decodeBase64Url(record.previous_generation_hash)
+			: null;
+		const recordBytes = canonicalVaultRecordBytes({
+			protocolVersion: PROTOCOL_VERSION,
+			identityId: principal,
+			generation: record.generation,
+			ciphertextHash,
+			previousGenerationHash,
+			timestamp: record.timestamp,
+			nonce,
+		});
+		const candidates = acceptedPublicKeys(record);
+		let verified = false;
+		for (const publicKey of candidates) {
+			if (
+				await this.crypto.verify(
+					publicKey,
+					recordBytes,
+					decodeBase64Url(record.msk_signature),
+					MSK_ALGORITHM,
+				)
+			) {
+				verified = true;
+				break;
 			}
 		}
-		if (persistSecret && target?.unlocked) {
+		if (!verified) {
+			throw new PubkeyError(
+				"invalid_signature",
+				"Vault record signature is invalid",
+			);
+		}
+		return { generation: record.generation, ciphertext, ciphertextHash, nonce };
+	}
+
+	/**
+	 * Convenience for the "Sync with Scomm.AI" UX: pull the latest remote
+	 * generation (merging it into the local Vault so both devices keep the
+	 * union of keys), then push local state back up as the next generation.
+	 * If nothing has ever been uploaded, this is just the first upload.
+	 */
+	async syncVault({ email, mskKey, vault, vrk, persistSecret } = {}) {
+		const target = vault ?? this.vault;
+		if (!target?.unlocked) {
+			throw new PubkeyError("vault_locked", "Vault is locked");
+		}
+		if (!(vrk ?? target.vrk)) {
+			target.ensureVrk();
+		}
+		const downloadedGeneration = await this.downloadCurrentVault({ email, vault: target, vrk });
+		const uploaded = await this.uploadVault({ email, mskKey, vault: target, vrk });
+		if (persistSecret) {
 			await target.persist(persistSecret);
 		}
-		return { pulled, listed, applied };
+		return { downloadedGeneration, uploaded, generation: target.generation };
 	}
 
 	async _signDeviceAuthorization({ email, mskKey, device }) {

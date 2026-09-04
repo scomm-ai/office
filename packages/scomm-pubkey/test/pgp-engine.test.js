@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { WebCryptoProvider } from "../src/crypto/webcrypto.js";
-import { PgpEngine, createPgpEngine } from "../src/engines/pgp.js";
+import { PgpEngine, createPgpEngine, matchDecryptionKeys } from "../src/engines/pgp.js";
 import { PubkeyClient } from "../src/client.js";
 
 describe("PgpEngine", () => {
@@ -124,6 +124,77 @@ describe("PgpEngine", () => {
 			privateKey: alice.privateKey,
 		});
 		assert.equal(new TextDecoder().decode(decrypted), "signed secret");
+	});
+
+	it("publishes a full multi-packet key: one primary key packet (tag 6) plus a distinct, correctly bound encryption subkey packet (tag 14) — never a stripped/single-packet key", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const openpgp = await import("openpgp");
+
+		const parsed = await openpgp.readKey({ binaryKey: alice.publicKey });
+		assert.equal(parsed.isPrivate(), false);
+
+		// Exactly one primary key (tag 6), with a User ID carrying a valid
+		// self-certification.
+		const primaryUser = await parsed.getPrimaryUser();
+		assert.ok(primaryUser.user, "primary key must carry a certified User ID");
+		assert.ok(primaryUser.selfCertification, "User ID must carry a self-certification signature");
+
+		// Exactly primary + one subkey (tag 6 + tag 14), each with a
+		// distinct key ID — never a stripped single-packet key.
+		const allKeys = parsed.getKeys();
+		assert.equal(allKeys.length, 2);
+		const primaryId = parsed.getKeyID().toHex();
+		const subkeys = allKeys.filter((k) => k.getKeyID().toHex() !== primaryId);
+		assert.equal(subkeys.length, 1);
+
+		// The encryption-capable key, resolved only via openpgp.js's own
+		// binding-signature-verified API, must be the subkey (tag 14), not
+		// the primary key (tag 6) — confirms tag 6 vs tag 14 were not
+		// conflated when the key was generated/published.
+		const encryptionKey = await parsed.getEncryptionKey();
+		assert.notEqual(
+			encryptionKey.getKeyID().toHex(),
+			primaryId,
+			"the encryption key must be the subkey, not the primary key",
+		);
+		assert.equal(encryptionKey.getKeyID().toHex(), subkeys[0].getKeyID().toHex());
+
+		// The published material is the full key (primary + subkey + user ID
+		// + signatures), not a bare subkey point — round-trips to the same
+		// packet count/shape after re-serializing.
+		const reserialized = parsed.toPacketList();
+		assert.ok(reserialized.length >= 4, "expected primary, subkey, user ID, and signature packets");
+	});
+
+	it("matchDecryptionKeys selects only the vault key that actually matches the ciphertext's recipient key ID", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const bob = await engine.generateKey({ email: "bob@example.com" });
+
+		const ciphertext = await engine.encrypt({
+			plaintext: "only for bob",
+			recipientPublicKey: bob.publicKey,
+		});
+
+		const matches = await matchDecryptionKeys(ciphertext, [alice.privateKey, bob.privateKey]);
+		assert.equal(matches.length, 1);
+		assert.deepEqual(matches[0], bob.privateKey);
+	});
+
+	it("matchDecryptionKeys returns no matches when no candidate key fits", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const bob = await engine.generateKey({ email: "bob@example.com" });
+		const carol = await engine.generateKey({ email: "carol@example.com" });
+
+		const ciphertext = await engine.encrypt({
+			plaintext: "only for bob",
+			recipientPublicKey: bob.publicKey,
+		});
+
+		const matches = await matchDecryptionKeys(ciphertext, [alice.privateKey, carol.privateKey]);
+		assert.equal(matches.length, 0);
 	});
 
 	it("advertises pgp on PubkeyClient discovery only when the engine is wired", async () => {

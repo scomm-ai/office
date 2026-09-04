@@ -476,6 +476,9 @@ importers:
       '@scomm-office/core':
         specifier: workspace:*
         version: link:../core
+      '@scomm-office/crypto':
+        specifier: workspace:*
+        version: link:../crypto
     devDependencies:
       typescript:
         specifier: ^5.7.3

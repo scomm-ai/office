@@ -17,6 +17,7 @@ export class MockMicrosoftGraph implements MicrosoftGraphClient {
 
   private messages = new Map<string, GraphMessage>();
   private conversations = new Map<string, GraphMessage[]>();
+  private sentMimeMessages: Uint8Array[] = [];
   private contacts: GraphContact[] = [
     {
       id: "contact-001",
@@ -79,6 +80,14 @@ export class MockMicrosoftGraph implements MicrosoftGraphClient {
     }
     const top = options.top ?? results.length;
     return results.slice(0, top).map((contact) => ({ ...contact }));
+  }
+
+  async sendMimeMessage(mime: Uint8Array): Promise<void> {
+    this.sentMimeMessages.push(mime);
+  }
+
+  getSentMimeMessages(): Uint8Array[] {
+    return [...this.sentMimeMessages];
   }
 }
 

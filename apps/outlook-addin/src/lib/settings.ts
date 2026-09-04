@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: ResolvedConfiguration = {
   experimentalEncryptionEnabled: false,
   diagnosticsEnabled: true,
   requireAiAddonEntitlement: true,
+  requireCryptoAddonEntitlement: true,
 };
 
 export function loadSettingsFromStorage(): ResolvedConfiguration {

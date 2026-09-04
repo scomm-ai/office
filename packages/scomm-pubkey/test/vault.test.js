@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { WebCryptoProvider } from "../src/crypto/webcrypto.js";
 import { MemoryVaultStore } from "../src/vault/store.js";
-import { Vault } from "../src/vault/vault.js";
+import { Vault, wrapMskWithAek, unwrapMskWithAek } from "../src/vault/vault.js";
 import { PubkeyError } from "../src/errors.js";
 
 describe("Vault", () => {
@@ -209,5 +209,111 @@ describe("Vault", () => {
 		const other = new Vault({ crypto, store });
 		await other.unlockVault("pw");
 		assert.deepEqual(other.vrk, vrk);
+	});
+
+	describe("CKVF-spec vault ciphertext (cross-client interop)", () => {
+		it("round-trips a PGP content key through exportVaultCiphertext/decryptVaultCiphertext", async () => {
+			const crypto = new WebCryptoProvider();
+			const vault = new Vault({ crypto });
+			await vault.createVault("p");
+			const vrk = vault.ensureVrk();
+			vault.addKey({
+				kind: "content",
+				family: "pgp",
+				purpose: "encryption",
+				algorithm: "openpgp-cv25519",
+				fingerprint: "fp1",
+				locator: "loc1",
+				private_material: new Uint8Array([1, 2, 3]),
+			});
+
+			const { iv, ciphertext } = await vault.exportVaultCiphertext(vrk);
+			const snapshot = await vault.decryptVaultCiphertext(vrk, iv, ciphertext);
+
+			assert.equal(snapshot.entries.length, 1);
+			const [entry] = snapshot.entries;
+			assert.equal(entry.family, "pgp");
+			assert.equal(entry.purpose, "encryption");
+			assert.equal(entry.fingerprint, "fp1");
+			assert.deepEqual(entry.private_material, new Uint8Array([1, 2, 3]));
+			assert.equal(entry.status, "active");
+		});
+
+		it("decrypts a secMail10-shaped vault ciphertext (openpgp_keys array, AEK-wrapped MSK)", async () => {
+			// Hand-builds the exact plaintext shape secMail10's
+			// `Vault.exportVault(vek)` produces (packages/scomm_pubkey/lib/src/
+			// vault/vault.dart + vault_plaintext.dart on the Dart side) — this is
+			// the regression test for the bug where office's old flat
+			// `{entries: [...]}` schema silently produced zero entries against a
+			// real secMail10 vault.
+			const crypto = new WebCryptoProvider();
+			const vrk = crypto.random(32);
+			const aek = crypto.random(32);
+			const rawMsk = crypto.random(32);
+			const mskWrap = await wrapMskWithAek(crypto, aek, rawMsk);
+
+			const secMail10Plaintext = {
+				vault_format_version: 1,
+				generation: 3,
+				principal: "p",
+				created_at: 1000,
+				updated_at: 2000,
+				current_signing_key_id: null,
+				current_encryption_key_id: 5,
+				msk_envelope: {
+					envelope_version: 1,
+					algorithm: "ed25519",
+					public_key: "abc",
+					created_at: 1000,
+					iv: mskWrap.iv,
+					encrypted_msk: mskWrap.encrypted_msk,
+				},
+				openpgp_keys: [
+					{
+						key_id: "5",
+						type: "encryption",
+						status: "active",
+						created_at: 1500,
+						private_key: "AQIDBA", // base64url("\x01\x02\x03\x04")
+						fingerprint: "fp-from-secmail10",
+						algorithm: "openpgp-cv25519",
+					},
+				],
+				smime_keys: [],
+				signing_keys: [],
+				legacy_entries: [],
+				metadata: { devices: [] },
+			};
+			const { iv, ciphertext } = await crypto.encryptAead(
+				vrk,
+				new TextEncoder().encode(JSON.stringify(secMail10Plaintext)),
+			);
+
+			const vault = new Vault({ crypto });
+			const snapshot = await vault.decryptVaultCiphertext(vrk, iv, ciphertext);
+
+			assert.equal(snapshot.entries.length, 1);
+			assert.equal(snapshot.entries[0].fingerprint, "fp-from-secmail10");
+			assert.equal(snapshot.entries[0].family, "pgp");
+			assert.equal(snapshot.entries[0].purpose, "encryption");
+			assert.ok(snapshot.mskEnvelope.iv, "mskEnvelope should carry the AEK-wrap iv");
+
+			const recovered = await unwrapMskWithAek(crypto, aek, snapshot.mskEnvelope);
+			assert.deepEqual(recovered, rawMsk);
+		});
+
+		it("wrapMskWithAek/unwrapMskWithAek round-trip and fail closed on the wrong AEK", async () => {
+			const crypto = new WebCryptoProvider();
+			const aek = crypto.random(32);
+			const wrongAek = crypto.random(32);
+			const msk = crypto.random(32);
+			const wrapped = await wrapMskWithAek(crypto, aek, msk);
+
+			assert.deepEqual(await unwrapMskWithAek(crypto, aek, wrapped), msk);
+			await assert.rejects(
+				() => unwrapMskWithAek(crypto, wrongAek, wrapped),
+				(err) => err instanceof PubkeyError && err.code === "envelope_authentication_failure",
+			);
+		});
 	});
 });

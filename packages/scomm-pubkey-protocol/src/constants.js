@@ -19,10 +19,7 @@ export const OPERATIONS = Object.freeze({
 	authorize_device: "authorize_device",
 	revoke_device: "revoke_device",
 	list_devices: "list_devices",
-	complete_device_enrollment: "complete_device_enrollment",
-	vault_put_record: "vault_put_record",
-	vault_list: "vault_list",
-	vault_get_records: "vault_get_records",
+	vault_upload: "vault_upload",
 });
 
 export const FAMILIES = Object.freeze({
@@ -106,6 +103,12 @@ export const ENROLLMENT_KEM_FALLBACK = "p-256";
 export const ENROLLMENT_HKDF_INFO = "scomm-enrollment-v1";
 export const MSK_WRAP_INFO = "scomm-msk-wrap-v1";
 export const VRK_WRAP_INFO = "scomm-vrk-wrap-v1";
+// Must match secMail10's `pairingTekHkdfInfo` (packages/scomm_pubkey/lib/src/vault/device_pairing.dart)
+// byte-for-byte: pairing derives a TEK between two devices of the same identity across
+// whichever clients they run, so the HKDF info string is part of the wire protocol, not an
+// internal implementation detail either side can pick independently.
+export const PAIRING_TEK_HKDF_INFO = "SComm/Pubkey/pairing/tek/v1";
+export const PAIRING_SESSION_CODE_LENGTH = 8;
 export const ENROLLMENT_STATE = Object.freeze({
 	new: "NEW",
 	qrCreated: "QR_CREATED",

@@ -63,10 +63,10 @@ export {
 	packVaultRecordBox,
 	unpackVaultRecordBox,
 } from "./crypto/enrollment.js";
-export { PgpEngine, createPgpEngine } from "./engines/pgp.js";
+export { PgpEngine, createPgpEngine, matchDecryptionKeys } from "./engines/pgp.js";
 export { SmimeEngine } from "./engines/smime.js";
 export { PqEngine } from "./engines/pq.js";
-export { Vault } from "./vault/vault.js";
+export { Vault, wrapMskWithAek, unwrapMskWithAek } from "./vault/vault.js";
 export {
 	VaultStore,
 	MemoryVaultStore,
