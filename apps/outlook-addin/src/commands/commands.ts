@@ -20,7 +20,7 @@ import {
 import { getOfficePubkeySession, restoreOfficeVault } from "../lib/pubkey-session";
 
 const DEFAULT_READ = "https://pubkey.scomm.ai";
-const DEFAULT_WRITE = "https://api.pubkey.scomm.ai";
+const DEFAULT_WRITE = "https://pubkey.scomm.ai";
 
 function envUrl(name: string, fallback: string): string {
   const value =

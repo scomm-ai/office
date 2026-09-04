@@ -50,7 +50,7 @@ function randomNonce() {
 export class PubkeyClient {
 	constructor({
 		readBaseUrl = "https://pubkey.scomm.ai",
-		writeBaseUrl = "https://api.pubkey.scomm.ai",
+		writeBaseUrl = "https://pubkey.scomm.ai",
 		crypto,
 		vault,
 		pgpEngine,

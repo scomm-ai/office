@@ -66,5 +66,5 @@ export function resolvePubkeyReadBaseUrl(settings: ResolvedConfiguration): strin
 }
 
 export function resolvePubkeyWriteBaseUrl(settings: ResolvedConfiguration): string {
-  return settings.pubkeyWriteBaseUrl || "https://api.pubkey.scomm.ai";
+  return settings.pubkeyWriteBaseUrl || "https://pubkey.scomm.ai";
 }

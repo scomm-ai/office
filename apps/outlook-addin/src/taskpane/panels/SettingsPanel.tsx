@@ -63,7 +63,7 @@ export function SettingsPanel() {
         <input
           id="pubkey-write"
           type="url"
-          placeholder="https://api.pubkey.example.com"
+          placeholder="https://pubkey.scomm.ai"
           value={settings.pubkeyWriteBaseUrl ?? ""}
           onChange={(event) => updateSettings({ pubkeyWriteBaseUrl: event.target.value || undefined })}
         />
