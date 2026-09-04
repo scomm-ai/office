@@ -11,6 +11,14 @@ const V4_CV25519 = Object.freeze({
 	config: { v6Keys: false },
 });
 
+function reverseBytes(bytes) {
+	const out = new Uint8Array(bytes.length);
+	for (let i = 0; i < bytes.length; i += 1) {
+		out[i] = bytes[bytes.length - 1 - i];
+	}
+	return out;
+}
+
 function coerceBytes(value) {
 	if (value instanceof Uint8Array) return value;
 	if (value instanceof ArrayBuffer) return new Uint8Array(value);
@@ -329,6 +337,52 @@ export class PgpEngine {
 			throw new PubkeyError(
 				ERROR_CODES.unsupported_algorithm,
 				"OpenPGP encrypt failed",
+				{ cause },
+			);
+		}
+	}
+
+	/**
+	 * Extracts the cv25519 encryption-subkey scalar and Montgomery public point
+	 * from an OpenPGP secret key. Used to solve directory decrypt challenges.
+	 *
+	 * openpgp.js exposes the Curve25519 MPI as a big-endian integer; WebCrypto
+	 * X25519 wants RFC 7748 native little-endian, so the scalar is reversed.
+	 *
+	 * @param {Uint8Array | string} privateMaterial
+	 * @returns {Promise<{ scalar: Uint8Array, publicKey: Uint8Array }>}
+	 */
+	async extractX25519EncryptionSubkey(privateMaterial) {
+		this._requireAvailable();
+		try {
+			const key = await readPrivateKey(privateMaterial);
+			if (!key.isDecrypted()) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"OpenPGP private key is passphrase-protected; Vault keys must be stored unencrypted",
+				);
+			}
+			const enc = await key.getEncryptionKey();
+			const packet = enc?.keyPacket;
+			const d = packet?.privateParams?.d;
+			if (!d || d.length < 32) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"OpenPGP encryption subkey has no X25519 scalar",
+				);
+			}
+			const scalar = reverseBytes(d.subarray(0, 32));
+			const Q = packet.publicParams?.Q;
+			let publicKey;
+			if (Q instanceof Uint8Array && Q.length >= 32) {
+				publicKey = Q[0] === 0x40 ? new Uint8Array(Q.subarray(1, 33)) : new Uint8Array(Q.subarray(0, 32));
+			}
+			return { scalar, publicKey };
+		} catch (cause) {
+			if (cause instanceof PubkeyError) throw cause;
+			throw new PubkeyError(
+				ERROR_CODES.key_import_failure,
+				"Could not extract OpenPGP X25519 encryption subkey",
 				{ cause },
 			);
 		}

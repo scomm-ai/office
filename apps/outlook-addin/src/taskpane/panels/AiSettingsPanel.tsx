@@ -10,6 +10,8 @@ import {
 import { BILLING_ADDON_AI_ASSISTANT } from "../../lib/billing-catalog";
 import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
+import { Dropdown, Option, Switch } from "@fluentui/react-components";
+import { Button, Field, Input, Note, PageTitle, usePaneStyles } from "../ui/layout";
 
 const BYOAI_PROFILES_KEY = "scomm-office.byoai.profiles.v1";
 const ACCOUNT_KEY = "default";
@@ -31,6 +33,7 @@ function saveProfiles(profiles: CloudAiProfile[]): void {
 }
 
 export function AiSettingsPanel() {
+  const styles = usePaneStyles();
   const { settings, updateSettings } = useHostContext();
   const [profiles, setProfiles] = useState<CloudAiProfile[]>(() => loadProfiles());
   const [draftApiKey, setDraftApiKey] = useState("");
@@ -129,149 +132,113 @@ export function AiSettingsPanel() {
   };
 
   return (
-    <section>
-      <h2>AI — Local (IDR) & Cloud (BYOAI)</h2>
-      <p className="note">
-        Local AI uses the third-party IDR browser SDK (see AI / IDR). Cloud BYOAI sends requests from
-        this WebView to your provider with your API key — keys never go to an Office server.
-      </p>
+    <>
+      <PageTitle
+        title="AI — Local (IDR) & Cloud (BYOAI)"
+        description="Local AI uses the third-party IDR browser SDK (see AI / IDR). Cloud BYOAI sends requests from this WebView to your provider with your API key — keys never go to an Office server."
+      />
+      <Switch
+        label="Require AI add-on entitlement"
+        checked={requireEntitlement}
+        onChange={(_, data) => updateSettings({ requireAiAddonEntitlement: data.checked })}
+      />
+      <Note>Entitlement status: {entitled ? "ai_assistant active" : "not entitled (or not synced)"}</Note>
 
-      <div className="field-row">
-        <input
-          id="require-ai-addon"
-          type="checkbox"
-          checked={requireEntitlement}
-          onChange={(event) =>
-            updateSettings({ requireAiAddonEntitlement: event.target.checked })
-          }
+      <PageTitle title="Local (IDR / Ollama)" description="Connect and list models on the AI / IDR panel." />
+      <Field label="IDR host">
+        <Input
+          value={settings.idrTargetHost ?? ""}
+          onChange={(_, data) => updateSettings({ idrTargetHost: data.value })}
         />
-        <label htmlFor="require-ai-addon">Require AI add-on entitlement</label>
+      </Field>
+      <Field label="IDR service">
+        <Input
+          value={settings.idrDefaultService ?? "ollama"}
+          onChange={(_, data) => updateSettings({ idrDefaultService: data.value })}
+        />
+      </Field>
+
+      <PageTitle title="Cloud (BYOAI)" />
+      <div className={styles.actions}>
+        <Button appearance="secondary" size="small" onClick={() => addProfile("openai")}>
+          Add OpenAI
+        </Button>
+        <Button appearance="secondary" size="small" onClick={() => addProfile("openai_compatible")}>
+          Add custom compatible
+        </Button>
       </div>
-      <p className="note">
-        Entitlement status: {entitled ? "ai_assistant active" : "not entitled (or not synced)"}
-      </p>
 
-      <section>
-        <h2>Local (IDR / Ollama)</h2>
-        <div className="field">
-          <label htmlFor="ai-idr-host">IDR host</label>
-          <input
-            id="ai-idr-host"
-            type="text"
-            value={settings.idrTargetHost ?? ""}
-            onChange={(event) => updateSettings({ idrTargetHost: event.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="ai-idr-service">IDR service</label>
-          <input
-            id="ai-idr-service"
-            type="text"
-            value={settings.idrDefaultService ?? "ollama"}
-            onChange={(event) => updateSettings({ idrDefaultService: event.target.value })}
-          />
-        </div>
-        <p className="note">Connect and list models on the AI / IDR panel.</p>
-      </section>
-
-      <section>
-        <h2>Cloud (BYOAI)</h2>
-        <div className="actions">
-          <button type="button" className="secondary" onClick={() => addProfile("openai")}>
-            Add OpenAI
-          </button>
-          <button type="button" className="secondary" onClick={() => addProfile("openai_compatible")}>
-            Add custom compatible
-          </button>
-        </div>
-
-        {profiles.length === 0 ? (
-          <p className="empty">No cloud providers yet.</p>
-        ) : (
-          <ul className="list-plain">
-            {profiles.map((profile) => (
-              <li key={profile.id}>
-                <button
-                  type="button"
-                  className={profile.id === selectedId ? "primary" : "secondary"}
-                  onClick={() => setSelectedId(profile.id)}
-                >
-                  {profile.name}
-                  {profile.isDefault ? " (default)" : ""}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {selected ? (
-          <>
-            <div className="field">
-              <label htmlFor="cloud-provider">Provider</label>
-              <select
-                id="cloud-provider"
-                value={selected.provider}
-                onChange={(event) => {
-                  const provider = event.target.value as CloudAiProviderKind;
-                  updateSelected({
-                    provider,
-                    name: displayNameForProvider(provider),
-                    baseUrl: selected.baseUrl || undefined,
-                  });
-                }}
+      {profiles.length === 0 ? (
+        <Note>No cloud providers yet.</Note>
+      ) : (
+        <ul className={styles.list}>
+          {profiles.map((profile) => (
+            <li key={profile.id}>
+              <Button
+                appearance={profile.id === selectedId ? "primary" : "secondary"}
+                size="small"
+                onClick={() => setSelectedId(profile.id)}
               >
-                <option value="openai">OpenAI</option>
-                <option value="openai_compatible">Custom</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="cloud-base">Base URL</label>
-              <input
-                id="cloud-base"
-                type="url"
-                value={selected.baseUrl}
-                onChange={(event) => updateSelected({ baseUrl: event.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="cloud-model">Model</label>
-              <input
-                id="cloud-model"
-                type="text"
-                value={selected.model}
-                onChange={(event) => updateSelected({ model: event.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="cloud-key">API key</label>
-              <input
-                id="cloud-key"
-                type="password"
-                placeholder={selected.hasApiKey ? "(saved — enter to replace)" : "sk-…"}
-                value={draftApiKey}
-                onChange={(event) => setDraftApiKey(event.target.value)}
-              />
-            </div>
-            <div className="actions">
-              <button type="button" className="secondary" disabled={busy} onClick={() => void saveKey()}>
-                Save key
-              </button>
-              <button type="button" className="primary" disabled={busy} onClick={() => void testCloud()}>
-                Test connection
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => updateSelected({ isDefault: true })}
-              >
-                Use as default
-              </button>
-            </div>
-          </>
-        ) : null}
-      </section>
+                {profile.name}
+                {profile.isDefault ? " (default)" : ""}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
 
-      {status ? <p className="note">{status}</p> : null}
-    </section>
+      {selected ? (
+        <>
+          <Field label="Provider">
+            <Dropdown
+              value={displayNameForProvider(selected.provider)}
+              selectedOptions={[selected.provider]}
+              onOptionSelect={(_, data) => {
+                const provider = (data.optionValue ?? selected.provider) as CloudAiProviderKind;
+                updateSelected({
+                  provider,
+                  name: displayNameForProvider(provider),
+                  baseUrl: selected.baseUrl || undefined,
+                });
+              }}
+            >
+              <Option value="openai">OpenAI</Option>
+              <Option value="openai_compatible">Custom</Option>
+            </Dropdown>
+          </Field>
+          <Field label="Base URL">
+            <Input
+              type="url"
+              value={selected.baseUrl}
+              onChange={(_, data) => updateSelected({ baseUrl: data.value })}
+            />
+          </Field>
+          <Field label="Model">
+            <Input value={selected.model} onChange={(_, data) => updateSelected({ model: data.value })} />
+          </Field>
+          <Field label="API key">
+            <Input
+              type="password"
+              placeholder={selected.hasApiKey ? "(saved — enter to replace)" : "sk-…"}
+              value={draftApiKey}
+              onChange={(_, data) => setDraftApiKey(data.value)}
+            />
+          </Field>
+          <div className={styles.actions}>
+            <Button appearance="secondary" size="small" disabled={busy} onClick={() => void saveKey()}>
+              Save key
+            </Button>
+            <Button appearance="primary" size="small" disabled={busy} onClick={() => void testCloud()}>
+              Test connection
+            </Button>
+            <Button appearance="secondary" size="small" onClick={() => updateSelected({ isDefault: true })}>
+              Use as default
+            </Button>
+          </div>
+        </>
+      ) : null}
+
+      {status ? <Note>{status}</Note> : null}
+    </>
   );
 }

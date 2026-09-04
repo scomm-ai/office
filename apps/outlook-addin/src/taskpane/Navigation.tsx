@@ -1,3 +1,6 @@
+import { Button } from "@fluentui/react-components";
+import { usePaneStyles } from "./ui/layout";
+
 export type NavModule =
   | "message"
   | "account"
@@ -29,17 +32,18 @@ interface NavigationProps {
 }
 
 export function Navigation({ active, onChange }: NavigationProps) {
+  const styles = usePaneStyles();
   return (
-    <nav className="nav" aria-label="SComm modules">
+    <nav className={styles.nav} aria-label="SComm modules">
       {MODULES.map((module) => (
-        <button
+        <Button
           key={module.id}
-          type="button"
-          className={active === module.id ? "active" : undefined}
+          appearance={active === module.id ? "primary" : "subtle"}
+          size="small"
           onClick={() => onChange(module.id)}
         >
           {module.label}
-        </button>
+        </Button>
       ))}
     </nav>
   );

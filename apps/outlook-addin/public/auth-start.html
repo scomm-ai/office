@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Signing in…</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        color: #242424;
+      }
+      .card { text-align: center; padding: 2rem; max-width: 28rem; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p id="msg">Opening billing sign-in…</p>
+    </div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var start = params.get("start") || "";
+        var isPopup = params.get("mode") === "popup";
+        var msg = document.getElementById("msg");
+        var redirected = false;
+
+        function fail(text) {
+          if (msg) msg.textContent = text;
+        }
+
+        function go() {
+          if (redirected) return;
+          try {
+            var url = new URL(start);
+            var path = url.pathname.replace(/\/+$/, "");
+            if (url.protocol !== "https:" && url.protocol !== "http:") {
+              fail("Sign-in start URL must be http or https. Check billing origin in Settings.");
+              return;
+            }
+            if (!path.endsWith("/oauth/office-start.html")) {
+              fail("Sign-in start URL is not the billing Office start page.");
+              return;
+            }
+            redirected = true;
+            window.location.replace(url.toString());
+          } catch (e) {
+            fail("Could not start sign-in. Check billing origin in Settings.");
+          }
+        }
+
+        // Popup: do not wait for Office.onReady (this is a normal browser window).
+        // Dialog: Office must initialize on this first same-origin page. Otherwise
+        // auth-callback.html hangs on Office.onReady after Google returns.
+        if (isPopup) {
+          go();
+        } else if (typeof Office !== "undefined" && Office.onReady) {
+          Office.onReady(function () {
+            go();
+          });
+          window.setTimeout(go, 4000);
+        } else {
+          go();
+        }
+      })();
+    </script>
+  </body>
+</html>

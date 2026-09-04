@@ -18,6 +18,8 @@ import {
   signComposeBody,
 } from "../lib/mail-crypto-actions";
 import { getOfficePubkeySession, restoreOfficeVault } from "../lib/pubkey-session";
+import { assertPgpAddon, loadPgpEntitlement } from "../lib/billing-pgp";
+import { DEFAULT_SETTINGS, isLoopbackHostname, normalizePubkeyWriteBaseUrl, resolvePubkeyReadBaseUrl } from "../lib/settings";
 
 const DEFAULT_READ = "https://pubkey.scomm.ai";
 const DEFAULT_WRITE = "https://pubkey.scomm.ai";
@@ -31,9 +33,18 @@ function envUrl(name: string, fallback: string): string {
 }
 
 function session() {
+  const writeConfigured = normalizePubkeyWriteBaseUrl(
+    envUrl("VITE_PUBKEY_WRITE_BASE_URL", DEFAULT_WRITE),
+  );
+  const onLoopback = typeof location !== "undefined" && isLoopbackHostname(location.hostname);
+  const readConfigured = envUrl("VITE_PUBKEY_READ_BASE_URL", DEFAULT_READ);
   return getOfficePubkeySession({
-    readBaseUrl: envUrl("VITE_PUBKEY_READ_BASE_URL", DEFAULT_READ),
-    writeBaseUrl: envUrl("VITE_PUBKEY_WRITE_BASE_URL", DEFAULT_WRITE),
+    readBaseUrl: resolvePubkeyReadBaseUrl({
+      ...DEFAULT_SETTINGS,
+      pubkeyReadBaseUrl: readConfigured,
+      pubkeyWriteBaseUrl: writeConfigured,
+    }),
+    writeBaseUrl: onLoopback ? `${location.origin}/pubkey-write` : writeConfigured,
   });
 }
 
@@ -113,6 +124,7 @@ async function completeCommand(event: Office.AddinCommands.Event, work: () => Pr
 
 function encryptMessage(event: Office.AddinCommands.Event): void {
   void completeCommand(event, async () => {
+    await assertPgpAddon();
     const item = Office.context.mailbox.item as Office.MessageCompose;
     const prev = await loadComposeTogglesFromItem(item);
     const next: ComposeProtectionToggles = { ...prev, encrypt: true };
@@ -132,6 +144,7 @@ function encryptMessage(event: Office.AddinCommands.Event): void {
 
 function signMessage(event: Office.AddinCommands.Event): void {
   void completeCommand(event, async () => {
+    await assertPgpAddon();
     const item = Office.context.mailbox.item as Office.MessageCompose;
     const prev = await loadComposeTogglesFromItem(item);
     const next: ComposeProtectionToggles = { ...prev, sign: true };
@@ -182,7 +195,8 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
       const toggles = await loadComposeTogglesFromItem(item);
       const pubkey = session();
       const recipients = await lookupRecipientStatuses(pubkey, emails);
-      const gate = evaluateSendForToggles(toggles, text, body, recipients);
+      const pgpEntitled = await loadPgpEntitlement();
+      const gate = evaluateSendForToggles(toggles, text, body, recipients, pgpEntitled);
       if (!gate.allow) {
         event.completed({
           allowEvent: false,

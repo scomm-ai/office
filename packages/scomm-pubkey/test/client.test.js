@@ -4,7 +4,12 @@ import { WebCryptoProvider } from "../src/crypto/webcrypto.js";
 import { PubkeyClient } from "../src/client.js";
 import { Vault } from "../src/vault/vault.js";
 import { encodeVaultRecord } from "../src/crypto/enrollment.js";
-import { OPERATIONS } from "@scomm/pubkey-protocol";
+import { PgpEngine } from "../src/engines/pgp.js";
+import {
+	encodeX25519Spki,
+	frameDecryptChallengeCiphertext,
+} from "../src/crypto/encryption-pop.js";
+import { OPERATIONS, ARTIFACT_POP_OPERATION, encodeBase64Url, decodeBase64Url, canonicalSignedBytes, bytesToHex, sha256Bytes } from "@scomm/pubkey-protocol";
 
 describe("PubkeyClient", () => {
 	it("initializes headlessly and signs a mutation envelope", async () => {
@@ -206,5 +211,136 @@ describe("PubkeyClient", () => {
 		assert.equal(dest.getKeyByFingerprint("remote-only").fingerprint, "remote-only");
 		assert.ok(ops.includes(OPERATIONS.vault_put_record));
 		assert.ok(ops.includes(OPERATIONS.vault_get_records));
+	});
+
+	it("posts signing keys to /v1/keys/signing with artifact_pop self_signature", async () => {
+		const crypto = new WebCryptoProvider();
+		const msk = await crypto.generateSigningKey("ed25519");
+		const contentKey = await crypto.generateSigningKey("ed25519");
+		/** @type {object | null} */
+		let captured = null;
+		const client = new PubkeyClient({
+			crypto,
+			readBaseUrl: "https://pubkey.test",
+			writeBaseUrl: "https://api.pubkey.test",
+			fetchImpl: async (url, init) => {
+				captured = { url, body: JSON.parse(init.body) };
+				return new Response(JSON.stringify({ key_id: 2, status: "active" }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			},
+		});
+		const artifact = {
+			family: "pgp",
+			purpose: "signing",
+			algorithm: "openpgp-ed25519",
+			public_material: encodeBase64Url(contentKey.publicKey),
+		};
+		await client.setSigningKeyWithProof({
+			email: "alice@example.com",
+			artifact,
+			mskKey: msk,
+			contentSigningKey: contentKey,
+		});
+		assert.equal(captured.url, "https://api.pubkey.test/v1/keys/signing");
+		assert.equal(captured.body.operation, OPERATIONS.set_signing_key);
+		const sent = captured.body.payload.artifacts[0];
+		const popBytes = await canonicalSignedBytes({
+			protocolVersion: 1,
+			operation: ARTIFACT_POP_OPERATION,
+			principal: captured.body.principal,
+			timestamp: captured.body.timestamp,
+			nonce: captured.body.nonce,
+			payload: {
+				algorithm: artifact.algorithm,
+				family: artifact.family,
+				purpose: artifact.purpose,
+				public_material_sha256: bytesToHex(
+					await sha256Bytes(decodeBase64Url(artifact.public_material)),
+				),
+			},
+		});
+		assert.equal(
+			await crypto.verify(
+				contentKey.publicKey,
+				popBytes,
+				decodeBase64Url(sent.self_signature.value),
+				"ed25519",
+			),
+			true,
+		);
+	});
+
+	it("publishes OpenPGP encryption keys via challenge then /v1/keys/encryption", async () => {
+		const crypto = new WebCryptoProvider();
+		const caps = await crypto.capabilities();
+		if (!caps.keyAgreement.includes("x25519")) {
+			return;
+		}
+		const msk = await crypto.generateSigningKey("ed25519");
+		const pgpEngine = new PgpEngine(crypto);
+		const generated = await pgpEngine.generateKey({ email: "alice@example.com" });
+		const subkey = await pgpEngine.extractX25519EncryptionSubkey(generated.privateKey);
+		assert.equal(subkey.scalar.length, 32);
+		assert.equal(subkey.publicKey.length, 32);
+
+		const eph = await crypto.generateKey({ algorithm: "x25519" });
+		const shared = await crypto.deriveSecret(eph, subkey.publicKey);
+		const aesKey = await crypto.hash("sha-256", shared);
+		const nonce = crypto.random(16);
+		const box = await crypto.encryptAead(aesKey, nonce);
+		const wrapped = frameDecryptChallengeCiphertext(box);
+
+		const urls = [];
+		/** @type {object | null} */
+		let upload = null;
+		const client = new PubkeyClient({
+			crypto,
+			pgpEngine,
+			readBaseUrl: "https://pubkey.test",
+			writeBaseUrl: "https://api.pubkey.test",
+			fetchImpl: async (url, init) => {
+				urls.push(url);
+				if (String(url).endsWith("/v1/keys/encryption/challenge")) {
+					return new Response(
+						JSON.stringify({
+							challenge_id: "chal-1",
+							ciphertext: encodeBase64Url(wrapped),
+							ephemeral_public: encodeBase64Url(encodeX25519Spki(eph.publicKey)),
+						}),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				}
+				upload = JSON.parse(init.body);
+				return new Response(JSON.stringify({ key_id: 9, status: "active" }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			},
+		});
+
+		const result = await client.publishEncryptionKey({
+			email: "alice@example.com",
+			artifact: {
+				family: "pgp",
+				purpose: "encryption",
+				algorithm: "openpgp-cv25519",
+				public_material: encodeBase64Url(generated.publicKey),
+			},
+			privateKey: generated.privateKey,
+			mskKey: msk,
+		});
+		assert.equal(result.key_id, 9);
+		assert.deepEqual(urls, [
+			"https://api.pubkey.test/v1/keys/encryption/challenge",
+			"https://api.pubkey.test/v1/keys/encryption",
+		]);
+		assert.equal(upload.operation, OPERATIONS.set_encryption_key);
+		assert.equal(upload.payload.artifacts[0].decrypt_proof.challenge_id, "chal-1");
+		assert.deepEqual(
+			decodeBase64Url(upload.payload.artifacts[0].decrypt_proof.plaintext),
+			nonce,
+		);
 	});
 });

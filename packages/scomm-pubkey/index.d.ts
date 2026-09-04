@@ -36,6 +36,7 @@ export const KEY_PROTECTION: Record<string, string>;
 export const REQUIREMENT_LEVELS: Record<string, string>;
 export const PROTOCOL_VERSION: number;
 export const MSK_ALGORITHM: "ed25519";
+export const ARTIFACT_POP_OPERATION: "artifact_pop";
 export const OTP_BITS: 64;
 export const OTP_BASE62_LENGTH: 11;
 export const OTP_BASE62_ALPHABET: string;
@@ -106,6 +107,17 @@ export class CryptoProvider {
 	}): Promise<KeyHandle>;
 	generateMSK(options?: { extractable?: boolean; protection?: string }): Promise<KeyHandle>;
 	sign(key: KeyHandle, payload: Uint8Array): Promise<Uint8Array>;
+	hash(algorithm: string, data: Uint8Array): Promise<Uint8Array>;
+	deriveSecret(privateKey: KeyHandle, peerPublicKey: Uint8Array): Promise<Uint8Array>;
+	decryptAead(
+		keyBytes: Uint8Array,
+		iv: Uint8Array,
+		ciphertext: Uint8Array,
+	): Promise<Uint8Array>;
+	encryptAead(
+		keyBytes: Uint8Array,
+		plaintext: Uint8Array,
+	): Promise<{ iv: Uint8Array; ciphertext: Uint8Array }>;
 	wrapVault(
 		plaintext: Uint8Array,
 		passphrase: string,
@@ -149,6 +161,10 @@ export class PgpEngine {
 		privateKey: Uint8Array;
 		fingerprint: string;
 		algorithm: string;
+	}>;
+	extractX25519EncryptionSubkey(privateMaterial: Uint8Array | string): Promise<{
+		scalar: Uint8Array;
+		publicKey?: Uint8Array;
 	}>;
 	encrypt(request?: {
 		plaintext?: string | Uint8Array;
@@ -269,6 +285,36 @@ export class PubkeyClient {
 		email: string;
 		artifacts: unknown[];
 		mskKey: KeyHandle;
+	}): Promise<unknown>;
+	setSigningKeyWithProof(input: {
+		email: string;
+		artifact: Record<string, unknown>;
+		mskKey: KeyHandle;
+		contentSigningKey?: KeyHandle;
+		compositePopSigner?: (popBytes: Uint8Array) => {
+			mldsa: Uint8Array;
+			ed25519: Uint8Array;
+		};
+	}): Promise<unknown>;
+	requestEncryptionKeyChallenge(input: {
+		email: string;
+		family: string;
+		algorithm: string;
+		publicMaterial: string;
+		mskKey: KeyHandle;
+	}): Promise<Record<string, unknown>>;
+	setEncryptionKeyWithProof(input: {
+		email: string;
+		artifact: Record<string, unknown>;
+		decryptProof: { challenge_id: string; plaintext: string };
+		mskKey: KeyHandle;
+	}): Promise<unknown>;
+	publishEncryptionKey(input: {
+		email: string;
+		artifact: Record<string, unknown>;
+		privateKey: Uint8Array | string;
+		mskKey: KeyHandle;
+		contentKey?: KeyHandle;
 	}): Promise<unknown>;
 	assertNoSilentMsk(input: {
 		principalExists: boolean;
