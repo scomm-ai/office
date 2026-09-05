@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import simpleFixtureHtml from "../../../../packages/testkit/fixtures/simple.html?raw";
 import {
   detectOutlookCapabilities,
@@ -136,13 +136,46 @@ export function App() {
     probedSuccessfully: null,
   });
 
-  const refreshMessage = useCallback(async () => {
+  const refreshMessage = useCallback(async (reason = "manual") => {
     if (!mailHost) {
       return;
     }
     const next = await mailHost.getCurrentMessage();
+    // TEMP diagnostic — remove after item-switch / compose-mode issues are confirmed fixed.
+    console.info("[scomm-temp:refresh-message]", {
+      reason,
+      id: next.id ?? null,
+      mode: next.mode,
+      subject: next.subject ?? null,
+      bodyTextLength: next.bodyText?.length ?? 0,
+    });
     setMessage(next);
   }, [mailHost]);
+
+  const itemChangedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!mailHost || isMockHost || !(mailHost instanceof OutlookMailHost)) {
+      return;
+    }
+    const unsubscribe = mailHost.subscribeItemChanged(() => {
+      console.info("[scomm-temp:item-changed]", { note: "Outlook mailbox item changed" });
+      void refreshMessage("item-changed");
+      if (itemChangedTimer.current) {
+        clearTimeout(itemChangedTimer.current);
+      }
+      // Outlook sometimes exposes the new item before body APIs are ready.
+      itemChangedTimer.current = setTimeout(() => {
+        void refreshMessage("item-changed-delayed");
+      }, 250);
+    });
+    return () => {
+      if (itemChangedTimer.current) {
+        clearTimeout(itemChangedTimer.current);
+      }
+      unsubscribe();
+    };
+  }, [mailHost, isMockHost, refreshMessage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +198,12 @@ export function App() {
         setSettings(stored);
         setIdrRuntime(runtime);
         const initialMessage = await boot.mailHost.getCurrentMessage();
+        console.info("[scomm-temp:boot-message]", {
+          isMockHost: boot.isMockHost,
+          id: initialMessage.id ?? null,
+          mode: initialMessage.mode,
+          subject: initialMessage.subject ?? null,
+        });
         setMessage(initialMessage);
         setReady(true);
       } catch (error) {

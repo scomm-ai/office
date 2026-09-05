@@ -1,10 +1,7 @@
 import { CryptoFamily } from "@scomm-office/crypto";
 import { useCallback, useEffect, useState } from "react";
 import { useHostContext } from "../../lib/host-context";
-import {
-  loadComposeTogglesFromItem,
-  saveComposeTogglesToItem,
-} from "../../lib/compose-security-state";
+import { loadComposeTogglesFromItem, saveComposeTogglesToItem } from "../../lib/compose-security-state";
 import { lookupRecipientStatuses } from "../../lib/mail-crypto-actions";
 import type { RecipientDirectoryStatus } from "../../lib/directory-key";
 import type { OfficePubkeySession } from "../../lib/pubkey-session";
@@ -108,7 +105,7 @@ export function ComposeSecurityControls(props: {
             type="checkbox"
             checked={security.sign}
             onChange={(e) => security.setSign(e.target.checked)}
-            disabled={!props.composeMode || !props.engineReady}
+            disabled={!props.engineReady}
           />{" "}
           Sign
         </label>
@@ -117,7 +114,7 @@ export function ComposeSecurityControls(props: {
             type="checkbox"
             checked={security.encrypt}
             onChange={(e) => security.setEncrypt(e.target.checked)}
-            disabled={!props.composeMode || !props.engineReady}
+            disabled={!props.engineReady}
           />{" "}
           Encrypt
         </label>

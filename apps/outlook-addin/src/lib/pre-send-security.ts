@@ -1,6 +1,5 @@
 import { captureComposeSnapshot } from "@scomm-office/message-core";
 import { OfficeSubmissionAdapter, type MailHost } from "@scomm-office/office";
-import { collectRecipientEmails } from "./semantic-policy.js";
 import {
   defaultSecurityPolicy,
   getMailSecurityService,
@@ -42,21 +41,6 @@ export async function evaluatePreSendSecurity(
   });
 
   if (!options.sign && !options.encrypt) {
-    const emails = collectRecipientEmails(message);
-    for (const email of emails) {
-      try {
-        const key = await session.client.getBestKey({ email, purpose: "encryption" });
-        if (key) {
-          return {
-            allowed: false,
-            errorMessage:
-              `Recipient ${email} has a published encryption key. Enable Encrypt or remove the recipient.`,
-          };
-        }
-      } catch {
-        /* directory lookup failure — do not block send */
-      }
-    }
     return { allowed: true };
   }
 

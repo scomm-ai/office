@@ -244,6 +244,13 @@ export async function decryptCurrentBody(options: {
   ensureCryptoDecryptionEntitlement(settings);
   const privateKeys = [await requireUnlockedPgp(session), ...vaultPgpPrivateKeys(session).slice(1)];
   const current = await mailHost.getCurrentMessage();
+  console.info("[scomm-temp:decrypt-current]", {
+    id: current.id ?? null,
+    mode: current.mode,
+    subject: current.subject ?? null,
+    bodyTextLength: current.bodyText?.length ?? 0,
+    bodyHtmlLength: current.bodyHtml?.length ?? 0,
+  });
   const armored = extractPgpMessage(current.bodyText) ?? extractPgpMessage(current.bodyHtml);
   if (!armored) {
     throw new Error("No OpenPGP message in the current item");

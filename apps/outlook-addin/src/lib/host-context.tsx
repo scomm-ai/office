@@ -42,7 +42,7 @@ export interface AppHostContext {
   settings: ResolvedConfiguration;
   idrRuntime: IdrRuntimeSupport | null;
   idrConnected: boolean;
-  refreshMessage: () => Promise<void>;
+  refreshMessage: (reason?: string) => Promise<void>;
   setSemanticDoc: (doc: SemanticMailDocument | null) => void;
   setPolicyResult: (evaluation: PolicyEvaluation | null, decision: SendDecision | null) => void;
   updateSettings: (patch: Partial<ResolvedConfiguration>) => void;

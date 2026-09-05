@@ -37,15 +37,15 @@ describe("decideSendGate", () => {
     ...classifyDirectoryKey({ family: "pgp", algorithm: "openpgp-cv25519" }),
   };
 
-  it("blocks send when a recipient has OpenPGP and Encrypt is off", () => {
+  it("allows send when Encrypt is off — the user chooses whether to protect", () => {
     const gate = decideSendGate({
       bodyProtected: false,
       encrypt: false,
       sign: false,
       recipients: [alice],
     });
-    expect(gate.allow).toBe(false);
-    expect(gate.errorMessage).toMatch(/Enable Encrypt/);
+    expect(gate.allow).toBe(true);
+    expect(gate.needsProtect).toBe(false);
   });
 
   it("allows already-protected bodies", () => {

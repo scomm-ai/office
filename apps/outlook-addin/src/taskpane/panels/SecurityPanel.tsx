@@ -11,10 +11,6 @@ import {
 } from "@scomm-office/pubkeys";
 import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../lib/settings";
 import type { TaskPaneCryptoAction } from "../../lib/taskpane-launch";
-import {
-  loadComposeTogglesFromItem,
-  saveComposeTogglesToItem,
-} from "../../lib/compose-security-state";
 import { decryptCurrentBody, verifyCurrentBody } from "../../lib/mail-crypto-actions";
 import {
   getOfficePubkeySession,
@@ -56,6 +52,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
   const [mailStatus, setMailStatus] = useState<string | null>(null);
   const [decryptedBody, setDecryptedBody] = useState<string | null>(null);
   const launchRan = useRef(false);
+  const lastItemId = useRef<string | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [vaultPassphrase, setVaultPassphrase] = useState("");
   const [vaultBackup, setVaultBackup] = useState("");
@@ -305,6 +302,11 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     setMailStatus(null);
     setDecryptedBody(null);
     try {
+      console.info("[scomm-temp:decrypt-click]", {
+        cachedId: message?.id ?? null,
+        cachedMode: message?.mode ?? null,
+        cachedSubject: message?.subject ?? null,
+      });
       const result = await decryptCurrentBody({ session, mailHost, settings });
       setDecryptedBody(result.plaintext);
       setMailStatus(result.note);
@@ -313,7 +315,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     } finally {
       setBusy(false);
     }
-  }, [sessionFor, mailHost, settings]);
+  }, [sessionFor, mailHost, settings, message?.id, message?.mode, message?.subject]);
 
   const handleVerify = useCallback(async () => {
     const session = sessionFor();
@@ -364,35 +366,49 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
   }, [sessionFor, vaultPassphrase, vaultBackup]);
 
   useEffect(() => {
+    void refreshMessage("security-panel");
+  }, [refreshMessage]);
+
+  useEffect(() => {
+    const nextId = message?.id ?? null;
+    console.info("[scomm-temp:security-item]", {
+      id: nextId,
+      previousId: lastItemId.current,
+      mode: message?.mode ?? null,
+      subject: message?.subject ?? null,
+    });
+    if (lastItemId.current && lastItemId.current !== nextId) {
+      setDecryptedBody(null);
+      setMailStatus(null);
+    }
+    lastItemId.current = nextId;
+  }, [message?.id, message?.mode, message?.subject]);
+
+  const liveMode = (() => {
+    try {
+      return mailHost.getMode();
+    } catch {
+      return undefined;
+    }
+  })();
+  const composeMode = liveMode === "compose" || message?.mode === "compose" || isMockHost;
+
+  useEffect(() => {
+    console.info("[scomm-temp:compose-mode]", {
+      liveMode: liveMode ?? null,
+      cachedMode: message?.mode ?? null,
+      engineReady,
+      composeMode,
+    });
+  }, [liveMode, message?.mode, engineReady, composeMode]);
+
+  useEffect(() => {
     if (launchRan.current || !launchAction || !engineReady) return;
     launchRan.current = true;
     if (launchAction === "decrypt") void handleDecrypt();
     if (launchAction === "verify") void handleVerify();
-    if (launchAction === "encrypt" || launchAction === "sign") {
-      void (async () => {
-        const item = (() => {
-          if (typeof Office === "undefined") return undefined;
-          try {
-            return Office.context?.mailbox?.item as Office.MessageCompose | undefined;
-          } catch {
-            return undefined;
-          }
-        })();
-        const prev = await loadComposeTogglesFromItem(item);
-        await saveComposeTogglesToItem(item, {
-          encrypt: launchAction === "encrypt" ? true : prev.encrypt,
-          sign: launchAction === "sign" ? true : prev.sign,
-        });
-        setMailStatus(
-          launchAction === "encrypt"
-            ? "Encrypt enabled. Outlook Send will protect this message."
-            : "Sign enabled. Outlook Send will protect this message.",
-        );
-      })();
-    }
   }, [launchAction, engineReady, handleDecrypt, handleVerify]);
 
-  const composeMode = message?.mode === "compose" || isMockHost;
   const pgpPresent = Boolean(
     extractPgpMessage(message?.bodyText) ??
       extractPgpMessage(message?.bodyHtml) ??

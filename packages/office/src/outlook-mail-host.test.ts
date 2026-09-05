@@ -94,4 +94,109 @@ describe("OutlookMailHost", () => {
       { id: "att-1", name: "file.pdf", contentType: "application/pdf", size: 12, isInline: false },
     ]);
   });
+
+  it("treats a message item with saveAsync as compose", async () => {
+    const office = {
+      context: {
+        mailbox: {
+          item: {
+            itemType: "message",
+            saveAsync: () => undefined,
+            subject: { getAsync: asyncOk("Draft") },
+            to: { getAsync: asyncOk([]) },
+            cc: { getAsync: asyncOk([]) },
+            bcc: { getAsync: asyncOk([]) },
+            body: {
+              getAsync: (_coercionType: string, callback: (result: { status: string; value: string }) => void) => {
+                callback({ status: "succeeded", value: "" });
+              },
+              setAsync: (
+                _data: string,
+                _options: { coercionType: string },
+                callback: (result: { status: string }) => void,
+              ) => {
+                callback({ status: "succeeded" });
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const host = new OutlookMailHost(office, mailbox13);
+    expect(host.getMode()).toBe("compose");
+    const message = await host.getCurrentMessage();
+    expect(message.mode).toBe("compose");
+  });
+
+  it("treats a message item with displayReplyForm as read", () => {
+    const office = {
+      context: {
+        mailbox: {
+          item: {
+            itemType: "message",
+            itemId: "AAMk-read-1",
+            displayReplyForm: () => undefined,
+            subject: "Encrypted",
+          },
+        },
+      },
+    };
+
+    const host = new OutlookMailHost(office, mailbox13);
+    expect(host.getMode()).toBe("read");
+  });
+
+  it("notifies subscribers when ItemChanged fires and reads the new item id", async () => {
+    const handlers: Array<() => void> = [];
+    const mailbox = {
+      item: {
+        itemType: "message",
+        itemId: "item-a",
+        displayReplyForm: () => undefined,
+        subject: "A",
+        body: {
+          getAsync: (_coercionType: string, callback: (result: { status: string; value: string }) => void) => {
+            callback({ status: "succeeded", value: "body-a" });
+          },
+        },
+      },
+      addHandlerAsync: (
+        eventType: string,
+        handler: () => void,
+        callback: (result: { status: string }) => void,
+      ) => {
+        expect(eventType).toBe("itemChanged");
+        handlers.push(handler);
+        callback({ status: "succeeded" });
+      },
+    };
+
+    const host = new OutlookMailHost(
+      { EventType: { ItemChanged: "itemChanged" }, context: { mailbox } },
+      mailbox13,
+    );
+    const seen: string[] = [];
+    host.subscribeItemChanged(() => {
+      seen.push(mailbox.item.itemId);
+    });
+
+    mailbox.item = {
+      itemType: "message",
+      itemId: "item-b",
+      displayReplyForm: () => undefined,
+      subject: "B",
+      body: {
+        getAsync: (_coercionType: string, callback: (result: { status: string; value: string }) => void) => {
+          callback({ status: "succeeded", value: "body-b" });
+        },
+      },
+    };
+    handlers[0]!();
+
+    const message = await host.getCurrentMessage();
+    expect(seen).toEqual(["item-b"]);
+    expect(message.id).toBe("item-b");
+    expect(message.bodyText).toBe("body-b");
+  });
 });

@@ -52,6 +52,10 @@ type OfficeAsyncAccessor<T> = {
 
 type OfficeMailboxItem = {
   itemType?: string;
+  itemId?: string;
+  conversationId?: string;
+  saveAsync?: unknown;
+  displayReplyForm?: unknown;
   /** Read mode: string. Compose mode: async accessor. */
   subject?: string | OfficeAsyncAccessor<string>;
   internetHeaders?: OfficeInternetHeaders;
@@ -70,11 +74,24 @@ type OfficeMailboxItem = {
 
 type OfficeMailbox = {
   item?: OfficeMailboxItem | null;
+  addHandlerAsync?(
+    eventType: string,
+    handler: () => void,
+    callback?: (result: AsyncResult<void>) => void,
+  ): void;
+  removeHandlerAsync?(
+    eventType: string,
+    options?: { handler?: () => void },
+    callback?: (result: AsyncResult<void>) => void,
+  ): void;
 };
 
 type OfficeGlobal = {
   context?: {
     mailbox?: OfficeMailbox;
+  };
+  EventType?: {
+    ItemChanged?: string;
   };
   AsyncResultStatus?: {
     Succeeded: string;
@@ -134,6 +151,27 @@ function mapAttachmentDetails(details: OfficeAttachmentDetails[]): MailAttachmen
     }));
 }
 
+function hasGetAsync(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && "getAsync" in value);
+}
+
+function messageIdentity(item: OfficeMailboxItem, mode: "read" | "compose", bodyText?: string): string {
+  if (item.itemId) {
+    return item.itemId;
+  }
+  if (item.conversationId) {
+    return `${mode}:${item.conversationId}`;
+  }
+  const subject = typeof item.subject === "string" ? item.subject : "";
+  const preview = (bodyText ?? "").slice(0, 48);
+  return `${mode}:${subject}:${preview.length}:${preview}`;
+}
+
+/** TEMP diagnostic — remove after Encrypt/Sign + Decrypt item-switch issues are confirmed fixed. */
+function tempLog(scope: string, payload: Record<string, unknown>): void {
+  console.info(`[scomm-temp:${scope}]`, payload);
+}
+
 function parseInternetHeadersBlock(raw: string): Record<string, string> {
   const headers: Record<string, string> = {};
   for (const line of raw.split(/\r?\n/)) {
@@ -169,20 +207,48 @@ export class OutlookMailHost implements MailHost {
 
   getMode(): "read" | "compose" {
     const item = this.item;
-    // itemType is "message" for both read and compose.
-    // Detect compose by checking if subject is an async accessor (object with getAsync)
-    // rather than a plain string, or if to has setAsync.
-    if (item.subject && typeof item.subject === "object" && "getAsync" in item.subject) {
+    // Outlook uses itemType "message" for both read and compose. Prefer APIs that
+    // only exist on one side so a late-ready compose item is not treated as read.
+    if (typeof item.saveAsync === "function") {
       return "compose";
     }
-    if (item.to && !Array.isArray(item.to) && typeof item.to === "object" && "getAsync" in item.to) {
+    if (typeof item.displayReplyForm === "function") {
+      return "read";
+    }
+    if (item.body?.setAsync) {
       return "compose";
     }
-    const itemType = item.itemType;
-    if (itemType === "messageCompose") {
+    if (hasGetAsync(item.subject) || hasGetAsync(item.to) || hasGetAsync(item.cc) || hasGetAsync(item.bcc)) {
+      return "compose";
+    }
+    if (item.itemType === "messageCompose") {
       return "compose";
     }
     return "read";
+  }
+
+  /**
+   * Outlook does not update mailbox.item until ItemChanged fires. Subscribe so
+   * callers can reload the current message when the user switches mail.
+   */
+  subscribeItemChanged(handler: () => void): () => void {
+    const mailbox = this.office.context?.mailbox;
+    const eventType = this.office.EventType?.ItemChanged ?? "itemChanged";
+    if (!mailbox?.addHandlerAsync) {
+      tempLog("item-changed-subscribe", { ok: false, reason: "addHandlerAsync missing" });
+      return () => undefined;
+    }
+    mailbox.addHandlerAsync(eventType, handler, (result) => {
+      tempLog("item-changed-subscribe", {
+        ok: String(result.status).toLowerCase() === "succeeded",
+        status: String(result.status),
+        error: result.error?.message,
+        eventType,
+      });
+    });
+    return () => {
+      mailbox.removeHandlerAsync?.(eventType, { handler });
+    };
   }
 
   async getCurrentMessage(): Promise<MailMessage> {
@@ -202,6 +268,21 @@ export class OutlookMailHost implements MailHost {
       this.getAttachments(),
     ]);
 
+    const id = messageIdentity(item, mode, bodyText);
+    tempLog("get-current-message", {
+      id,
+      mode,
+      itemType: item.itemType ?? null,
+      itemId: item.itemId ?? null,
+      conversationId: item.conversationId ?? null,
+      hasSaveAsync: typeof item.saveAsync === "function",
+      hasDisplayReplyForm: typeof item.displayReplyForm === "function",
+      hasBodySetAsync: Boolean(item.body?.setAsync),
+      subjectIsAsync: hasGetAsync(item.subject),
+      bodyTextLength: bodyText?.length ?? 0,
+      bodyHtmlLength: bodyHtml?.length ?? 0,
+    });
+
     if (mode === "compose") {
       const [subject, from, to, cc, bcc] = await Promise.all([
         this.readComposeSubject(),
@@ -210,10 +291,12 @@ export class OutlookMailHost implements MailHost {
         this.readComposeRecipients(item.cc),
         this.readComposeRecipients(item.bcc),
       ]);
-      return { subject, from, to, cc, bcc, bodyText, bodyHtml, attachments, headers, mode };
+      return { id, conversationId: item.conversationId, subject, from, to, cc, bcc, bodyText, bodyHtml, attachments, headers, mode };
     }
 
     return {
+      id,
+      conversationId: item.conversationId,
       subject: typeof item.subject === "string" ? item.subject : undefined,
       from: toMailAddress(item.from as OfficeRecipient | undefined),
       to: toMailAddresses(item.to as OfficeRecipient[] | undefined),

@@ -34,7 +34,7 @@ async function addPgpKey(session: OfficePubkeySession, email: string, keyId: num
 describe("protectOnSend", () => {
   const email = "alice@example.com";
 
-  it("blocks send when a recipient has OpenPGP and Encrypt is off", async () => {
+  it("allows send when Encrypt is off — the user chooses whether to protect", async () => {
     const session = await buildSession(email);
     const alice = await addPgpKey(session, email, 1);
     session.client.getBestKey = (async () => ({
@@ -54,8 +54,7 @@ describe("protectOnSend", () => {
       userEmail: email,
       toggles: { encrypt: false, sign: false },
     });
-    expect(result.outcome).toBe("block");
-    if (result.outcome === "block") expect(result.errorMessage).toMatch(/Enable Encrypt/);
+    expect(result.outcome).toBe("allow-native");
   });
 
   it("writes armor only (not MIME headers) when Graph is unavailable", async () => {
