@@ -150,6 +150,7 @@ export class PgpEngine {
 		fingerprint: string;
 		algorithm: string;
 	}>;
+	exportPublicKey(privateKey: Uint8Array | string): Promise<Uint8Array>;
 	encrypt(request?: {
 		plaintext?: string | Uint8Array;
 		recipientPublicKey?: Uint8Array | string;

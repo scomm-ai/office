@@ -1,39 +1,25 @@
 /// <reference types="office-js" />
 
 import { detectOutlookCapabilities, OutlookMailHost } from "@scomm-office/office";
+import { GraphSubmissionAdapter, HttpMicrosoftGraphClient } from "@scomm-office/microsoft-graph";
 import {
   extractPgpMessage,
   extractPgpSignedMessage,
-  normalizeEmail,
 } from "@scomm-office/pubkeys";
 import {
   loadComposeTogglesFromItem,
   saveComposeTogglesToItem,
   type ComposeProtectionToggles,
 } from "../lib/compose-security-state";
-import {
-  encryptComposeBody,
-  evaluateSendForToggles,
-  lookupRecipientStatuses,
-  signComposeBody,
-} from "../lib/mail-crypto-actions";
-import { getOfficePubkeySession, restoreOfficeVault } from "../lib/pubkey-session";
-
-const DEFAULT_READ = "https://pubkey.scomm.ai";
-const DEFAULT_WRITE = "https://api.pubkey.scomm.ai";
-
-function envUrl(name: string, fallback: string): string {
-  const value =
-    typeof import.meta !== "undefined"
-      ? (import.meta as { env?: Record<string, string> }).env?.[name]
-      : undefined;
-  return value?.trim() || fallback;
-}
+import { protectOnSend } from "../lib/protect-on-send";
+import { SilentOnlyIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
+import { getOfficePubkeySession } from "../lib/pubkey-session";
+import { envPubkeyReadBaseUrl, envPubkeyWriteBaseUrl } from "../lib/settings";
 
 function session() {
   return getOfficePubkeySession({
-    readBaseUrl: envUrl("VITE_PUBKEY_READ_BASE_URL", DEFAULT_READ),
-    writeBaseUrl: envUrl("VITE_PUBKEY_WRITE_BASE_URL", DEFAULT_WRITE),
+    readBaseUrl: envPubkeyReadBaseUrl(),
+    writeBaseUrl: envPubkeyWriteBaseUrl(),
   });
 }
 
@@ -46,28 +32,21 @@ function getAsync<T>(fn: (cb: (result: Office.AsyncResult<T>) => void) => void):
   });
 }
 
-function emailsFromRecipients(recips: Office.EmailAddressDetails[] | undefined): string[] {
-  return (recips ?? [])
-    .map((r) => String(r.emailAddress || ""))
-    .filter(Boolean)
-    .map((email) => normalizeEmail(email));
-}
-
-async function recipientEmails(item: Office.MessageCompose): Promise<string[]> {
-  const [to, cc, bcc] = await Promise.all([
-    getAsync<Office.EmailAddressDetails[]>((cb) => item.to.getAsync(cb)),
-    getAsync<Office.EmailAddressDetails[]>((cb) => item.cc.getAsync(cb)),
-    getAsync<Office.EmailAddressDetails[]>((cb) => item.bcc.getAsync(cb)),
-  ]);
-  return [...new Set([...emailsFromRecipients(to), ...emailsFromRecipients(cc), ...emailsFromRecipients(bcc)])];
-}
-
 function mailboxHost() {
   const capabilities = detectOutlookCapabilities({ Office });
   return {
     capabilities,
     mailHost: new OutlookMailHost(Office as never, capabilities),
   };
+}
+
+function silentGraphSubmit() {
+  if (!isNaaConfigured()) return undefined;
+  const adapter = new GraphSubmissionAdapter(
+    new HttpMicrosoftGraphClient(new SilentOnlyIdentityProvider()),
+  );
+  return (message: Parameters<GraphSubmissionAdapter["submit"]>[0], headers: Record<string, string>) =>
+    adapter.submit(message, headers);
 }
 
 function userEmail(): string {
@@ -117,16 +96,9 @@ function encryptMessage(event: Office.AddinCommands.Event): void {
     const prev = await loadComposeTogglesFromItem(item);
     const next: ComposeProtectionToggles = { ...prev, encrypt: true };
     await saveComposeTogglesToItem(item, next);
-    const { mailHost, capabilities } = mailboxHost();
-    const pubkey = session();
-    await restoreOfficeVault(pubkey);
-    return encryptComposeBody({
-      session: pubkey,
-      mailHost,
-      userEmail: userEmail(),
-      sign: next.sign,
-      capabilities,
-    });
+    return next.sign
+      ? "Encrypt and Sign enabled. Outlook Send will protect this message."
+      : "Encrypt enabled. Outlook Send will protect this message.";
   });
 }
 
@@ -136,19 +108,9 @@ function signMessage(event: Office.AddinCommands.Event): void {
     const prev = await loadComposeTogglesFromItem(item);
     const next: ComposeProtectionToggles = { ...prev, sign: true };
     await saveComposeTogglesToItem(item, next);
-    const { mailHost } = mailboxHost();
-    const pubkey = session();
-    await restoreOfficeVault(pubkey);
-    if (next.encrypt) {
-      return encryptComposeBody({
-        session: pubkey,
-        mailHost,
-        userEmail: userEmail(),
-        sign: true,
-        capabilities: detectOutlookCapabilities({ Office }),
-      });
-    }
-    return signComposeBody({ session: pubkey, mailHost });
+    return next.encrypt
+      ? "Encrypt and Sign enabled. Outlook Send will protect this message."
+      : "Sign enabled. Outlook Send will protect this message.";
   });
 }
 
@@ -178,33 +140,35 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
         return;
       }
 
-      const emails = await recipientEmails(item);
       const toggles = await loadComposeTogglesFromItem(item);
-      const pubkey = session();
-      const recipients = await lookupRecipientStatuses(pubkey, emails);
-      const gate = evaluateSendForToggles(toggles, text, body, recipients);
-      if (!gate.allow) {
+      const { mailHost } = mailboxHost();
+      const result = await protectOnSend({
+        session: session(),
+        mailHost,
+        userEmail: userEmail(),
+        toggles,
+        graphSubmit: silentGraphSubmit(),
+      });
+
+      if (result.outcome === "block") {
         event.completed({
           allowEvent: false,
-          errorMessage: gate.errorMessage ?? "Scomm.AI blocked this send.",
+          errorMessage: result.errorMessage,
         } as Office.AddinCommands.EventCompletedOptions);
         return;
       }
 
-      if (gate.needsProtect) {
-        const { mailHost, capabilities } = mailboxHost();
-        await restoreOfficeVault(pubkey);
-        if (toggles.encrypt) {
-          await encryptComposeBody({
-            session: pubkey,
-            mailHost,
-            userEmail: userEmail(),
-            sign: toggles.sign,
-            capabilities,
-          });
-        } else if (toggles.sign) {
-          await signComposeBody({ session: pubkey, mailHost });
+      if (result.outcome === "graph-sent") {
+        try {
+          item.close();
+        } catch {
+          /* close() may be unavailable */
         }
+        event.completed({
+          allowEvent: false,
+          errorMessage: "Sent securely via Scomm.AI. You can close this window.",
+        } as Office.AddinCommands.EventCompletedOptions);
+        return;
       }
 
       event.completed({ allowEvent: true });

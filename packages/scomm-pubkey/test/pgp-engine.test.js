@@ -39,6 +39,22 @@ describe("PgpEngine", () => {
 		assert.equal(new TextDecoder().decode(decrypted), plaintext);
 	});
 
+	it("exports a public key from a generated private key", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const exported = await engine.exportPublicKey(alice.privateKey);
+		assert.ok(exported.byteLength > 0);
+		const ciphertext = await engine.encrypt({
+			plaintext: "via exported public",
+			recipientPublicKey: exported,
+		});
+		const decrypted = await engine.decrypt({
+			ciphertext,
+			privateKey: alice.privateKey,
+		});
+		assert.equal(new TextDecoder().decode(decrypted), "via exported public");
+	});
+
 	it("encrypts to multiple recipients including armor-as-utf8 wire material", async () => {
 		const engine = new PgpEngine(new WebCryptoProvider());
 		const alice = await engine.generateKey({ email: "alice@example.com" });

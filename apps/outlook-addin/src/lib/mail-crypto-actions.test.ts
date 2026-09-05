@@ -6,7 +6,12 @@ import {
   encodeBase64Url,
   formatOpenPgpLocator,
 } from "@scomm-office/pubkeys";
-import { decryptCurrentBody, encryptComposeBody, signComposeBody } from "./mail-crypto-actions";
+import {
+  decryptCurrentBody,
+  encryptComposeBody,
+  lookupRecipientStatuses,
+  signComposeBody,
+} from "./mail-crypto-actions";
 import type { OfficePubkeySession } from "./pubkey-session";
 
 let mockHasAddon = false;
@@ -84,19 +89,17 @@ describe("decryptCurrentBody", () => {
     expect(result.plaintext.trim().length).toBeGreaterThan(0);
   });
 
-  it("blocks decryption without the crypto add-on entitlement", async () => {
+  it("does not gate decryption while the Crypto add-on check is disabled", async () => {
     const session = await buildSession(email);
     const alice = await addPgpKey(session, email, 1);
     mockGetBestKey(session, { [email]: alice.publicKey });
-    mockHasAddon = true;
+    mockHasAddon = false;
 
     const mailHost = new MockMailHost({ mode: "compose", to: [{ emailAddress: email }], bodyText: "hello from the compose pane" });
     await encryptComposeBody({ session, mailHost, userEmail: email, sign: false });
 
-    mockHasAddon = false;
-    await expect(
-      decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS }),
-    ).rejects.toThrow(/Crypto add-on/);
+    const result = await decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS });
+    expect(result.plaintext.trim().length).toBeGreaterThan(0);
   });
 
   it("allows decryption without entitlement when the org setting is disabled", async () => {
@@ -152,6 +155,36 @@ describe("decryptCurrentBody", () => {
     await expect(
       decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS }),
     ).rejects.toThrow(/No Vault key/);
+  });
+});
+
+describe("lookupRecipientStatuses", () => {
+  it("treats directory 404 as a missing key", async () => {
+    const email = "bob@example.com";
+    const session = await buildSession(email);
+    session.client.getBestKey = (async () => {
+      throw Object.assign(new Error("Pubkey request failed (404)"), { status: 404, code: "not_found" });
+    }) as typeof session.client.getBestKey;
+
+    const rows = await lookupRecipientStatuses(session, [email]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe("missing");
+    expect(rows[0]?.hint).toMatch(/directory/i);
+    expect(rows[0]?.hint).not.toMatch(/Directory lookup failed/);
+  });
+
+  it("uses the sender Vault key when the directory has no key for self", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    await addPgpKey(session, email, 1);
+    session.client.getBestKey = (async () => {
+      throw Object.assign(new Error("Pubkey request failed (404)"), { status: 404, code: "capability_mismatch" });
+    }) as typeof session.client.getBestKey;
+
+    const rows = await lookupRecipientStatuses(session, [email], { userEmail: email });
+    expect(rows[0]?.status).toBe("found");
+    expect(rows[0]?.addInCanEncrypt).toBe(true);
+    expect(rows[0]?.publicMaterial?.byteLength).toBeGreaterThan(0);
   });
 });
 

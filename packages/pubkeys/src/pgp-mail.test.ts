@@ -9,6 +9,14 @@ import {
 } from "./pgp-mail.js";
 
 describe("pgp-mail", () => {
+  it("extracts armor from an HTML-escaped pre wrapper", () => {
+    const armored = `-----BEGIN PGP MESSAGE-----\n\nwv8AAQ\n-----END PGP MESSAGE-----`;
+    const html = `<pre style="font-family:Consolas,monospace;white-space:pre-wrap">${armored
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")}</pre>`;
+    expect(extractPgpMessage(html)).toContain("BEGIN PGP MESSAGE");
+  });
+
   it("extracts an armored message from HTML compose bodies", () => {
     const armored = `-----BEGIN PGP MESSAGE-----\n\nwv8AAQ\n-----END PGP MESSAGE-----`;
     const html = `<div><pre>${armored.replaceAll("\n", "<br>")}</pre></div>`;

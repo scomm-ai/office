@@ -27,7 +27,7 @@ export function SettingsPanel() {
     <section>
       <h2>Settings</h2>
       <p className="note">
-        Product paths use billing + pubkey hosts (no Office server). Fixture Fastify URL is optional.
+        Product paths use billing + pubkey hosts from the build <code>.env</code> (no pubkey URL fields here).
       </p>
 
       <div className="field">
@@ -48,26 +48,6 @@ export function SettingsPanel() {
           placeholder="defaults to billing origin"
           value={settings.billingPortalUrl ?? ""}
           onChange={(event) => updateSettings({ billingPortalUrl: event.target.value || undefined })}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="pubkey-read">Pubkey read base URL</label>
-        <input
-          id="pubkey-read"
-          type="url"
-          placeholder="https://pubkey.example.com"
-          value={settings.pubkeyReadBaseUrl ?? settings.pubkeyServerUrl ?? ""}
-          onChange={(event) => updateSettings({ pubkeyReadBaseUrl: event.target.value || undefined })}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="pubkey-write">Pubkey write base URL</label>
-        <input
-          id="pubkey-write"
-          type="url"
-          placeholder="https://api.pubkey.example.com"
-          value={settings.pubkeyWriteBaseUrl ?? ""}
-          onChange={(event) => updateSettings({ pubkeyWriteBaseUrl: event.target.value || undefined })}
         />
       </div>
       <div className="field">

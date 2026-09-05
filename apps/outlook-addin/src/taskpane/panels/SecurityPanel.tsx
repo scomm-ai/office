@@ -12,10 +12,10 @@ import {
 import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../lib/settings";
 import type { TaskPaneCryptoAction } from "../../lib/taskpane-launch";
 import {
-  decryptCurrentBody,
-  encryptComposeBody,
-  verifyCurrentBody,
-} from "../../lib/mail-crypto-actions";
+  loadComposeTogglesFromItem,
+  saveComposeTogglesToItem,
+} from "../../lib/compose-security-state";
+import { decryptCurrentBody, verifyCurrentBody } from "../../lib/mail-crypto-actions";
 import {
   getOfficePubkeySession,
   persistMsk,
@@ -179,7 +179,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     try {
       await publishPgpContentKey(session, userEmail);
       setHasPgp(true);
-      setBootstrapStatus("OpenPGP content key published.");
+      setBootstrapStatus("OpenPGP encryption and signing keys published to the directory.");
     } catch (err) {
       setBootstrapStatus(`Publish failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -298,29 +298,6 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     }
   }, [userEmail, sessionFor]);
 
-  const handleEncrypt = useCallback(async () => {
-    if (!userEmail) return;
-    const session = sessionFor();
-    if (!session) return;
-    setBusy(true);
-    setMailStatus(null);
-    try {
-      const note = await encryptComposeBody({
-        session,
-        mailHost,
-        userEmail,
-        sign: false,
-        capabilities,
-      });
-      await refreshMessage();
-      setMailStatus(note);
-    } catch (err) {
-      setMailStatus(`Encrypt failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setBusy(false);
-    }
-  }, [userEmail, sessionFor, mailHost, refreshMessage, capabilities]);
-
   const handleDecrypt = useCallback(async () => {
     const session = sessionFor();
     if (!session) return;
@@ -391,8 +368,29 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     launchRan.current = true;
     if (launchAction === "decrypt") void handleDecrypt();
     if (launchAction === "verify") void handleVerify();
-    if (launchAction === "encrypt") void handleEncrypt();
-  }, [launchAction, engineReady, handleDecrypt, handleVerify, handleEncrypt]);
+    if (launchAction === "encrypt" || launchAction === "sign") {
+      void (async () => {
+        const item = (() => {
+          if (typeof Office === "undefined") return undefined;
+          try {
+            return Office.context?.mailbox?.item as Office.MessageCompose | undefined;
+          } catch {
+            return undefined;
+          }
+        })();
+        const prev = await loadComposeTogglesFromItem(item);
+        await saveComposeTogglesToItem(item, {
+          encrypt: launchAction === "encrypt" ? true : prev.encrypt,
+          sign: launchAction === "sign" ? true : prev.sign,
+        });
+        setMailStatus(
+          launchAction === "encrypt"
+            ? "Encrypt enabled. Outlook Send will protect this message."
+            : "Sign enabled. Outlook Send will protect this message.",
+        );
+      })();
+    }
+  }, [launchAction, engineReady, handleDecrypt, handleVerify]);
 
   const composeMode = message?.mode === "compose" || isMockHost;
   const pgpPresent = Boolean(
@@ -521,7 +519,12 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
                 Publish OpenPGP key
               </button>
             ) : (
-              <p className="note">OpenPGP encryption key is in the local Vault and the directory.</p>
+              <div>
+                <p className="note">OpenPGP encryption and signing keys are in the local Vault.</p>
+                <button type="button" disabled={busy || !engineReady} onClick={() => void handlePublishPgp()}>
+                  Publish / repair directory keys
+                </button>
+              </div>
             )}
             {devicesNote ? <p className="note">{devicesNote}</p> : null}
           </div>
@@ -537,22 +540,14 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       />
 
       <section>
-        <h2>OpenPGP (GpgOL-style)</h2>
+        <h2>OpenPGP (read)</h2>
         <p className="note">
-          Encrypt and sign the Outlook body as armored OpenPGP. Recipients are resolved on
-          pubkey.scomm.ai. Decrypt and verify stay in this pane so plaintext is not written back
-          to the mailbox. Attachments need Mailbox 1.8+.
+          Decrypt and verify stay in this pane so plaintext is not written back to the mailbox.
+          Compose protection is the Encrypt/Sign toggles above — they apply when you press Send.
+          Attachments need Mailbox 1.8+.
         </p>
         {composeMode && attachmentNotice ? <p className="note">{attachmentNotice}</p> : null}
         <div className="actions">
-          <button
-            type="button"
-            className="primary"
-            disabled={busy || !engineReady || !composeMode}
-            onClick={() => void handleEncrypt()}
-          >
-            Encrypt
-          </button>
           <button type="button" disabled={busy || !engineReady} onClick={() => void handleDecrypt()}>
             Decrypt
           </button>

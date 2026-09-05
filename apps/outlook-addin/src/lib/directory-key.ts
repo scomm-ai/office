@@ -80,6 +80,30 @@ export interface RecipientDirectoryStatus extends ClassifiedDirectoryKey {
   email: string;
   status: "found" | "missing" | "error";
   error?: string;
+  /** Binary public key when lookup used the local Vault instead of the directory. */
+  publicMaterial?: Uint8Array;
+}
+
+/** GET /v1/keys 404 / no matching artifact — not a transport failure. */
+export function isDirectoryKeyMiss(err: unknown): boolean {
+  const status = Number((err as { status?: number } | null)?.status);
+  if (status === 404) return true;
+  const code = String((err as { code?: string } | null)?.code || "").toLowerCase();
+  if (
+    code === "not_found" ||
+    code === "capability_mismatch" ||
+    code === "principal_not_found" ||
+    code === "no_key"
+  ) {
+    return true;
+  }
+  const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    message.includes("404") ||
+    message.includes("not found") ||
+    message.includes("no mutually supported") ||
+    message.includes("capability_mismatch")
+  );
 }
 
 export function decideSendGate(input: {
@@ -101,11 +125,30 @@ export function decideSendGate(input: {
       needsProtect: false,
       errorMessage:
         `${pgpEncryptable.map((row) => row.email).join(", ")} ` +
-        "have published OpenPGP keys. Click Encrypt on the Scomm.AI ribbon, or change recipients.",
+        "have published OpenPGP keys. Enable Encrypt in the Scomm.AI pane or ribbon, then Send, or change recipients.",
     };
   }
 
   if (encrypt) {
+    const missing = recipients.filter((row) => row.status === "missing");
+    if (missing.length > 0) {
+      return {
+        allow: false,
+        needsProtect: false,
+        errorMessage:
+          `${missing.map((row) => row.email).join(", ")} ` +
+          "have no OpenPGP key on the pubkey directory. Publish a key from the Security pane for your mailbox, or remove recipients without keys.",
+      };
+    }
+    const lookupErrors = recipients.filter((row) => row.status === "error");
+    if (lookupErrors.length > 0) {
+      const first = lookupErrors[0]!;
+      return {
+        allow: false,
+        needsProtect: false,
+        errorMessage: `Could not look up an encryption key for ${first.email}. ${first.hint}`,
+      };
+    }
     const blocked = recipients.filter((row) => !row.addInCanEncrypt);
     if (blocked.length > 0) {
       const first = blocked[0]!;

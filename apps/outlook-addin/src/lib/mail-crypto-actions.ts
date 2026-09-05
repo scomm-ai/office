@@ -13,21 +13,37 @@ import { collectRecipientEmails } from "./semantic-policy";
 import {
   classifyDirectoryKey,
   decideSendGate,
+  isDirectoryKeyMiss,
   type RecipientDirectoryStatus,
 } from "./directory-key";
 import type { ComposeProtectionToggles } from "./compose-security-state";
 import { ensureCryptoDecryptionEntitlement } from "./crypto-entitlement";
+import { writeArmoredComposeBody } from "./pgp-armor-body";
 import {
   restoreOfficeVault,
   vaultPgpPrivateKeys,
   type OfficePubkeySession,
 } from "./pubkey-session";
 
+async function vaultPublicEncryptionKey(
+  session: OfficePubkeySession,
+): Promise<Uint8Array | null> {
+  if (!session.vault.unlocked) {
+    await restoreOfficeVault(session);
+  }
+  if (!session.vault.unlocked) return null;
+  const privateKey = vaultPgpPrivateKeys(session)[0];
+  if (!privateKey || typeof session.pgpEngine.exportPublicKey !== "function") return null;
+  return session.pgpEngine.exportPublicKey(privateKey);
+}
+
 export async function lookupRecipientStatuses(
   session: OfficePubkeySession,
   emails: string[],
+  options?: { userEmail?: string },
 ): Promise<RecipientDirectoryStatus[]> {
   const unique = [...new Set(emails.map((email) => normalizeEmail(email)))];
+  const self = options?.userEmail ? normalizeEmail(options.userEmail) : "";
   const rows: RecipientDirectoryStatus[] = [];
   for (const email of unique) {
     try {
@@ -41,6 +57,20 @@ export async function lookupRecipientStatuses(
         public_material?: string;
       } | null;
       if (!selected) {
+        const local = email === self ? await vaultPublicEncryptionKey(session) : null;
+        if (local) {
+          rows.push({
+            email,
+            status: "found",
+            family: "pgp",
+            algorithm: "openpgp-cv25519",
+            isPqc: false,
+            addInCanEncrypt: true,
+            hint: "Local Vault OpenPGP key (not yet published on the pubkey directory).",
+            publicMaterial: local,
+          });
+          continue;
+        }
         rows.push({
           email,
           status: "missing",
@@ -48,7 +78,7 @@ export async function lookupRecipientStatuses(
           algorithm: "",
           isPqc: false,
           addInCanEncrypt: false,
-          hint: "No key published on pubkey.scomm.ai.",
+          hint: "No key published on the pubkey directory.",
         });
         continue;
       }
@@ -56,8 +86,37 @@ export async function lookupRecipientStatuses(
         email,
         status: "found",
         ...classifyDirectoryKey(selected),
+        publicMaterial: selected.public_material
+          ? decodePublicMaterial(selected.public_material)
+          : undefined,
       });
     } catch (err) {
+      if (isDirectoryKeyMiss(err)) {
+        const local = email === self ? await vaultPublicEncryptionKey(session) : null;
+        if (local) {
+          rows.push({
+            email,
+            status: "found",
+            family: "pgp",
+            algorithm: "openpgp-cv25519",
+            isPqc: false,
+            addInCanEncrypt: true,
+            hint: "Local Vault OpenPGP key (not yet published on the pubkey directory).",
+            publicMaterial: local,
+          });
+          continue;
+        }
+        rows.push({
+          email,
+          status: "missing",
+          family: "unknown",
+          algorithm: "",
+          isPqc: false,
+          addInCanEncrypt: false,
+          hint: "No key published on the pubkey directory.",
+        });
+        continue;
+      }
       rows.push({
         email,
         status: "error",
@@ -105,7 +164,7 @@ export async function encryptComposeBody(options: {
   }
   const recipients = collectRecipientEmails(current);
   const emails = [...new Set([...recipients, userEmail].map((value) => normalizeEmail(value)))];
-  const statuses = await lookupRecipientStatuses(session, emails);
+  const statuses = await lookupRecipientStatuses(session, emails, { userEmail });
   const others = statuses.filter((row) => row.email !== normalizeEmail(userEmail));
   const gate = decideSendGate({
     bodyProtected: false,
@@ -118,16 +177,16 @@ export async function encryptComposeBody(options: {
   }
 
   const publicKeys: Uint8Array[] = [];
-  for (const email of emails) {
-    const selected = (await session.client.getBestKey({
-      email,
-      purpose: "encryption",
-    })) as { public_material?: string } | null;
-    const material = selected?.public_material;
-    if (!material) {
-      throw new Error(`No OpenPGP encryption key for ${email}`);
+  for (const row of statuses) {
+    if (row.publicMaterial && row.publicMaterial.byteLength > 0) {
+      publicKeys.push(row.publicMaterial);
+      continue;
     }
-    publicKeys.push(decodePublicMaterial(material));
+    throw new Error(
+      row.status === "missing"
+        ? `No OpenPGP encryption key published for ${row.email} on the pubkey directory.`
+        : `No OpenPGP encryption key for ${row.email}`,
+    );
   }
 
   const plaintext = messagePlaintext(current);
@@ -140,7 +199,7 @@ export async function encryptComposeBody(options: {
     recipientPublicKeys: publicKeys,
     signingPrivateKey: privateKey,
   });
-  await mailHost.setBody({ text: new TextDecoder().decode(ciphertext) });
+  await writeArmoredComposeBody(mailHost, new TextDecoder().decode(ciphertext));
   const notice = options.capabilities ? attachmentEncryptionNotice(options.capabilities) : null;
   const leftover =
     notice ??
@@ -170,7 +229,7 @@ export async function signComposeBody(options: {
     throw new Error("Message body is empty");
   }
   const signed = await session.pgpEngine.sign({ plaintext, privateKey });
-  await mailHost.setBody({ text: new TextDecoder().decode(signed) });
+  await writeArmoredComposeBody(mailHost, new TextDecoder().decode(signed));
   return "Signed with the Vault OpenPGP key.";
 }
 

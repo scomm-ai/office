@@ -11,7 +11,7 @@ import { runPopupRelay } from "@azure/msal-browser/popup-relay";
  * this page, called directly on load rather than gated behind a click.
  *
  * KNOWN RISK: opening this relay page already consumed the original "user
- * gesture" from the task pane's Apply protection button — some browsers/
+ * gesture" from a task pane Graph sign-in — some browsers/
  * WebViews only treat the very first window.open() after a click as a
  * genuine user gesture and silently block a second one triggered
  * automatically on load, which MSAL then reports as `user_cancelled` even

@@ -171,6 +171,25 @@ export class PgpEngine {
 	}
 
 	/**
+	 * @param {Uint8Array | string} privateKey
+	 * @returns {Promise<Uint8Array>} binary public key packets
+	 */
+	async exportPublicKey(privateKey) {
+		this._requireAvailable();
+		try {
+			const key = await readPrivateKey(privateKey);
+			return toUint8(key.toPublic().write());
+		} catch (cause) {
+			if (cause instanceof PubkeyError) throw cause;
+			throw new PubkeyError(
+				ERROR_CODES.key_import_failure,
+				"Could not export OpenPGP public key",
+				{ cause },
+			);
+		}
+	}
+
+	/**
 	 * @param {{ plaintext: string, privateKey: Uint8Array | string }} request
 	 * @returns {Promise<Uint8Array>} clearsigned armor (UTF-8)
 	 */

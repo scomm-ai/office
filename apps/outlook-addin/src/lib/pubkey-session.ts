@@ -143,7 +143,7 @@ export async function persistMsk(session: OfficePubkeySession, email: string): P
 export async function publishPgpContentKey(
   session: OfficePubkeySession,
   email: string,
-): Promise<void> {
+): Promise<{ generated: boolean }> {
   const msk = session.msk;
   if (!msk) {
     throw new Error("MSK is not armed");
@@ -151,15 +151,32 @@ export async function publishPgpContentKey(
   if (!session.pgpEngine.available) {
     throw new Error("OpenPGP engine is not available");
   }
-  const existing = session.vault.getCurrentKey("encryption");
-  if (existing?.private_material && existing.family === "pgp") {
-    return;
-  }
   const canonical = normalizeEmail(email);
-  const generated = await session.pgpEngine.generateKey({
-    name: canonical,
-    email: canonical,
-  });
+  const existingEnc = session.vault.getCurrentKey("encryption");
+  const existingPrivate =
+    existingEnc?.family === "pgp" ? existingEnc.private_material : undefined;
+
+  let generated = false;
+  let publicKey: Uint8Array;
+  let privateKey: Uint8Array;
+  let fingerprint: string;
+
+  if (existingPrivate) {
+    publicKey = await session.pgpEngine.exportPublicKey(existingPrivate);
+    privateKey = existingPrivate;
+    fingerprint = existingEnc?.fingerprint || "local";
+  } else {
+    const created = await session.pgpEngine.generateKey({
+      name: canonical,
+      email: canonical,
+    });
+    generated = true;
+    publicKey = created.publicKey;
+    privateKey = created.privateKey;
+    fingerprint = created.fingerprint;
+  }
+
+  const material = encodeBase64Url(publicKey);
   const result = (await session.client.setKeys({
     email: canonical,
     artifacts: [
@@ -167,24 +184,38 @@ export async function publishPgpContentKey(
         family: "pgp",
         purpose: "encryption",
         algorithm: "openpgp-cv25519",
-        public_material: encodeBase64Url(generated.publicKey),
+        public_material: material,
+      },
+      {
+        family: "pgp",
+        purpose: "signing",
+        algorithm: "openpgp-ed25519",
+        public_material: material,
       },
     ],
     mskKey: msk,
-  })) as { key_id?: number };
-  session.vault.addKey({
-    kind: "content",
-    key_id: result.key_id ?? 0,
-    family: "pgp",
-    purpose: "encryption",
-    algorithm: "openpgp-cv25519",
-    fingerprint: generated.fingerprint,
-    locator: formatOpenPgpLocator(generated.fingerprint),
-    status: "active",
-    private_material: generated.privateKey,
-  });
+  })) as { key_id?: number; keys?: Array<{ key_id?: number; purpose?: string }> };
+
+  const encryptionKeyId =
+    result.keys?.find((row) => row.purpose === "encryption")?.key_id ?? result.key_id ?? 0;
+
+  if (!existingEnc?.private_material) {
+    session.vault.addKey({
+      kind: "content",
+      key_id: encryptionKeyId,
+      family: "pgp",
+      purpose: "encryption",
+      algorithm: "openpgp-cv25519",
+      fingerprint,
+      locator: formatOpenPgpLocator(fingerprint),
+      status: "active",
+      private_material: privateKey,
+    });
+  }
+
   const secret = await ensureDeviceSecret(session);
   await session.vault.persist(secret);
+  return { generated };
 }
 
 export function vaultPgpPrivateKeys(session: OfficePubkeySession): Uint8Array[] {

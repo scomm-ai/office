@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyDirectoryKey, decideSendGate } from "./directory-key";
+import { classifyDirectoryKey, decideSendGate, isDirectoryKeyMiss } from "./directory-key";
 
 describe("classifyDirectoryKey", () => {
   it("treats classical OpenPGP as encryptable in the add-in", () => {
@@ -45,7 +45,7 @@ describe("decideSendGate", () => {
       recipients: [alice],
     });
     expect(gate.allow).toBe(false);
-    expect(gate.errorMessage).toMatch(/Encrypt/);
+    expect(gate.errorMessage).toMatch(/Enable Encrypt/);
   });
 
   it("allows already-protected bodies", () => {
@@ -68,6 +68,33 @@ describe("decideSendGate", () => {
     });
     expect(gate.allow).toBe(true);
     expect(gate.needsProtect).toBe(true);
+  });
+
+  it("when Encrypt is on, missing directory keys ask the user to publish", () => {
+    const missing = {
+      email: "bob@example.com",
+      status: "missing" as const,
+      family: "unknown" as const,
+      algorithm: "",
+      isPqc: false,
+      addInCanEncrypt: false,
+      hint: "No key published on the pubkey directory.",
+    };
+    const gate = decideSendGate({
+      bodyProtected: false,
+      encrypt: true,
+      sign: false,
+      recipients: [missing],
+    });
+    expect(gate.allow).toBe(false);
+    expect(gate.errorMessage).toMatch(/no OpenPGP key on the pubkey directory/i);
+  });
+
+  it("treats HTTP 404 as a missing key, not a transport error", () => {
+    expect(
+      isDirectoryKeyMiss({ status: 404, code: "not_found", message: "Pubkey request failed (404)" }),
+    ).toBe(true);
+    expect(isDirectoryKeyMiss({ status: 500, code: "server_error", message: "boom" })).toBe(false);
   });
 
   it("does not block solely because a recipient has S/MIME", () => {

@@ -248,13 +248,39 @@ export class ResilientIdentityProvider implements MicrosoftIdentityProvider {
 
   /** Silent-only, never prompts: safe to call at boot for best-effort user discovery. */
   async trySilentUser(): Promise<MicrosoftUser | null> {
-    const token = await this.naa.trySilentToken(["User.Read"]);
+    const token = await this.trySilentGraphToken(["User.Read"]);
     if (!token) return null;
     try {
       return await fetchGraphUser(token);
     } catch {
       return null;
     }
+  }
+
+  /** Silent NAA token only — never opens a popup. Safe from OnMessageSend. */
+  async trySilentGraphToken(scopes: string[]): Promise<string | null> {
+    return this.naa.trySilentToken(scopes);
+  }
+}
+
+/**
+ * Graph tokens without any interactive prompt. Use from OnMessageSend where
+ * popups are blocked. Throws when no silent session exists so callers can
+ * fall back to inline OpenPGP in the compose body.
+ */
+export class SilentOnlyIdentityProvider implements MicrosoftIdentityProvider {
+  private readonly naa = new NaaIdentityProvider();
+
+  async getUser(): Promise<MicrosoftUser> {
+    return fetchGraphUser(await this.getGraphToken(["User.Read"]));
+  }
+
+  async getGraphToken(scopes: string[]): Promise<string> {
+    const token = await this.naa.trySilentToken(scopes);
+    if (!token) {
+      throw new Error("Silent Graph session unavailable");
+    }
+    return token;
   }
 }
 
