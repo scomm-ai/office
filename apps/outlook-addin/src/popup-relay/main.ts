@@ -7,9 +7,19 @@ import { runPopupRelay } from "@azure/msal-browser/popup-relay";
  * Outlook's cross-origin iframe embedding of our task pane, which otherwise
  * breaks the normal popup flow (COOP + third-party storage partitioning).
  *
- * This page's only job: open the actual IdP sign-in as a child popup, wait
- * for that child (running the redirect-bridge in taskpane.html) to report
- * back over BroadcastChannel, then relay the result to the original task
- * pane iframe via window.opener and close itself.
+ * runPopupRelay() opens the actual Microsoft sign-in as a *second* popup from
+ * this page, called directly on load rather than gated behind a click.
+ *
+ * KNOWN RISK: opening this relay page already consumed the original "user
+ * gesture" from the task pane's Apply protection button — some browsers/
+ * WebViews only treat the very first window.open() after a click as a
+ * genuine user gesture and silently block a second one triggered
+ * automatically on load, which MSAL then reports as `user_cancelled` even
+ * though no one actually cancelled anything. If that failure mode returns,
+ * the fix is re-gating this call behind a real click on this page.
  */
-runPopupRelay();
+try {
+  runPopupRelay();
+} catch (error) {
+  console.error("[Scomm.AI][auth] Popup relay: runPopupRelay() threw synchronously", error);
+}

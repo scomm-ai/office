@@ -1,31 +1,17 @@
-Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg="pgp-sha256"; boundary="signed_mtm06rnp_23b0d7a0728b243c1091630f"
-MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 7bit
 
---signed_mtm06rnp_23b0d7a0728b243c1091630f
-Content-Type: multipart/mixed; boundary="mixed_mtm06rnn_ae6f6d5ed95ac8560e2065e0"
-MIME-Version: 1.0
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
 
---mixed_mtm06rnn_ae6f6d5ed95ac8560e2065e0
-Content-Type: multipart/alternative; boundary="alt_mtm06rnn_2a2b5455cc23f936380865f2"
-
-
---mixed_mtm06rnn_ae6f6d5ed95ac8560e2065e0
-Content-Type: text/plain
-Content-Transfer-Encoding: base64
-Content-Disposition: attachment; filename="note.txt"
-
-aGVsbG8=
---mixed_mtm06rnn_ae6f6d5ed95ac8560e2065e0--
---signed_mtm06rnp_23b0d7a0728b243c1091630f
-Content-Type: application/pgp-signature
+Fixture message for external verification.
 
 -----BEGIN PGP SIGNATURE-----
 
-wrsEABYKAG0FgmqZ3oUJELT7u4hlslI9RRQAAAAAABwAIHNhbHRAbm90YXRp
-b25zLm9wZW5wZ3Bqcy5vcmfoTPiz2g4PlLnAmhrwBbsbgVj7Llj7nxRkSDt9
-FBF21RYhBNAn9CyN/umSjkRdQLT7u4hlslI9AADWHQEAy4ZHn/PGd0V056rR
-XLwM9Vlh1KMAE814LMH775dNuScA/ia4Jsr58cdGH1kJfjzLnlv1QZ2Bz10D
-sxqJPrqKOVsO
-=9em1
+wrsEARYKAG0FgmqbPUgJEHQvkPZxOmdQRRQAAAAAABwAIHNhbHRAbm90YXRp
+b25zLm9wZW5wZ3Bqcy5vcmechhky32IC9VlMPNB0luO7YjxP6fJiQYE8kizt
+hve1dhYhBLlnKwCjWDWNVi9iu3QvkPZxOmdQAADYBgEA2778s7AQARIbXiwf
+9QJ+NHuqGNKL//DcYisdGttBUXQBAPNo/OdbLPSm68slPHE2fvFReLrVz+tY
+aMDx1xFpZREA
+=x0aV
 -----END PGP SIGNATURE-----
---signed_mtm06rnp_23b0d7a0728b243c1091630f--

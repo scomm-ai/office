@@ -13,6 +13,20 @@ const AUTHORITY =
   import.meta.env.VITE_AZURE_AUTHORITY ??
   "https://login.microsoftonline.com/common";
 
+/**
+ * Logs only the failure signal — which step failed and the real MSAL error
+ * (errorCode/errorMessage), tagged `[Scomm.AI][auth]` so it's greppable in
+ * DevTools. This is what actually mattered every time this flow broke; the
+ * routine "starting/trying/succeeded" steps in between weren't.
+ */
+function logFailure(step: string, error: unknown): void {
+  const detail =
+    error && typeof error === "object"
+      ? { errorCode: (error as Record<string, unknown>).errorCode, errorMessage: (error as Record<string, unknown>).errorMessage, name: (error as Record<string, unknown>).name }
+      : error;
+  console.warn(`[Scomm.AI][auth] ${step}`, detail);
+}
+
 function requireClientId(): void {
   if (!CLIENT_ID) {
     throw new Error(
@@ -56,8 +70,15 @@ let naaInitPromise: Promise<IPublicClientApplication> | null = null;
 
 async function getNaaInstance(): Promise<IPublicClientApplication> {
   if (naaInstance) return naaInstance;
+  // Without an explicit redirectUri, MSAL falls back to window.location.href,
+  // which includes Office.js's own query params on the task pane URL (e.g.
+  // _host_Info=...). That doesn't exactly match a registered redirect URI, so
+  // Entra rejects it with invalid_request. Only matters when NAA's broker
+  // isn't available and it falls back to a real interactive popup (e.g.
+  // Outlook on the web) — the broker path itself doesn't hit this.
+  const redirectUri = window.location.href.split(/[?#]/)[0];
   naaInitPromise ??= createNestablePublicClientApplication({
-    auth: { clientId: CLIENT_ID, authority: AUTHORITY },
+    auth: { clientId: CLIENT_ID, authority: AUTHORITY, redirectUri },
   }).then((instance) => {
     naaInstance = instance;
     return instance;
@@ -99,8 +120,13 @@ export class NaaIdentityProvider implements MicrosoftIdentityProvider {
     }
 
     clearStaleInteractionLock();
-    const result = await pca.acquireTokenPopup({ scopes });
-    return result.accessToken;
+    try {
+      const result = await pca.acquireTokenPopup({ scopes });
+      return result.accessToken;
+    } catch (error) {
+      logFailure("NAA: acquireTokenPopup failed", error);
+      throw error;
+    }
   }
 
   /** Silent-only: never prompts, never throws — returns null instead. Safe to call at boot. */
@@ -170,17 +196,22 @@ export class PopupIdentityProvider implements MicrosoftIdentityProvider {
         const silentResult = await pca.acquireTokenSilent({ scopes, account: accounts[0] });
         return silentResult.accessToken;
       } catch {
-        // Silent failed — fall through to popup
+        // Silent failed — fall through to interactive popup
       }
     }
 
     clearStaleInteractionLock();
-    if (accounts.length === 0) {
-      const loginResult = await pca.loginPopup({ scopes });
-      return loginResult.accessToken;
+    try {
+      if (accounts.length === 0) {
+        const loginResult = await pca.loginPopup({ scopes });
+        return loginResult.accessToken;
+      }
+      const result = await pca.acquireTokenPopup({ scopes, account: accounts[0] });
+      return result.accessToken;
+    } catch (error) {
+      logFailure("Popup: interactive sign-in failed", error);
+      throw error;
     }
-    const result = await pca.acquireTokenPopup({ scopes, account: accounts[0] });
-    return result.accessToken;
   }
 }
 
@@ -208,10 +239,7 @@ export class ResilientIdentityProvider implements MicrosoftIdentityProvider {
       try {
         return await this.naa.getGraphToken(scopes);
       } catch (error) {
-        console.warn(
-          "[Scomm.AI] Nested App Authentication failed; falling back to popup sign-in for the rest of this session.",
-          error,
-        );
+        logFailure("Resilient: NAA failed entirely; switching to popup provider for the rest of this session", error);
         this.naaViable = false;
       }
     }

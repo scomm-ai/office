@@ -15,11 +15,7 @@ import type { PolicyEvaluation, SendDecision } from "@scomm-office/policy";
 import { HttpMicrosoftGraphClient, GraphSubmissionAdapter } from "@scomm-office/microsoft-graph";
 import { HostContext, type GraphDiagnostics } from "../lib/host-context";
 import { ResilientIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
-import {
-  DEFAULT_SETTINGS,
-  loadSettingsFromStorage,
-  saveSettingsToStorage,
-} from "../lib/settings";
+import { DEFAULT_SETTINGS, loadSettingsFromStorage, saveSettingsToStorage } from "../lib/settings";
 import { readTaskPaneLaunch } from "../lib/taskpane-launch";
 import { Navigation, type NavModule } from "./Navigation";
 import { MessagePanel } from "./panels/MessagePanel";
@@ -84,7 +80,14 @@ async function bootstrapHost(): Promise<{
         graphDiagnostics.error = "VITE_AZURE_CLIENT_ID not set in the build that produced this bundle.";
       }
 
-      return { mailHost, capabilities, isMockHost: false, userEmail, graphSubmissionAdapter, graphDiagnostics };
+      return {
+        mailHost,
+        capabilities,
+        isMockHost: false,
+        userEmail,
+        graphSubmissionAdapter,
+        graphDiagnostics,
+      };
     }
     // info.host is falsy — office.js loaded standalone outside any Office
     // host (e.g. a plain browser tab). Fall through to MockMailHost below.

@@ -14,16 +14,7 @@ import {
   type VerificationState,
 } from "@scomm-office/crypto";
 import { toLogicalMessage, type LogicalMessage } from "@scomm-office/message-core";
-import {
-  CRLF,
-  buildMultipartEncrypted,
-  buildMultipartSigned,
-  detectMimeStructure,
-  extractEncryptedPayloadFromMime,
-  extractSignedEntityFromMultipartSigned,
-  logicalMessageToMime,
-  mimeToEml,
-} from "@scomm-office/mime";
+import { CRLF, mimeToEml } from "@scomm-office/mime";
 
 const BEGIN_PGP = "-----BEGIN PGP";
 
@@ -95,15 +86,51 @@ export class OpenPgpPrivateKeyHandle implements SigningKeyHandle, DecryptionKeyH
   }
 }
 
-function innerMimeBytes(message: LogicalMessage): Uint8Array {
-  const mime = logicalMessageToMime(message);
-  return mimeToEml(mime);
-}
-
 function ensureCrlf(bytes: Uint8Array): Uint8Array {
   const text = new TextDecoder("latin1").decode(bytes);
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, CRLF);
   return new TextEncoder().encode(normalized);
+}
+
+/**
+ * Inline (GpgOL-style) OpenPGP body: a single `text/plain` MIME part whose
+ * content is the ASCII-armored block itself — no RFC 3156 `multipart/signed`
+ * or `multipart/encrypted` wrapper. Exchange Online's mailbox pipeline (MAPI)
+ * has no concept of those multipart structures and flattens each part into a
+ * separate file attachment on the way out, so a real OpenPGP client behind a
+ * standard Outlook/Graph send path never sees them as multipart in the first
+ * place — it sees plain text it can recognize by the `-----BEGIN PGP...`
+ * markers, matching secMail10's Outlook composer.
+ */
+function inlineTextMessage(armored: string) {
+  const body = ensureCrlf(new TextEncoder().encode(armored.trim()));
+  return mimeToEml({
+    headers: {
+      "Content-Type": 'text/plain; charset="UTF-8"',
+      "Content-Transfer-Encoding": "7bit",
+    },
+    body,
+  });
+}
+
+function plainTextOf(message: LogicalMessage): string {
+  const text = message.authoredText;
+  if (!text || !text.trim()) {
+    throw new ScommCryptoError(
+      CryptoErrorCodes.UnsupportedMimeStructure,
+      "Message has no plain-text body to protect",
+    );
+  }
+  return text;
+}
+
+/** Extracts the substring from `beginMarker` through the end of `endMarker`, or null. */
+function extractArmoredBlock(text: string, beginMarker: string, endMarker: string): string | null {
+  const start = text.indexOf(beginMarker);
+  if (start === -1) return null;
+  const end = text.indexOf(endMarker, start);
+  if (end === -1) return null;
+  return text.slice(start, end + endMarker.length);
 }
 
 export class OpenPgpCryptoProvider implements CryptoProvider {
@@ -114,53 +141,54 @@ export class OpenPgpCryptoProvider implements CryptoProvider {
     if (!handle) {
       throw new ScommCryptoError(CryptoErrorCodes.SigningKeyUnavailable, "Signing key required");
     }
-    const entity = ensureCrlf(innerMimeBytes(context.message));
-    const signature = await handle.sign(entity);
-    const signed = buildMultipartSigned(entity, signature);
-    const eml = mimeToEml(signed);
+    const signingKey = await readPrivateKeyFromHandle(handle);
+    const cleartext = await openpgp.createCleartextMessage({ text: plainTextOf(context.message) });
+    const armored = await openpgp.sign({ message: cleartext, signingKeys: signingKey, format: "armored" });
+    const eml = inlineTextMessage(armored);
     return { family: CryptoFamily.OpenPGP, mode: "sign", mime: eml, eml };
   }
 
   async encrypt(context: CryptoOperationContext): Promise<ProtectedMessage> {
     const keys = await this.encryptionKeys(context);
-    const payload = ensureCrlf(innerMimeBytes(context.message));
-    const encrypted = await this.encryptBytes(payload, keys);
-    const wrapped = buildMultipartEncrypted(encrypted);
-    const eml = mimeToEml(wrapped);
+    const message = await openpgp.createMessage({ text: plainTextOf(context.message) });
+    const armored = await openpgp.encrypt({ message, encryptionKeys: keys, format: "armored" });
+    const eml = inlineTextMessage(armored);
     return { family: CryptoFamily.OpenPGP, mode: "encrypt", mime: eml, eml };
   }
 
   async signAndEncrypt(context: CryptoOperationContext): Promise<ProtectedMessage> {
-    const signed = await this.sign(context);
+    const handle = context.senderSigningKey as OpenPgpPrivateKeyHandle | undefined;
+    if (!handle) {
+      throw new ScommCryptoError(CryptoErrorCodes.SigningKeyUnavailable, "Signing key required");
+    }
+    const signingKey = await readPrivateKeyFromHandle(handle);
     const keys = await this.encryptionKeys(context);
-    const encrypted = await this.encryptBytes(signed.mime, keys);
-    const wrapped = buildMultipartEncrypted(encrypted);
-    const eml = mimeToEml(wrapped);
+    const message = await openpgp.createMessage({ text: plainTextOf(context.message) });
+    const armored = await openpgp.encrypt({
+      message,
+      encryptionKeys: keys,
+      signingKeys: [signingKey],
+      format: "armored",
+    });
+    const eml = inlineTextMessage(armored);
     return { family: CryptoFamily.OpenPGP, mode: "signAndEncrypt", mime: eml, eml };
   }
 
   async verify(mime: Uint8Array, publicKeys: PublicKeyMaterial[]): Promise<VerificationState> {
     const text = new TextDecoder("latin1").decode(mime);
-    const structure = detectMimeStructure(text);
-    if (structure.kind !== "openpgp-signed") {
+    const block = extractArmoredBlock(
+      text,
+      "-----BEGIN PGP SIGNED MESSAGE-----",
+      "-----END PGP SIGNATURE-----",
+    );
+    if (!block) {
       return { state: "not-signed" };
     }
 
-    const extracted = extractSignedEntityFromMultipartSigned(mime);
-    if (!extracted) {
-      return { state: "invalid", reason: "Malformed multipart/signed" };
-    }
-
     try {
-      const message = await openpgp.createMessage({ binary: extracted.signedEntity });
-      const signature = await openpgp.readSignature({ armoredSignature: extracted.signature });
+      const message = await openpgp.readCleartextMessage({ cleartextMessage: block });
       const verificationKeys = await Promise.all(publicKeys.map((k) => readPublicKey(k.material)));
-
-      const result = await openpgp.verify({
-        message,
-        signature,
-        verificationKeys,
-      });
+      const result = await openpgp.verify({ message, verificationKeys });
 
       const sigResult = result.signatures[0];
       if (!sigResult) {
@@ -193,9 +221,16 @@ export class OpenPgpCryptoProvider implements CryptoProvider {
     mime: Uint8Array,
     decryptionKey: DecryptionKeyHandle,
   ): Promise<{ plaintext: Uint8Array; verification?: VerificationState }> {
-    const payload = extractEncryptedPayload(mime);
+    const armored = extractArmoredBlock(
+      new TextDecoder("latin1").decode(mime),
+      "-----BEGIN PGP MESSAGE-----",
+      "-----END PGP MESSAGE-----",
+    );
+    if (!armored) {
+      throw new ScommCryptoError(CryptoErrorCodes.UnsupportedMimeStructure, "No inline OpenPGP message found");
+    }
     const handle = decryptionKey as OpenPgpPrivateKeyHandle;
-    const plaintext = await handle.decrypt(payload);
+    const plaintext = await handle.decrypt(new TextEncoder().encode(armored));
     return { plaintext };
   }
 
@@ -204,11 +239,52 @@ export class OpenPgpCryptoProvider implements CryptoProvider {
     decryptionKey: DecryptionKeyHandle,
     publicKeys: PublicKeyMaterial[],
   ): Promise<{ message: LogicalMessage; verification: VerificationState }> {
-    const { plaintext } = await this.decrypt(mime, decryptionKey);
-    const innerText = new TextDecoder("latin1").decode(plaintext);
-    const verification = await this.verify(plaintext, publicKeys);
-    const message = parseInnerLogicalMessage(innerText);
-    return { message, verification };
+    const armored = extractArmoredBlock(
+      new TextDecoder("latin1").decode(mime),
+      "-----BEGIN PGP MESSAGE-----",
+      "-----END PGP MESSAGE-----",
+    );
+    if (!armored) {
+      throw new ScommCryptoError(CryptoErrorCodes.UnsupportedMimeStructure, "No inline OpenPGP message found");
+    }
+    const handle = decryptionKey as OpenPgpPrivateKeyHandle;
+    const privateKey = await readPrivateKeyFromHandle(handle);
+    const verificationKeys = await Promise.all(publicKeys.map((k) => readPublicKey(k.material)));
+    const message = await openpgp.readMessage({ armoredMessage: armored });
+    const result = await openpgp.decrypt({
+      message,
+      decryptionKeys: privateKey,
+      verificationKeys: verificationKeys.length ? verificationKeys : undefined,
+      format: "utf8",
+    });
+
+    const logicalMessage = toLogicalMessage({ bodyText: result.data as string });
+    const sigResult = result.signatures?.[0];
+    let verification: VerificationState = { state: "not-signed" };
+    if (sigResult) {
+      try {
+        await sigResult.verified;
+        const key = verificationKeys[0];
+        const fp = key?.getFingerprint().toLowerCase() ?? "";
+        verification = {
+          state: "verified",
+          family: CryptoFamily.OpenPGP,
+          signer: publicKeys[0]?.identity,
+          keyId: formatShortKeyId(fp),
+          signatureValid: true,
+          identityBindingValid: true,
+          trustValid: true,
+        };
+      } catch (err) {
+        verification = {
+          state: "invalid",
+          family: CryptoFamily.OpenPGP,
+          signatureValid: false,
+          reason: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+    return { message: logicalMessage, verification };
   }
 
   private async encryptionKeys(context: CryptoOperationContext): Promise<openpgp.Key[]> {
@@ -224,28 +300,6 @@ export class OpenPgpCryptoProvider implements CryptoProvider {
     }
     return Promise.all(materials.map((k) => readPublicKey(k.material)));
   }
-
-  private async encryptBytes(data: Uint8Array, keys: openpgp.Key[]): Promise<Uint8Array> {
-    const message = await openpgp.createMessage({ binary: data });
-    return openpgp.encrypt({ message, encryptionKeys: keys, format: "binary" });
-  }
-}
-
-function extractEncryptedPayload(mime: Uint8Array): Uint8Array {
-  return extractEncryptedPayloadFromMime(mime);
-}
-
-function parseInnerLogicalMessage(mimeText: string): LogicalMessage {
-  const plainMatch = /Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?:\r?\n--|$)/i.exec(
-    mimeText,
-  );
-  const htmlMatch = /Content-Type:\s*text\/html[\s\S]*?\r?\n\r?\n([\s\S]*?)(?:\r?\n--|$)/i.exec(
-    mimeText,
-  );
-  return toLogicalMessage({
-    bodyText: plainMatch?.[1]?.trim() ?? "",
-    bodyHtml: htmlMatch?.[1],
-  });
 }
 
 export async function generateOpenPgpKeyPair(email: string): Promise<{

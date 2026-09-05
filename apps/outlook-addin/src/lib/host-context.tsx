@@ -28,9 +28,9 @@ export interface AppHostContext {
   currentUserEmail?: string;
   /**
    * Set only when Microsoft Graph is configured and reachable (NAA client ID present).
-   * When available, compose protection should submit through Graph — the only path
-   * that preserves the SDK's exact MIME structure (e.g. multipart/encrypted) — rather
-   * than falling back to Office.js's plain-body submission.
+   * When available, compose protection should submit through Graph rather than
+   * falling back to Office.js's plain-body submission, which can't build a
+   * correctly-headed RFC 822 message from scratch.
    */
   graphSubmissionAdapter: GraphSubmissionAdapter | null;
   /** Why graphSubmissionAdapter is/isn't available — surfaced in the UI for troubleshooting. */

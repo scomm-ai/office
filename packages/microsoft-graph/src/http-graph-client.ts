@@ -23,6 +23,16 @@ export interface GraphTokenProvider {
   getGraphToken(scopes: string[]): Promise<string>;
 }
 
+/** Chunked to avoid call-stack limits from spreading a large byte array into String.fromCharCode. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
 interface RawGraphAddress {
   emailAddress?: { name?: string; address?: string };
 }
@@ -150,12 +160,17 @@ export class HttpMicrosoftGraphClient implements MicrosoftGraphClient {
    * Creates a draft from raw MIME (Graph parses envelope headers from the content
    * itself) and immediately sends it. This is the only Graph path that preserves an
    * exact Content-Type such as multipart/encrypted — Office.js compose APIs cannot.
+   *
+   * Graph's "create message from MIME content" endpoint requires the MIME bytes to
+   * be base64-encoded in the request body (Content-Type: text/plain describes that
+   * encoded string, not the MIME itself) — sending raw bytes fails with
+   * ErrorMimeContentInvalidBase64String.
    */
   async sendMimeMessage(mime: Uint8Array): Promise<void> {
     const createResponse = await this.request("/me/messages", GRAPH_SCOPES.sendMail, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: mime as BodyInit,
+      body: bytesToBase64(mime),
     });
     const draft = (await createResponse.json()) as { id: string };
     await this.request(`/me/messages/${encodeURIComponent(draft.id)}/send`, GRAPH_SCOPES.sendMail, {

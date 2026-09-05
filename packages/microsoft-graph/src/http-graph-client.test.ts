@@ -33,6 +33,9 @@ describe("HttpMicrosoftGraphClient.sendMimeMessage", () => {
     expect(createUrl).toBe("https://graph.microsoft.com/v1.0/me/messages");
     expect(createInit.method).toBe("POST");
     expect(createInit.headers["Content-Type"]).toBe("text/plain");
+    // Graph's create-from-MIME endpoint requires base64, not raw text —
+    // sending raw bytes fails with ErrorMimeContentInvalidBase64String.
+    expect(createInit.body).toBe(btoa("Subject: hi\r\n\r\nbody"));
 
     const [sendUrl, sendInit] = fetchMock.mock.calls[1]!;
     expect(sendUrl).toBe("https://graph.microsoft.com/v1.0/me/messages/draft-1/send");

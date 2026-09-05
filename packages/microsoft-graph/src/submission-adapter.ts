@@ -18,7 +18,13 @@ function generateMessageId(): string {
   return `<${random}@scomm.ai>`;
 }
 
-function buildEnvelopeHeaderBlock(headers: Record<string, string>): string {
+/**
+ * Builds the RFC 822 envelope header block (From/To/Subject/... plus auto-filled
+ * Date/Message-ID) that GraphSubmissionAdapter prepends ahead of the crypto SDK's
+ * content headers/body — Graph parses the envelope from raw MIME headers, not from
+ * any currently-open compose item, so the full envelope must be supplied explicitly.
+ */
+export function buildEnvelopeHeaderBlock(headers: Record<string, string>): string {
   const missing = REQUIRED_ENVELOPE_HEADERS.filter((name) => !hasHeader(headers, name));
   if (missing.length > 0) {
     throw new MicrosoftGraphError(

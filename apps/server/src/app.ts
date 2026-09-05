@@ -42,7 +42,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   await app.register(cors, {
-    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+    origin: [
+      "http://localhost:5173",
+      "https://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:3000",
+    ],
     methods: ["GET", "PUT", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type", "X-SComm-User-Id"],
   });

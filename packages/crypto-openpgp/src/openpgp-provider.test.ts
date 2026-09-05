@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { CryptoFamily } from "@scomm-office/crypto";
-import { detectMimeStructure } from "@scomm-office/mime";
 import {
   OpenPgpCryptoProvider,
   generateOpenPgpKeyPair,
@@ -9,8 +8,8 @@ import {
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-describe("OpenPgpCryptoProvider RFC 3156", () => {
-  it("signs with multipart/signed and verifies independently", async () => {
+describe("OpenPgpCryptoProvider inline (GpgOL-style)", () => {
+  it("signs as a single text/plain part with a cleartext signature", async () => {
     const alice = await generateOpenPgpKeyPair("alice@example.com");
     const provider = new OpenPgpCryptoProvider();
 
@@ -29,9 +28,10 @@ describe("OpenPgpCryptoProvider RFC 3156", () => {
     });
 
     const emlText = new TextDecoder("latin1").decode(protectedMsg.mime);
-    expect(emlText).toContain('protocol="application/pgp-signature"');
-    expect(emlText).toContain("application/pgp-signature");
-    expect(detectMimeStructure(protectedMsg.mime).kind).toBe("openpgp-signed");
+    expect(emlText).toContain('Content-Type: text/plain; charset="UTF-8"');
+    expect(emlText).not.toContain("multipart/signed");
+    expect(emlText).not.toContain("attachment");
+    expect(emlText).toContain("BEGIN PGP SIGNED MESSAGE");
 
     const pub = publicKeyMaterialFromBytes(
       "alice@example.com",
@@ -44,7 +44,7 @@ describe("OpenPgpCryptoProvider RFC 3156", () => {
     expect(verification.family).toBe(CryptoFamily.OpenPGP);
   });
 
-  it("encrypts with multipart/encrypted RFC 3156 structure", async () => {
+  it("encrypts as a single text/plain part with no multipart wrapper", async () => {
     const bob = await generateOpenPgpKeyPair("bob@example.com");
     const provider = new OpenPgpCryptoProvider();
 
@@ -66,15 +66,16 @@ describe("OpenPgpCryptoProvider RFC 3156", () => {
     });
 
     const emlText = new TextDecoder("latin1").decode(protectedMsg.mime);
-    expect(emlText).toContain('protocol="application/pgp-encrypted"');
-    expect(emlText).toContain("Version: 1");
-    expect(detectMimeStructure(protectedMsg.mime).kind).toBe("openpgp-encrypted");
+    expect(emlText).toContain('Content-Type: text/plain; charset="UTF-8"');
+    expect(emlText).not.toContain("multipart/encrypted");
+    expect(emlText).not.toContain("application/octet-stream");
+    expect(emlText).toContain("BEGIN PGP MESSAGE");
 
     const { plaintext } = await provider.decrypt(protectedMsg.mime, bob.handle);
-    expect(new TextDecoder().decode(plaintext)).toContain("text/plain");
+    expect(new TextDecoder().decode(plaintext)).toContain("Secret content");
   });
 
-  it("sign+encrypt then decrypt+verify", async () => {
+  it("sign+encrypt then decrypt+verify in one inline armored block", async () => {
     const alice = await generateOpenPgpKeyPair("alice@example.com");
     const bob = await generateOpenPgpKeyPair("bob@example.com");
     const provider = new OpenPgpCryptoProvider();
@@ -104,8 +105,15 @@ describe("OpenPgpCryptoProvider RFC 3156", () => {
       senderSigningKey: alice.handle,
     });
 
-    const { plaintext } = await provider.decrypt(protectedMsg.mime, bob.handle);
-    const verification = await provider.verify(plaintext, [alicePub]);
+    const emlText = new TextDecoder("latin1").decode(protectedMsg.mime);
+    expect(emlText).not.toContain("multipart/");
+
+    const { message: decrypted, verification } = await provider.decryptAndVerify(
+      protectedMsg.mime,
+      bob.handle,
+      [alicePub],
+    );
+    expect(decrypted.authoredText).toContain("Signed and encrypted");
     expect(verification.state).toBe("verified");
   });
 
@@ -116,14 +124,6 @@ describe("OpenPgpCryptoProvider RFC 3156", () => {
       authoredText: "Fixture message for external verification.\n",
       html: "<p>Fixture message for external verification.</p>",
       subject: "OpenPGP fixture",
-      attachments: [
-        {
-          filename: "note.txt",
-          mediaType: "text/plain",
-          size: 5,
-          data: new TextEncoder().encode("hello"),
-        },
-      ],
     };
     const protectedMsg = await provider.sign({
       message,

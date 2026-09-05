@@ -63,7 +63,8 @@ function buildEnvelopeHeaders(snapshot: ComposeSnapshot, userEmail: string): Rec
 }
 
 export function useComposeSecurity(session: OfficePubkeySession | null, userEmail: string | undefined) {
-  const { mailHost, message, refreshMessage, graphSubmissionAdapter, setGraphDiagnostics } = useHostContext();
+  const { mailHost, message, refreshMessage, graphSubmissionAdapter, setGraphDiagnostics } =
+    useHostContext();
   const [sign, setSign] = useState(false);
   const [encrypt, setEncrypt] = useState(false);
   const [protocol, setProtocol] = useState<"automatic" | CryptoFamily>("automatic");
@@ -133,17 +134,17 @@ export function useComposeSecurity(session: OfficePubkeySession | null, userEmai
       if (result.protectedMessage) {
         if (graphSubmissionAdapter) {
           try {
-            // Graph sends a brand-new message with the SDK's exact MIME structure —
-            // it doesn't touch the open compose item, so discard that draft afterward
-            // to avoid the user separately hitting Outlook's native Send unencrypted.
+            // Sends a brand-new message from the protected MIME — doesn't touch the
+            // open compose item — so discard that draft afterward to avoid the user
+            // separately hitting Outlook's native Send unencrypted.
             await graphSubmissionAdapter.submit(result.protectedMessage, buildEnvelopeHeaders(snapshot, userEmail));
-          } catch (graphError) {
+          } catch (sendError) {
             setGraphDiagnostics({
               clientIdConfigured: true,
               probedSuccessfully: false,
-              error: graphError instanceof Error ? graphError.message : String(graphError),
+              error: sendError instanceof Error ? sendError.message : String(sendError),
             });
-            throw graphError;
+            throw sendError;
           }
           setGraphDiagnostics({ clientIdConfigured: true, probedSuccessfully: true });
           setStatus(

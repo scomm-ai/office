@@ -55,40 +55,46 @@ export async function protectComposeSnapshot(
   const recipientKeys = [];
 
   for (const email of emails) {
+    // Looked up independently: a signing-key lookup failure (e.g. no signing
+    // key registered for this identity) must not discard an encryption key
+    // the first call already found successfully.
+    let encKey: { family?: string; public_material?: string; locator?: string } | null = null;
     try {
-      const encKey = (await session.client.getBestKey({
+      encKey = (await session.client.getBestKey({
         email,
         purpose: "encryption",
       })) as { family?: string; public_material?: string; locator?: string } | null;
-      const signKey = (await session.client.getBestKey({
+    } catch {
+      encKey = null;
+    }
+
+    let signKey: { family?: string } | null = null;
+    try {
+      signKey = (await session.client.getBestKey({
         email,
         purpose: "signing",
       })) as { family?: string } | null;
-      const wireFamily = encKey?.family ?? signKey?.family ?? "pgp";
-      const families = wireFamiliesToCrypto([wireFamily]);
-      recipients.push({
-        identity: email,
-        families: families.length ? families : [CryptoFamily.OpenPGP],
-        canEncrypt: Boolean(encKey?.public_material),
-        canSign: Boolean(signKey),
-      });
-      if (encKey?.public_material) {
-        recipientKeys.push(
-          publicKeyMaterialFromBytes(
-            email,
-            decodePublicMaterial(String(encKey.public_material)),
-            String(encKey.locator ?? email),
-            { canSign: Boolean(signKey), canEncrypt: true },
-          ),
-        );
-      }
     } catch {
-      recipients.push({
-        identity: email,
-        families: [CryptoFamily.OpenPGP],
-        canEncrypt: false,
-        canSign: false,
-      });
+      signKey = null;
+    }
+
+    const wireFamily = encKey?.family ?? signKey?.family ?? "pgp";
+    const families = wireFamiliesToCrypto([wireFamily]);
+    recipients.push({
+      identity: email,
+      families: families.length ? families : [CryptoFamily.OpenPGP],
+      canEncrypt: Boolean(encKey?.public_material),
+      canSign: Boolean(signKey),
+    });
+    if (encKey?.public_material) {
+      recipientKeys.push(
+        publicKeyMaterialFromBytes(
+          email,
+          decodePublicMaterial(String(encKey.public_material)),
+          String(encKey.locator ?? email),
+          { canSign: Boolean(signKey), canEncrypt: true },
+        ),
+      );
     }
   }
 

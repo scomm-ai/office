@@ -24,7 +24,7 @@ if (isMsalResponseHash()) {
   import("@azure/msal-browser/redirect-bridge")
     .then(({ broadcastResponseToMainFrame }) => broadcastResponseToMainFrame())
     .catch((error) => {
-      console.error("[Scomm.AI] Failed to relay MSAL popup response:", error);
+      console.error("[Scomm.AI][auth] Failed to relay MSAL popup response:", error);
     });
 } else {
   const root = document.getElementById("root");
