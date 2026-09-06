@@ -92,7 +92,7 @@ export async function protectOnSend(options: {
     return { outcome: "allow-native" };
   }
 
-  if (options.graphSubmit) {
+  if (options.graphSubmit && toggles.encrypt) {
     try {
       const snapshot = captureComposeSnapshot({
         subject: current.subject,

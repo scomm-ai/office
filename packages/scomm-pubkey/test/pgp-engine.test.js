@@ -127,6 +127,20 @@ describe("PgpEngine", () => {
 		assert.equal(verified.plaintext, "signed from outlook");
 	});
 
+	it("creates a detached signature without embedding armor in the plaintext", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({ email: "alice@example.com" });
+		const signed = await engine.sign({
+			plaintext: "hello body",
+			privateKey: alice.privateKey,
+			detached: true,
+		});
+		const armor = new TextDecoder().decode(signed);
+		assert.match(armor, /-----BEGIN PGP SIGNATURE-----/);
+		assert.doesNotMatch(armor, /BEGIN PGP SIGNED MESSAGE/);
+		assert.doesNotMatch(armor, /hello body/);
+	});
+
 	it("encrypts with an embedded signature", async () => {
 		const engine = new PgpEngine(new WebCryptoProvider());
 		const alice = await engine.generateKey({ email: "alice@example.com" });

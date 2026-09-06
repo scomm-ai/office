@@ -5,6 +5,7 @@ export interface MailHost {
   getCurrentMessage(): Promise<MailMessage>;
   getComposeState(): Promise<ComposeState>;
   setBody(body: { html?: string; text?: string }): Promise<void>;
+  addFileAttachment(attachment: { name: string; base64: string; contentType?: string }): Promise<void>;
   getHeaders(): Promise<Record<string, string>>;
   setHeaders(headers: Record<string, string>): Promise<void>;
   getAttachments(): Promise<MailAttachment[]>;

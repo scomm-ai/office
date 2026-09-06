@@ -211,6 +211,14 @@ export async function encryptComposeBody(options: {
     : `Encrypted for ${emails.join(", ")}.`;
 }
 
+const SIGNATURE_ATTACHMENT_NAME = "signature.asc";
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export async function signComposeBody(options: {
   session: OfficePubkeySession;
   mailHost: MailHost;
@@ -218,6 +226,9 @@ export async function signComposeBody(options: {
   const { session, mailHost } = options;
   const current = await mailHost.getCurrentMessage();
   if (extractPgpSignedMessage(current.bodyText) || extractPgpSignedMessage(current.bodyHtml)) {
+    return "Message is already signed.";
+  }
+  if (current.attachments?.some((attachment) => attachment.name.toLowerCase() === SIGNATURE_ATTACHMENT_NAME)) {
     return "Message is already signed.";
   }
   if (extractPgpMessage(current.bodyText) || extractPgpMessage(current.bodyHtml)) {
@@ -228,9 +239,13 @@ export async function signComposeBody(options: {
   if (!plaintext.trim()) {
     throw new Error("Message body is empty");
   }
-  const signed = await session.pgpEngine.sign({ plaintext, privateKey });
-  await writeArmoredComposeBody(mailHost, new TextDecoder().decode(signed));
-  return "Signed with the Vault OpenPGP key.";
+  const signed = await session.pgpEngine.sign({ plaintext, privateKey, detached: true });
+  await mailHost.addFileAttachment({
+    name: SIGNATURE_ATTACHMENT_NAME,
+    contentType: "application/pgp-signature",
+    base64: bytesToBase64(signed),
+  });
+  return "Signed. The message body is unchanged; the OpenPGP signature is attached as signature.asc.";
 }
 
 export async function decryptCurrentBody(options: {

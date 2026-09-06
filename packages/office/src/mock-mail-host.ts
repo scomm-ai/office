@@ -56,6 +56,17 @@ export class MockMailHost implements MailHost {
     }
   }
 
+  async addFileAttachment(attachment: { name: string; base64: string; contentType?: string }): Promise<void> {
+    const next: MailAttachment = {
+      id: `att-${attachment.name}`,
+      name: attachment.name,
+      contentType: attachment.contentType,
+      size: Math.ceil((attachment.base64.length * 3) / 4),
+      isInline: false,
+    };
+    this.message.attachments = [...(this.message.attachments ?? []), next];
+  }
+
   async getHeaders(): Promise<Record<string, string>> {
     return { ...this.message.headers };
   }

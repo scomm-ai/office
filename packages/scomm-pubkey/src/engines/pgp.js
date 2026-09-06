@@ -209,6 +209,18 @@ export class PgpEngine {
 					"OpenPGP private key is passphrase-protected; Vault keys must be stored unencrypted",
 				);
 			}
+			if (request.detached) {
+				const binary = await openpgp.createMessage({
+					text: String(request.plaintext),
+				});
+				const armored = await openpgp.sign({
+					message: binary,
+					signingKeys,
+					detached: true,
+					format: "armored",
+				});
+				return toUint8(armored);
+			}
 			const message = await openpgp.createCleartextMessage({
 				text: String(request.plaintext),
 			});

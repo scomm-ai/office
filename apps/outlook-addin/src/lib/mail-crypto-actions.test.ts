@@ -200,6 +200,8 @@ describe("signComposeBody", () => {
     expect(note).toMatch(/Signed/);
 
     const signedMessage = await mailHost.getCurrentMessage();
-    expect(signedMessage.bodyText).toMatch(/-----BEGIN PGP SIGNED MESSAGE-----/);
+    expect(signedMessage.bodyText).toBe("hello there");
+    expect(signedMessage.bodyText).not.toMatch(/BEGIN PGP SIGNED MESSAGE/);
+    expect(signedMessage.attachments?.some((row) => row.name === "signature.asc")).toBe(true);
   });
 });

@@ -166,6 +166,7 @@ export class PgpEngine {
 	sign(request?: {
 		plaintext?: string;
 		privateKey?: Uint8Array | string;
+		detached?: boolean;
 	}): Promise<Uint8Array>;
 	verify(request?: {
 		signed?: string | Uint8Array;

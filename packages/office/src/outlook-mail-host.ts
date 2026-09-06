@@ -56,6 +56,12 @@ type OfficeMailboxItem = {
   conversationId?: string;
   saveAsync?: unknown;
   displayReplyForm?: unknown;
+  addFileAttachmentFromBase64Async?(
+    base64: string,
+    name: string,
+    options: { isInline?: boolean },
+    callback: (result: AsyncResult<void>) => void,
+  ): void;
   /** Read mode: string. Compose mode: async accessor. */
   subject?: string | OfficeAsyncAccessor<string>;
   internetHeaders?: OfficeInternetHeaders;
@@ -393,6 +399,19 @@ export class OutlookMailHost implements MailHost {
     const setAsync = itemBody.setAsync.bind(itemBody);
     await promisify<void>((callback) => {
       setAsync(content, { coercionType }, callback);
+    });
+  }
+
+  async addFileAttachment(attachment: { name: string; base64: string; contentType?: string }): Promise<void> {
+    const item = this.item as OfficeMailboxItem & {
+      addFileAttachmentFromBase64Async?: OfficeMailboxItem["addFileAttachmentFromBase64Async"];
+    };
+    if (!item.addFileAttachmentFromBase64Async) {
+      throw new CapabilityUnavailableError("File attachments require Mailbox 1.8+");
+    }
+    const add = item.addFileAttachmentFromBase64Async.bind(item);
+    await promisify<void>((callback) => {
+      add(attachment.base64, attachment.name, { isInline: false }, callback);
     });
   }
 
