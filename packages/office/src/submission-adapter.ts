@@ -16,7 +16,7 @@ export interface OfficeSubmissionOptions {
 export class OfficeSubmissionAdapter implements MessageSubmissionAdapter {
   constructor(
     private readonly mailHost: MailHost,
-    private readonly options: OfficeSubmissionOptions = { fallbackToTextBody: true },
+    private readonly options: OfficeSubmissionOptions = { fallbackToTextBody: false },
   ) {}
 
   async submit(protectedMessage: ProtectedMessage, headers?: Record<string, string>): Promise<void> {
@@ -39,9 +39,8 @@ export class OfficeSubmissionAdapter implements MessageSubmissionAdapter {
 
   static limitationNote(): string {
     return (
-      "Outlook compose via Office.js cannot replace the full MIME envelope. " +
-      "The SDK emits standards-compliant RFC 3156 MIME; submission uses the best supported " +
-      "Office.js path until Microsoft Graph or SMTP adapters are configured."
+      "Outlook compose via Office.js cannot replace the MIME envelope. " +
+      "Do not paste RFC 3156 into the body. Use armored OpenPGP in the editor, or Graph/SMTP submission."
     );
   }
 }

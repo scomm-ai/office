@@ -27,11 +27,13 @@ export function isPubkeyConnectionError(error) {
 
 export async function pubkeyFetch(url, options = {}) {
 	const fetchImpl = options.fetch ?? globalThis.fetch;
+	const attempts = options.retries ?? CONNECTION_ATTEMPTS;
 	let lastError;
-	for (let attempt = 1; attempt <= CONNECTION_ATTEMPTS; attempt += 1) {
+	for (let attempt = 1; attempt <= attempts; attempt += 1) {
 		try {
 			const response = await fetchImpl(url, {
 				method: options.method ?? "GET",
+				credentials: "same-origin",
 				headers: {
 					Accept: "application/json",
 					...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -57,7 +59,7 @@ export async function pubkeyFetch(url, options = {}) {
 			if (
 				error instanceof PubkeyError ||
 				!isPubkeyConnectionError(error) ||
-				attempt === CONNECTION_ATTEMPTS
+				attempt === attempts
 			) {
 				break;
 			}

@@ -19,7 +19,7 @@ Each spec uses a consistent structure: **Status → Context → Problem → Goal
 | [003-idr-transport](./architecture/003-idr-transport.md) | Third-party `@idrto/idr_browser_sdk` embed only |
 | [004-semantic-engine](./architecture/004-semantic-engine.md) | `RawMailDocument` → `SemanticMailDocument` pipeline |
 | [005-no-office-server](./architecture/005-no-office-server.md) | Client-only product; Fastify is fixture |
-| [006-billing-auth-js](./architecture/006-billing-auth-js.md) | `@scomm-office/billing` — Better Auth + license JWT |
+| [006-billing-auth-js](./architecture/006-billing-auth-js.md) | Host `@2key/browser-sdk` — DeviceID, license, gates |
 
 ## Microsoft / Outlook
 

@@ -16,6 +16,7 @@ import { HttpMicrosoftGraphClient, GraphSubmissionAdapter } from "@scomm-office/
 import { HostContext, type GraphDiagnostics } from "../lib/host-context";
 import { ResilientIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
 import { DEFAULT_SETTINGS, loadSettingsFromStorage, saveSettingsToStorage } from "../lib/settings";
+import { isOutlookMailboxSession } from "../lib/office-ready";
 import { readTaskPaneLaunch } from "../lib/taskpane-launch";
 import { Navigation, type NavModule } from "./Navigation";
 import { MessagePanel } from "./panels/MessagePanel";
@@ -28,6 +29,10 @@ import { IdrPanel } from "./panels/IdrPanel";
 import { AiSettingsPanel } from "./panels/AiSettingsPanel";
 import { DiagnosticsPanel } from "./panels/DiagnosticsPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
+import { MessageBar, MessageBarBody, Spinner, Text, Title3 } from "@fluentui/react-components";
+import { acquireUsingPartyApiToken } from "@2key/browser-sdk/auth";
+import { createOfficeBillingClient } from "../lib/billing-client";
+import { usePaneStyles } from "./ui/layout";
 
 const settingsStore = new MemoryUserSettingsStore<ResolvedConfiguration>();
 
@@ -41,7 +46,7 @@ async function bootstrapHost(): Promise<{
 }> {
   if (typeof Office !== "undefined" && Office.onReady) {
     const info = await Office.onReady();
-    if (info.host) {
+    if (isOutlookMailboxSession(info, Office as never)) {
       const capabilities = detectOutlookCapabilities({ Office });
       const mailHost = new OutlookMailHost(Office as never, capabilities);
 
@@ -89,8 +94,8 @@ async function bootstrapHost(): Promise<{
         graphDiagnostics,
       };
     }
-    // info.host is falsy — office.js loaded standalone outside any Office
-    // host (e.g. a plain browser tab). Fall through to MockMailHost below.
+    // Not an Outlook mailbox session — office.js loaded standalone outside any
+    // Office host (e.g. a plain browser tab). Fall through to MockMailHost below.
   }
 
   const mailHost = new MockMailHost({
@@ -112,6 +117,7 @@ async function bootstrapHost(): Promise<{
 }
 
 export function App() {
+  const styles = usePaneStyles();
   const launch = useMemo(() => readTaskPaneLaunch(), []);
   const [ready, setReady] = useState(false);
   const [activeModule, setActiveModule] = useState<NavModule>(launch.module ?? "message");
@@ -220,6 +226,29 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    const origin = settings.billingOrigin?.trim();
+    if (!origin) {
+      return;
+    }
+    const client = createOfficeBillingClient(origin, settings.billingPortalUrl?.trim());
+    client.startPolling({
+      accountKey: "default",
+      accessToken: async () => {
+        try {
+          const minted = await acquireUsingPartyApiToken(client.config);
+          return minted.token ?? "";
+        } catch {
+          return "";
+        }
+      },
+    });
+    return () => client.stopPolling();
+  }, [ready, settings.billingOrigin, settings.billingPortalUrl]);
+
   const updateSettings = useCallback((patch: Partial<ResolvedConfiguration>) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
@@ -283,30 +312,46 @@ export function App() {
   ]);
 
   if (!ready) {
-    return <div className="panel empty">Loading Scomm.AI…</div>;
+    return (
+      <div className={styles.panel}>
+        <Spinner size="small" label="Loading Scomm.AI…" />
+      </div>
+    );
   }
 
   if (bootError || !ctx) {
     return (
-      <div className="panel">
-        <h2>Startup error</h2>
-        <p className="error-text">{bootError ?? "Host context unavailable"}</p>
+      <div className={styles.panel}>
+        <Title3>Startup error</Title3>
+        <MessageBar intent="error">
+          <MessageBarBody>{bootError ?? "Host context unavailable"}</MessageBarBody>
+        </MessageBar>
+        {bootError?.includes("mailbox item") ? (
+          <Text size={200}>
+            Open an email (read or compose) in Outlook, then start Scomm.AI from the ribbon. A
+            normal browser tab is not a mailbox item.
+          </Text>
+        ) : null}
       </div>
     );
   }
 
   return (
     <HostContext.Provider value={ctx}>
-      <div className="app-shell">
+      <div className={styles.shell}>
         {isMockHost ? (
-          <div className="banner">Mock host — running outside Outlook with testkit fixture</div>
+          <MessageBar intent="warning">
+            <MessageBarBody>Mock host — running outside Outlook with a testkit fixture.</MessageBarBody>
+          </MessageBar>
         ) : null}
-        <header className="app-header">
-          <h1>Scomm.AI</h1>
-          <p>Outlook add-in — OpenPGP, pubkey.scomm.ai, semantics, and compliance</p>
+        <header className={styles.header}>
+          <Title3 className={styles.headerTitle}>Scomm.AI</Title3>
+          <Text size={200}>
+            Outlook add-in — OpenPGP, pubkey.scomm.ai, semantics, and compliance
+          </Text>
         </header>
         <Navigation active={activeModule} onChange={setActiveModule} />
-        <main className="panel">
+        <main className={styles.panel}>
           {activeModule === "message" ? <MessagePanel /> : null}
           {activeModule === "account" ? <AccountBillingPanel /> : null}
           {activeModule === "identity" ? <IdentityPanel /> : null}

@@ -3,6 +3,8 @@ import { LocalUidProvider } from "@scomm-office/core";
 import { ScommMessageMetadataAdapter } from "@scomm-office/office";
 import { HeuristicSemanticExtractor, sha256SemanticDocument } from "@scomm-office/semantics";
 import type { SemanticBodySegment } from "@scomm-office/semantics";
+import { Checkbox } from "@fluentui/react-components";
+import { Button, MessageBar, MessageBarBody, Note, PageTitle, Textarea, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
 
 const SEGMENT_TYPES: SemanticBodySegment["type"][] = [
@@ -20,6 +22,7 @@ const SEGMENT_TYPES: SemanticBodySegment["type"][] = [
 ];
 
 export function SemanticsPanel() {
+  const styles = usePaneStyles();
   const { message, mailHost, capabilities, semanticDoc, setSemanticDoc } = useHostContext();
   const [busy, setBusy] = useState(false);
   const [stampMessage, setStampMessage] = useState<string | null>(null);
@@ -93,50 +96,45 @@ export function SemanticsPanel() {
   const presentTypes = new Set(semanticDoc?.segments.map((segment) => segment.type) ?? []);
 
   return (
-    <section>
-      <h2>Semantics</h2>
-      <div className="actions">
-        <button type="button" className="primary" disabled={busy || !message} onClick={() => void analyze()}>
+    <>
+      <PageTitle title="Semantics" />
+      <div className={styles.actions}>
+        <Button appearance="primary" size="small" disabled={busy || !message} onClick={() => void analyze()}>
           Analyze
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={busy || !semanticDoc}
-          onClick={() => void stampHeaders()}
-        >
+        </Button>
+        <Button appearance="secondary" size="small" disabled={busy || !semanticDoc} onClick={() => void stampHeaders()}>
           Stamp headers
-        </button>
+        </Button>
       </div>
-      {error ? <p className="error-text">{error}</p> : null}
-      {stampMessage ? <p className="note">{stampMessage}</p> : null}
+      {error ? (
+        <MessageBar intent="error">
+          <MessageBarBody>{error}</MessageBarBody>
+        </MessageBar>
+      ) : null}
+      {stampMessage ? <Note>{stampMessage}</Note> : null}
 
       {semanticDoc ? (
         <>
-          <section>
-            <h2>Segment types</h2>
-            <ul className="checklist">
-              {SEGMENT_TYPES.map((type) => (
-                <li key={type}>
-                  <input type="checkbox" readOnly checked={presentTypes.has(type)} />
-                  <span>{type}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section>
-            <h2>Semantic JSON</h2>
-            <textarea
-              className="code-block"
-              readOnly
-              value={JSON.stringify(semanticDoc, null, 2)}
-              rows={16}
-            />
-          </section>
+          <PageTitle title="Segment types" />
+          <ul className="checklist">
+            {SEGMENT_TYPES.map((type) => (
+              <li key={type}>
+                <Checkbox checked={presentTypes.has(type)} disabled label={type} />
+              </li>
+            ))}
+          </ul>
+          <PageTitle title="Semantic JSON" />
+          <Textarea
+            className={styles.code}
+            readOnly
+            value={JSON.stringify(semanticDoc, null, 2)}
+            rows={16}
+            resize="vertical"
+          />
         </>
       ) : (
-        <p className="empty">No semantic document yet. Click Analyze to run HeuristicSemanticExtractor.</p>
+        <Note>No semantic document yet. Click Analyze to run HeuristicSemanticExtractor.</Note>
       )}
-    </section>
+    </>
   );
 }

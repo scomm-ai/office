@@ -11,7 +11,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   use: {
-    baseURL: process.env.ADDIN_BASE_URL ?? "https://localhost:5173",
+    baseURL:
+      process.env.ADDIN_BASE_URL ?? `https://localhost:${process.env.ADDIN_PORT ?? 5173}`,
     ignoreHTTPSErrors: true,
     trace: "on-first-retry",
   },

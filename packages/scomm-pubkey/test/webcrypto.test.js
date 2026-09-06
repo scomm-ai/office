@@ -162,6 +162,29 @@ describe("WebCryptoProvider", () => {
 		assert.ok(ab.length > 0);
 	});
 
+	it("imports a raw X25519 scalar for ECDH", async () => {
+		const cryptoProvider = new WebCryptoProvider();
+		const caps = await cryptoProvider.capabilities();
+		if (!caps.keyAgreement.includes("x25519")) {
+			return;
+		}
+		const alice = await cryptoProvider.generateKey({
+			algorithm: "x25519",
+			extractable: true,
+		});
+		const portable = await cryptoProvider.exportPrivateKey(alice);
+		const imported = await cryptoProvider.importPrivateKey({
+			algorithm: "x25519",
+			encoding: "raw-32",
+			bytes: portable.bytes,
+			publicKey: portable.publicKey,
+		});
+		const bob = await cryptoProvider.generateKey({ algorithm: "x25519" });
+		const ab = await cryptoProvider.deriveSecret(imported, bob.publicKey);
+		const ba = await cryptoProvider.deriveSecret(bob, alice.publicKey);
+		assert.deepEqual(ab, ba);
+	});
+
 	it("hashes with SHA-256", async () => {
 		const cryptoProvider = new WebCryptoProvider();
 		const digest = await cryptoProvider.hash(

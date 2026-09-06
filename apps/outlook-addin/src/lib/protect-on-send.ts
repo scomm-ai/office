@@ -14,6 +14,7 @@ import {
   lookupRecipientStatuses,
   signComposeBody,
 } from "./mail-crypto-actions";
+import { loadPgpEntitlement } from "./billing-pgp";
 import type { OfficePubkeySession } from "./pubkey-session";
 import type { ComposeProtectionToggles } from "./compose-security-state";
 
@@ -84,7 +85,14 @@ export async function protectOnSend(options: {
 
   const emails = collectRecipientEmails(current);
   const recipients = await lookupRecipientStatuses(session, emails, { userEmail });
-  const gate = evaluateSendForToggles(toggles, current.bodyText ?? "", current.bodyHtml ?? "", recipients);
+  const pgpEntitled = await loadPgpEntitlement();
+  const gate = evaluateSendForToggles(
+    toggles,
+    current.bodyText ?? "",
+    current.bodyHtml ?? "",
+    recipients,
+    pgpEntitled,
+  );
   if (!gate.allow) {
     return { outcome: "block", errorMessage: gate.errorMessage ?? "Scomm.AI blocked this send." };
   }

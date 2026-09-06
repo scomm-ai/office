@@ -5,6 +5,8 @@ import {
   type PolicyEvaluation,
   type SendDecision,
 } from "@scomm-office/policy";
+import { MessageBar, MessageBarBody } from "@fluentui/react-components";
+import { Note, PageTitle, StatusBadge, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
 import {
   collectRecipientEmails,
@@ -13,6 +15,7 @@ import {
 } from "../../lib/semantic-policy";
 
 export function CompliancePanel() {
+  const styles = usePaneStyles();
   const { message, semanticDoc, policyEvaluation, sendDecision, setPolicyResult, settings } =
     useHostContext();
   const [error, setError] = useState<string | null>(null);
@@ -50,73 +53,71 @@ export function CompliancePanel() {
 
   if (!settings.complianceEnabled) {
     return (
-      <section>
-        <h2>Compliance</h2>
-        <p className="empty">Compliance checks disabled in Settings.</p>
-      </section>
+      <>
+        <PageTitle title="Compliance" />
+        <Note>Compliance checks disabled in Settings.</Note>
+      </>
     );
   }
 
   if (!semanticDoc) {
     return (
-      <section>
-        <h2>Compliance</h2>
-        <p className="empty">Run semantic analysis first (Semantics → Analyze).</p>
-      </section>
+      <>
+        <PageTitle title="Compliance" />
+        <Note>Run semantic analysis first (Semantics → Analyze).</Note>
+      </>
     );
   }
 
   return (
-    <section>
-      <h2>Compliance</h2>
-      <p className="note">DeterministicPolicyEngine on last semantic document.</p>
-      {error ? <p className="error-text">{error}</p> : null}
+    <>
+      <PageTitle title="Compliance" description="DeterministicPolicyEngine on last semantic document." />
+      {error ? (
+        <MessageBar intent="error">
+          <MessageBarBody>{error}</MessageBarBody>
+        </MessageBar>
+      ) : null}
       {sendDecision ? (
-        <dl className="meta-grid">
-          <dt>Send decision</dt>
+        <dl className={styles.metaGrid}>
+          <dt className={styles.metaLabel}>Send decision</dt>
           <dd>
-            <span
-              className={`status ${
-                sendDecision.mode === "allow"
-                  ? "ok"
-                  : sendDecision.mode === "warn"
-                    ? "warn"
-                    : "error"
-              }`}
+            <StatusBadge
+              tone={
+                sendDecision.mode === "allow" ? "ok" : sendDecision.mode === "warn" ? "warn" : "error"
+              }
             >
               {sendDecision.mode}
-            </span>
+            </StatusBadge>
           </dd>
           {sendDecision.message ? (
             <>
-              <dt>Message</dt>
+              <dt className={styles.metaLabel}>Message</dt>
               <dd>{sendDecision.message}</dd>
             </>
           ) : null}
         </dl>
       ) : null}
       <FindingsList evaluation={policyEvaluation} />
-    </section>
+    </>
   );
 }
 
 function FindingsList({ evaluation }: { evaluation: PolicyEvaluation | null }) {
+  const styles = usePaneStyles();
   if (!evaluation?.findings.length) {
-    return <p className="empty">No policy findings.</p>;
+    return <Note>No policy findings.</Note>;
   }
 
   return (
-    <ul className="list-plain">
+    <ul className={styles.list}>
       {evaluation.findings.map((finding) => (
         <li key={finding.ruleId}>
           <strong>{finding.ruleId}</strong>{" "}
-          <span
-            className={`status ${
-              finding.action === "block" ? "error" : finding.action === "warn" ? "warn" : "muted"
-            }`}
+          <StatusBadge
+            tone={finding.action === "block" ? "error" : finding.action === "warn" ? "warn" : "muted"}
           >
             {finding.action}
-          </span>
+          </StatusBadge>
           <div>{finding.message}</div>
         </li>
       ))}

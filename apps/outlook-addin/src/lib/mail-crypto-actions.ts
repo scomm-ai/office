@@ -1,4 +1,3 @@
-import type { ResolvedConfiguration } from "@scomm-office/protocol";
 import {
   bodyHasOpenPgpProtection,
   decodePublicMaterial,
@@ -17,13 +16,13 @@ import {
   type RecipientDirectoryStatus,
 } from "./directory-key";
 import type { ComposeProtectionToggles } from "./compose-security-state";
-import { ensureCryptoDecryptionEntitlement } from "./crypto-entitlement";
 import { writeArmoredComposeBody } from "./pgp-armor-body";
 import {
   restoreOfficeVault,
   vaultPgpPrivateKeys,
   type OfficePubkeySession,
 } from "./pubkey-session";
+import { assertPgpAddon } from "./billing-pgp";
 
 async function vaultPublicEncryptionKey(
   session: OfficePubkeySession,
@@ -158,6 +157,7 @@ export async function encryptComposeBody(options: {
   capabilities?: Parameters<typeof attachmentEncryptionNotice>[0];
 }): Promise<string> {
   const { session, mailHost, userEmail, sign } = options;
+  await assertPgpAddon();
   const current = await mailHost.getCurrentMessage();
   if (itemIsProtected(current.bodyText, current.bodyHtml)) {
     return "Message is already OpenPGP-protected.";
@@ -171,6 +171,7 @@ export async function encryptComposeBody(options: {
     encrypt: true,
     sign,
     recipients: others,
+    pgpEntitled: true,
   });
   if (!gate.allow) {
     throw new Error(gate.errorMessage ?? "Cannot encrypt this message");
@@ -224,6 +225,7 @@ export async function signComposeBody(options: {
   mailHost: MailHost;
 }): Promise<string> {
   const { session, mailHost } = options;
+  await assertPgpAddon();
   const current = await mailHost.getCurrentMessage();
   if (extractPgpSignedMessage(current.bodyText) || extractPgpSignedMessage(current.bodyHtml)) {
     return "Message is already signed.";
@@ -251,12 +253,8 @@ export async function signComposeBody(options: {
 export async function decryptCurrentBody(options: {
   session: OfficePubkeySession;
   mailHost: MailHost;
-  settings: ResolvedConfiguration;
 }): Promise<{ plaintext: string; note: string }> {
-  const { session, mailHost, settings } = options;
-  // All decryption (RSA, EC, PQC alike) is paid — checked before any vault
-  // or private-key access, regardless of the ciphertext's algorithm family.
-  ensureCryptoDecryptionEntitlement(settings);
+  const { session, mailHost } = options;
   const privateKeys = [await requireUnlockedPgp(session), ...vaultPgpPrivateKeys(session).slice(1)];
   const current = await mailHost.getCurrentMessage();
   console.info("[scomm-temp:decrypt-current]", {
@@ -332,11 +330,13 @@ export function evaluateSendForToggles(
   bodyText: string,
   bodyHtml: string,
   recipients: RecipientDirectoryStatus[],
+  pgpEntitled: boolean,
 ) {
   return decideSendGate({
     bodyProtected: itemIsProtected(bodyText, bodyHtml),
     encrypt: toggles.encrypt,
     sign: toggles.sign,
     recipients,
+    pgpEntitled,
   });
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useHostContext } from "../../lib/host-context";
 import { loadComposeTogglesFromItem, saveComposeTogglesToItem } from "../../lib/compose-security-state";
 import { lookupRecipientStatuses } from "../../lib/mail-crypto-actions";
+import { PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
 import type { RecipientDirectoryStatus } from "../../lib/directory-key";
 import type { OfficePubkeySession } from "../../lib/pubkey-session";
 import { resolvePubkeyReadBaseUrl } from "../../lib/settings";
@@ -76,10 +77,14 @@ export function ComposeSecurityControls(props: {
   userEmail: string | undefined;
   engineReady: boolean;
   composeMode: boolean;
+  pgpEntitled: boolean;
 }) {
   const security = useComposeSecurity(props.session, props.userEmail);
   const { settings, graphDiagnostics } = useHostContext();
   const pubkeyBase = resolvePubkeyReadBaseUrl(settings);
+  const paidReady = props.engineReady && props.pgpEntitled;
+  const canUncheckSign = !props.pgpEntitled && security.sign;
+  const canUncheckEncrypt = !props.pgpEntitled && security.encrypt;
 
   return (
     <section>
@@ -88,6 +93,7 @@ export function ComposeSecurityControls(props: {
         Enable Encrypt and/or Sign, then use Outlook’s Send. Scomm.AI protects the message at send
         time (Microsoft Graph MIME when signed in silently, otherwise inline OpenPGP in the body).
         Classical OpenPGP keys come from the pubkey directory (local by default). S/MIME stays in native Outlook.
+        Paid <code>pgp</code> add-on required.
       </p>
       <p className="note">
         Microsoft Graph send:{" "}
@@ -99,13 +105,14 @@ export function ComposeSecurityControls(props: {
               ? `unavailable (${graphDiagnostics.error ?? "unknown reason"}) — Send will use inline OpenPGP in the compose body.`
               : "configured — Send uses silent Graph when a session exists, otherwise inline OpenPGP."}
       </p>
+      {!props.pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
       <div className="actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <label>
           <input
             type="checkbox"
             checked={security.sign}
             onChange={(e) => security.setSign(e.target.checked)}
-            disabled={!props.engineReady}
+            disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckSign)}
           />{" "}
           Sign
         </label>
@@ -114,7 +121,7 @@ export function ComposeSecurityControls(props: {
             type="checkbox"
             checked={security.encrypt}
             onChange={(e) => security.setEncrypt(e.target.checked)}
-            disabled={!props.engineReady}
+            disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckEncrypt)}
           />{" "}
           Encrypt
         </label>

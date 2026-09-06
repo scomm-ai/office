@@ -22,7 +22,7 @@ Product paths must not depend on a dedicated SComm Office server. Prefer direct 
 
 | Concern | Host |
 |---------|------|
-| Profile / billing SSO + entitlements | Billing host (Better Auth + `/api/v1/*`) |
+| Profile / billing SSO + entitlements | Billing host via `@2key/browser-sdk` |
 | Public keys | Production pubkey service (same as secMail) |
 | Local AI / BYOM routing | Third-party [idr.to](https://idr.to) browser SDK |
 
@@ -30,11 +30,11 @@ A Fastify app under `apps/server` may remain as a **local/test fixture only**. I
 
 ### 3. Dual identity
 
-Mailbox/host identity (Office.js / future Graph Nested App Auth) is **separate** from profile/billing SSO (Better Auth on the billing host). Mirror secMail’s mailbox auth vs `app_auth` split. Never conflate mailbox OAuth tokens with billing license JWTs.
+Mailbox/host identity (Office.js / future Graph Nested App Auth) is **separate** from profile/billing SSO on the billing host. Mirror secMail’s mailbox auth vs `app_auth` split. Never conflate mailbox OAuth tokens with billing license JWTs.
 
 ### 4. Entitlements gate premium capability
 
-License JWTs are verified **client-side** (ES256 public PEM). Checkout, invoices, and seat admin stay on the billing portal. Premium AI, connectors, and future crypto add-ons require active entitlement claims (`hasAddon` / `hasPlan` / `hasProduct`).
+License JWTs are verified **client-side** by `@2key/browser-sdk` (ES256 public PEM). Checkout, invoices, and seat admin stay on the billing portal. Premium AI, connectors, and future crypto add-ons require active entitlement claims (`hasAddon` / `hasOffering` / `hasProduct`).
 
 ### 5. Trust boundaries
 

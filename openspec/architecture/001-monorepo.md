@@ -29,7 +29,7 @@ Without a disciplined monorepo layout, Office.js calls leak into semantic parsin
 
 ## Non-goals
 
-- Publishing packages to npm (all `private: true` for MVP; billing module may extract later)
+- Publishing packages to npm (all `private: true` for MVP)
 - Nx/Turborepo orchestration
 - Multi-language components (TypeScript only for Office; Dart SDK is reference only)
 - Docker-first development
@@ -57,7 +57,6 @@ scomm-office/
 │   ├── semantics/
 │   ├── identity/
 │   ├── pubkeys/           # Production pubkey client + mocks
-│   ├── billing/           # Better Auth + license JWT (JS SDK-shaped)
 │   ├── byoai/             # Local (IDR) + Cloud BYOAI
 │   ├── idr/               # Third-party IDR embed
 │   ├── crypto/
@@ -79,7 +78,6 @@ scomm-office/
 |---------|----------------|
 | `@scomm-office/core` | Cross-cutting primitives |
 | `@scomm-office/office` | Outlook / MailHost boundary |
-| `@scomm-office/billing` | Auth + license entitlements |
 | `@scomm-office/byoai` | Local + Cloud AI providers |
 | `@scomm-office/idr` | IDR browser SDK wrapper |
 | `@scomm-office/pubkeys` | Public key directory clients |
@@ -104,11 +102,11 @@ Apps depend on packages; packages must not depend on apps.
 | Item | Status |
 |------|--------|
 | Root workspace | Done |
-| Billing + BYOAI packages | In progress |
+| Billing via `@2key/browser-sdk` + BYOAI | Done |
 | CI | Done |
 
 ## Deferred work
 
 - Product Office API server ([005](./005-no-office-server.md), [deferred](../deferred/README.md))
-- npm publishing of extracted billing JS SDK
+- npm publishing of `@2key/browser-sdk` (until then, pin the sibling workspace)
 - Playwright E2E in CI

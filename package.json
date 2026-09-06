@@ -11,13 +11,13 @@
   "scripts": {
     "dev": "pnpm run --parallel --filter @scomm-office/outlook-addin --filter @scomm-office/dev-console dev",
     "dev:with-fixture-server": "pnpm run --parallel --filter @scomm-office/server --filter @scomm-office/outlook-addin --filter @scomm-office/dev-console dev",
-    "build": "pnpm -r run build",
+    "build": "pnpm -r --filter './apps/**' --filter './packages/**' run build",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r --filter './apps/**' --filter './packages/**' run typecheck",
+    "test": "pnpm -r --filter './apps/**' --filter './packages/**' run test",
     "test:unit": "pnpm -r --filter './packages/**' run test",
     "clean": "pnpm -r run clean && rimraf node_modules"
   },

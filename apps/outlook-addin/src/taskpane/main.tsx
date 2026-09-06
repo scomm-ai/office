@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { FluentApp } from "./ui/fluent-app";
 import "./styles.css";
 
 /**
@@ -16,6 +17,20 @@ function isMsalResponseHash(): boolean {
   return /[#&](code|error|state)=/.test(window.location.hash);
 }
 
+function mountTaskPane(): void {
+  const root = document.getElementById("root");
+  if (!root) {
+    return;
+  }
+  createRoot(root).render(
+    <StrictMode>
+      <FluentApp>
+        <App />
+      </FluentApp>
+    </StrictMode>,
+  );
+}
+
 if (isMsalResponseHash()) {
   // Don't boot the real add-in here (Office.onReady/mailbox detection makes
   // no sense in a bare auth popup) — instead run MSAL's own redirect-bridge
@@ -26,13 +41,10 @@ if (isMsalResponseHash()) {
     .catch((error) => {
       console.error("[Scomm.AI][auth] Failed to relay MSAL popup response:", error);
     });
+} else if (typeof Office !== "undefined" && Office.onReady) {
+  Office.onReady(() => {
+    mountTaskPane();
+  });
 } else {
-  const root = document.getElementById("root");
-  if (root) {
-    createRoot(root).render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    );
-  }
+  mountTaskPane();
 }

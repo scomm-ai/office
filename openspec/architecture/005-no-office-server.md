@@ -27,7 +27,7 @@ Shipping a product Office backend before it is required creates auth duplication
 ## Constraints
 
 - Add-in WebView must call external HTTPS origins allowed by CSP / Office host policy
-- No long-lived Office-server session; billing uses Better Auth + license JWT
+- No long-lived Office-server session; billing uses `@2key/browser-sdk` (DeviceID + license JWT)
 
 ## Proposed design
 

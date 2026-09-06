@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResolvedConfiguration } from "@scomm-office/protocol";
+import { describe, expect, it } from "vitest";
 import { MockMailHost } from "@scomm-office/office";
 import {
   createPubkeyClient,
@@ -13,23 +12,6 @@ import {
   signComposeBody,
 } from "./mail-crypto-actions";
 import type { OfficePubkeySession } from "./pubkey-session";
-
-let mockHasAddon = false;
-
-vi.mock("@scomm-office/billing", async () => {
-  const actual =
-    await vi.importActual<typeof import("@scomm-office/billing")>("@scomm-office/billing");
-  return {
-    ...actual,
-    BillingSdk: {
-      ...actual.BillingSdk,
-      hasAddon: (code: string) => mockHasAddon && code === actual.BILLING_ADDON_CRYPTO,
-    },
-  };
-});
-
-const ENTITLED_SETTINGS = { requireCryptoAddonEntitlement: true } as ResolvedConfiguration;
-const UNGATED_SETTINGS = { requireCryptoAddonEntitlement: false } as ResolvedConfiguration;
 
 async function buildSession(email: string): Promise<OfficePubkeySession> {
   const bundle = createPubkeyClient({ readBaseUrl: "https://pubkey.example.test" });
@@ -72,47 +54,16 @@ function mockGetBestKey(session: OfficePubkeySession, publicKeyByEmail: Record<s
 
 describe("decryptCurrentBody", () => {
   const email = "alice@example.com";
-  beforeEach(() => {
-    mockHasAddon = false;
-  });
 
-  it("round-trips encrypt -> decrypt when entitled", async () => {
+  it("round-trips encrypt -> decrypt", async () => {
     const session = await buildSession(email);
     const alice = await addPgpKey(session, email, 1);
     mockGetBestKey(session, { [email]: alice.publicKey });
-    mockHasAddon = true;
 
     const mailHost = new MockMailHost({ mode: "compose", to: [{ emailAddress: email }], bodyText: "hello from the compose pane" });
     await encryptComposeBody({ session, mailHost, userEmail: email, sign: false });
 
-    const result = await decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS });
-    expect(result.plaintext.trim().length).toBeGreaterThan(0);
-  });
-
-  it("does not gate decryption while the Crypto add-on check is disabled", async () => {
-    const session = await buildSession(email);
-    const alice = await addPgpKey(session, email, 1);
-    mockGetBestKey(session, { [email]: alice.publicKey });
-    mockHasAddon = false;
-
-    const mailHost = new MockMailHost({ mode: "compose", to: [{ emailAddress: email }], bodyText: "hello from the compose pane" });
-    await encryptComposeBody({ session, mailHost, userEmail: email, sign: false });
-
-    const result = await decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS });
-    expect(result.plaintext.trim().length).toBeGreaterThan(0);
-  });
-
-  it("allows decryption without entitlement when the org setting is disabled", async () => {
-    const session = await buildSession(email);
-    const alice = await addPgpKey(session, email, 1);
-    mockGetBestKey(session, { [email]: alice.publicKey });
-    mockHasAddon = true;
-
-    const mailHost = new MockMailHost({ mode: "compose", to: [{ emailAddress: email }], bodyText: "hello from the compose pane" });
-    await encryptComposeBody({ session, mailHost, userEmail: email, sign: false });
-
-    mockHasAddon = false;
-    const result = await decryptCurrentBody({ session, mailHost, settings: UNGATED_SETTINGS });
+    const result = await decryptCurrentBody({ session, mailHost });
     expect(result.plaintext.trim().length).toBeGreaterThan(0);
   });
 
@@ -120,7 +71,6 @@ describe("decryptCurrentBody", () => {
     const session = await buildSession(email);
     await addPgpKey(session, email, 1); // decoy — never used for encryption
     const target = await addPgpKey(session, email, 2);
-    mockHasAddon = true;
 
     // Encrypt directly to the second key (bypassing directory lookup) so
     // the ciphertext's recipient key ID matches only vault key 2.
@@ -133,14 +83,13 @@ describe("decryptCurrentBody", () => {
       bodyText: new TextDecoder().decode(ciphertext),
     });
 
-    const result = await decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS });
+    const result = await decryptCurrentBody({ session, mailHost });
     expect(result.plaintext).toBe("for key two only");
   });
 
   it("throws a clear error when no vault key matches the ciphertext", async () => {
     const session = await buildSession(email);
     await addPgpKey(session, email, 1);
-    mockHasAddon = true;
 
     const stranger = await session.pgpEngine.generateKey({ email: "stranger@example.com" });
     const ciphertext = await session.pgpEngine.encrypt({
@@ -152,9 +101,7 @@ describe("decryptCurrentBody", () => {
       bodyText: new TextDecoder().decode(ciphertext),
     });
 
-    await expect(
-      decryptCurrentBody({ session, mailHost, settings: ENTITLED_SETTINGS }),
-    ).rejects.toThrow(/No Vault key/);
+    await expect(decryptCurrentBody({ session, mailHost })).rejects.toThrow(/No Vault key/);
   });
 });
 
@@ -189,11 +136,10 @@ describe("lookupRecipientStatuses", () => {
 });
 
 describe("signComposeBody", () => {
-  it("is never gated by the decryption entitlement check", async () => {
+  it("signs without touching decryption entitlement", async () => {
     const email = "alice@example.com";
     const session = await buildSession(email);
     await addPgpKey(session, email, 1);
-    mockHasAddon = false; // no crypto entitlement at all
 
     const mailHost = new MockMailHost({ mode: "compose", bodyText: "hello there" });
     const note = await signComposeBody({ session, mailHost });
