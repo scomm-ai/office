@@ -115,7 +115,6 @@ export function decideSendGate(input: {
   pgpEntitled: boolean;
 }): { allow: boolean; needsProtect: boolean; errorMessage?: string } {
   const { bodyProtected, encrypt, sign, recipients, pgpEntitled } = input;
-  const pgpEncryptable = recipients.filter((row) => row.addInCanEncrypt);
 
   if (bodyProtected) {
     return { allow: true, needsProtect: false };
@@ -132,16 +131,6 @@ export function decideSendGate(input: {
 
   if (!pgpEntitled) {
     return { allow: true, needsProtect: false };
-  }
-
-  if (pgpEncryptable.length > 0 && !encrypt) {
-    return {
-      allow: false,
-      needsProtect: false,
-      errorMessage:
-        `${pgpEncryptable.map((row) => row.email).join(", ")} ` +
-        "have published OpenPGP keys. Click Encrypt on the Scomm.AI ribbon, or change recipients.",
-    };
   }
 
   if (encrypt) {

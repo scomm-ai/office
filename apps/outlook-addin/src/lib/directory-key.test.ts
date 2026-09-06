@@ -88,6 +88,7 @@ describe("decideSendGate", () => {
       encrypt: true,
       sign: false,
       recipients: [missing],
+      pgpEntitled: true,
     });
     expect(gate.allow).toBe(false);
     expect(gate.errorMessage).toMatch(/no OpenPGP key on the pubkey directory/i);

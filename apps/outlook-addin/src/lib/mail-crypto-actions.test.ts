@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MockMailHost } from "@scomm-office/office";
 import {
   createPubkeyClient,
@@ -12,6 +12,10 @@ import {
   signComposeBody,
 } from "./mail-crypto-actions";
 import type { OfficePubkeySession } from "./pubkey-session";
+
+// PGP add-on entitlement is billing-pgp.test.ts's concern; these tests exercise
+// the crypto operations themselves and assume an entitled license.
+vi.mock("./billing-pgp", () => ({ assertPgpAddon: vi.fn().mockResolvedValue(undefined) }));
 
 async function buildSession(email: string): Promise<OfficePubkeySession> {
   const bundle = createPubkeyClient({ readBaseUrl: "https://pubkey.example.test" });

@@ -19,7 +19,6 @@ import {
 	emailSha256Hex,
 	sha256Bytes,
 	sha256ToUuidV8,
-	sha256Bytes,
 	bytesToHex,
 } from "@scomm/pubkey-protocol";
 import { pubkeyFetch, joinUrl } from "./http.js";

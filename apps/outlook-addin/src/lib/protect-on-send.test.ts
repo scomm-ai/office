@@ -4,6 +4,13 @@ import { createPubkeyClient, encodeBase64Url, formatOpenPgpLocator } from "@scom
 import { protectOnSend } from "./protect-on-send";
 import type { OfficePubkeySession } from "./pubkey-session";
 
+// PGP add-on entitlement is billing-pgp.test.ts's concern; these tests exercise
+// the send-time protection flow itself and assume an entitled license.
+vi.mock("./billing-pgp", () => ({
+  assertPgpAddon: vi.fn().mockResolvedValue(undefined),
+  loadPgpEntitlement: vi.fn().mockResolvedValue(true),
+}));
+
 async function buildSession(email: string): Promise<OfficePubkeySession> {
   const bundle = createPubkeyClient({ readBaseUrl: "https://pubkey.example.test" });
   await bundle.vault.createVault(email);
