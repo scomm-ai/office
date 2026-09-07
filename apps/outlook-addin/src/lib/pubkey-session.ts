@@ -389,3 +389,35 @@ export async function syncHostedVault(session: OfficePubkeySession, email: strin
     persistSecret: secret,
   });
 }
+
+/**
+ * Pull-only vault refresh: downloads the current hosted generation (if it's
+ * newer than what's already applied) and merges it into the local Vault,
+ * without also re-uploading local state. Use this to pick up keys another
+ * device published, without racing an upload against it.
+ */
+export async function pullHostedVault(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<{ hasPgp: boolean }> {
+  if (!session.msk) {
+    const restored = await restoreOfficeVault(session);
+    if (!restored.restored || !session.msk) {
+      throw new Error("MSK is not armed");
+    }
+  }
+  const secret = await ensureDeviceSecret(session);
+  if (!session.vault.unlocked) {
+    await session.vault.unlockVault(secret);
+  }
+  await session.client.downloadCurrentVault({ email, vault: session.vault, merge: true });
+  await session.vault.persist(secret);
+  await importMskFromVault(session);
+  const hasPgp = session.vault
+    .listKeys()
+    .some(
+      (entry) =>
+        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
+    );
+  return { hasPgp };
+}

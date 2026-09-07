@@ -28,6 +28,7 @@ import {
   fetchVaultInventory,
   listVaultTiles,
   syncHostedVault,
+  pullHostedVault,
   type OfficePubkeySession,
 } from "../../lib/pubkey-session";
 
@@ -70,11 +71,20 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
   const [vaultPassphrase, setVaultPassphrase] = useState("");
   const [vaultBackup, setVaultBackup] = useState("");
   const [vaultTiles, setVaultTiles] = useState<Array<Record<string, unknown>>>([]);
+  const [showPurposeFilter, setShowPurposeFilter] = useState(false);
+  const [keyPurposeFilter, setKeyPurposeFilter] = useState<"all" | "encryption" | "signing">("all");
   const [inventoryNote, setInventoryNote] = useState<string | null>(null);
   const [keyPackageJson, setKeyPackageJson] = useState("");
   const [keyPackagePass, setKeyPackagePass] = useState("");
   const [pairingCode, setPairingCode] = useState("");
   const [devicesNote, setDevicesNote] = useState<string | null>(null);
+  // Every path that reaches "verified" (genesis enroll+verify, device
+  // transfer, recovery, or a vault restored/imported from a prior session)
+  // implies the server already has this identity's MSK armed — pairing
+  // itself requires an already-armed MSK (see createPairingSession in
+  // @scomm-office/pubkeys). Track it so we don't invite a second, redundant
+  // enrollment attempt that the server will reject with 409.
+  const [directoryArmed, setDirectoryArmed] = useState(false);
 
   const directory = useMemo(
     () => (pubkeyBase ? new ProductionPubkeyDirectory(pubkeyBase) : null),
@@ -96,7 +106,10 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     let cancelled = false;
     void restoreOfficeVault(session).then((state) => {
       if (cancelled) return;
-      if (state.restored) setBootstrapStep("verified");
+      if (state.restored) {
+        setBootstrapStep("verified");
+        setDirectoryArmed(true);
+      }
       setHasPgp(state.hasPgp);
       if (session.vault.unlocked) setVaultTiles(listVaultTiles(session));
     });
@@ -175,9 +188,18 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       setBootstrapStep("otp-sent");
       setBootstrapStatus(enrollOtpStatus(userEmail, result));
     } catch (err) {
-      setBootstrapStatus(
-        `Could not register this identity on the directory: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const status = err && typeof err === "object" && "status" in err ? Number(err.status) : 0;
+      const message = err instanceof Error ? err.message : String(err);
+      if (status === 409 && /already has an armed msk/i.test(message)) {
+        // We only manage one MSK per identity: the directory already has
+        // this key armed (every path that reaches this button — genesis,
+        // transfer, recovery, or a restored vault — implies that), so a
+        // second enrollment is a no-op, not a failure.
+        setDirectoryArmed(true);
+        setBootstrapStatus("This identity is already registered on the directory — no action needed.");
+        return;
+      }
+      setBootstrapStatus(`Could not register this identity on the directory: ${message}`);
     } finally {
       setBusy(false);
     }
@@ -205,6 +227,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       });
       await persistMsk(session, userEmail);
       setBootstrapStep("verified");
+      setDirectoryArmed(true);
       setBootstrapStatus("SComm identity created on this device. Synchronize the Vault before creating a new encryption key.");
     } catch (err) {
       setBootstrapStatus(`OTP verify failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -264,6 +287,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
           const { hasPgp, hasMsk } = await completeDeviceTransfer(session, userEmail, { vrk, aek });
           setHasPgp(hasPgp);
           setBootstrapStep("verified");
+          setDirectoryArmed(true);
           setBootstrapStatus(
             hasMsk
               ? "Paired and synced — this device can now sign and decrypt with your identity."
@@ -320,6 +344,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       });
       await persistMsk(session, userEmail);
       setBootstrapStep("verified");
+      setDirectoryArmed(true);
       setBootstrapStatus("Identity recovered. Historical encryption keys are unavailable unless another device or ordinary-key backup exists.");
     } catch (err) {
       setBootstrapStatus(`Recovery verify failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -345,6 +370,24 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       );
     } catch (err) {
       setDevicesNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, sessionFor]);
+
+  const handleSyncVault = useCallback(async () => {
+    if (!userEmail) return;
+    const session = sessionFor();
+    if (!session) return;
+    setBusy(true);
+    setBootstrapStatus(null);
+    try {
+      const { hasPgp: synced } = await pullHostedVault(session, userEmail);
+      setHasPgp(synced);
+      if (session.vault.unlocked) setVaultTiles(listVaultTiles(session));
+      setBootstrapStatus("Vault synced. Local Vault now matches the directory's latest generation.");
+    } catch (err) {
+      setBootstrapStatus(`Vault sync failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -411,7 +454,15 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
       await importVaultBackup(session, vaultBackup.trim(), vaultPassphrase.trim());
       const state = await restoreOfficeVault(session);
       setHasPgp(state.hasPgp);
-      if (state.restored) setBootstrapStep("verified");
+      if (state.restored) {
+        setBootstrapStep("verified");
+        // Unlike the other "verified" paths, a manually-imported backup's
+        // origin isn't known — it may predate this identity ever being
+        // armed on the directory. Leave directoryArmed as-is: the Register
+        // button stays available so this ambiguous case can still self-heal,
+        // and a redundant attempt is now handled gracefully (see
+        // handleRegisterOnThisDirectory).
+      }
       setBootstrapStatus("Vault imported from passphrase backup.");
     } catch (err) {
       setBootstrapStatus(`Vault import failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -592,21 +643,28 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         ) : (
           <div className="actions">
             <p className="note status ok">This device is authorized. Master Identity Key is protected.</p>
-            <p className="note">
-              A restored Vault is not the same as an armed identity on this pubkey directory. If publish
-              fails with “No armed MSK”, register the existing key here, then verify the OTP.
-            </p>
             <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleListDevices()}>
               Show devices
             </Button>
-            <Button
-              appearance="secondary"
-              size="small"
-              disabled={busy}
-              onClick={() => void handleRegisterOnThisDirectory()}
-            >
-              Register identity on this directory
+            <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleSyncVault()}>
+              Sync vault
             </Button>
+            {directoryArmed ? null : (
+              <>
+                <p className="note">
+                  A restored Vault is not the same as an armed identity on this pubkey directory. If publish
+                  fails with “No armed MSK”, register the existing key here, then verify the OTP.
+                </p>
+                <Button
+                  appearance="secondary"
+                  size="small"
+                  disabled={busy}
+                  onClick={() => void handleRegisterOnThisDirectory()}
+                >
+                  Register identity on this directory
+                </Button>
+              </>
+            )}
             {!hasPgp ? (
               <>
                 <Button
@@ -677,14 +735,63 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         {vaultTiles.length === 0 ? (
           <p className="note">No content keys in this device Vault yet.</p>
         ) : (
-          vaultTiles.map((tile) => (
-            <div key={String(tile.fingerprint ?? tile.locator)} className="note" style={{ border: "1px solid #ccc", padding: 8, marginBottom: 8 }}>
-              <strong>{String(tile.family ?? "KEY").toUpperCase()}</strong>
-              {tile.status === "active" ? " — DEFAULT" : " — HISTORICAL"}
-              <div>Key ID {String(tile.locator ?? tile.fingerprint ?? "—")}</div>
-              <div>{String(tile.algorithm ?? "")}</div>
+          <>
+            <div className="actions">
+              <Button
+                appearance="secondary"
+                size="small"
+                onClick={() => {
+                  setShowPurposeFilter((prev) => !prev);
+                  setKeyPurposeFilter("all");
+                }}
+              >
+                {showPurposeFilter ? "Hide purpose filter" : "Filter by purpose"}
+              </Button>
             </div>
-          ))
+            {showPurposeFilter ? (
+              <div className="actions" role="tablist" aria-label="Filter by key purpose">
+                {(
+                  [
+                    { value: "all", label: "All" },
+                    { value: "encryption", label: "Encryption" },
+                    { value: "signing", label: "Signing" },
+                  ] as const
+                ).map((tab) => (
+                  <Button
+                    key={tab.value}
+                    appearance={keyPurposeFilter === tab.value ? "primary" : "secondary"}
+                    size="small"
+                    aria-pressed={keyPurposeFilter === tab.value}
+                    onClick={() => setKeyPurposeFilter(tab.value)}
+                  >
+                    {tab.label}
+                    {tab.value === "all"
+                      ? ` (${vaultTiles.length})`
+                      : ` (${vaultTiles.filter((t) => t.purpose === tab.value).length})`}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            {(() => {
+              const filtered =
+                !showPurposeFilter || keyPurposeFilter === "all"
+                  ? vaultTiles
+                  : vaultTiles.filter((tile) => tile.purpose === keyPurposeFilter);
+              return filtered.length === 0 ? (
+                <p className="note">No {keyPurposeFilter} keys in this device Vault.</p>
+              ) : (
+                filtered.map((tile) => (
+                  <div key={String(tile.fingerprint ?? tile.locator)} className="note" style={{ border: "1px solid #ccc", padding: 8, marginBottom: 8 }}>
+                    <strong>{String(tile.family ?? "KEY").toUpperCase()}</strong>
+                    {tile.status === "active" ? " — DEFAULT" : " — HISTORICAL"}
+                    <div>Key ID {String(tile.locator ?? tile.fingerprint ?? "—")}</div>
+                    <div>{String(tile.algorithm ?? "")}</div>
+                    {showPurposeFilter ? <div>Purpose: {String(tile.purpose ?? "—")}</div> : null}
+                  </div>
+                ))
+              );
+            })()}
+          </>
         )}
         {inventoryNote ? <p className="note">{inventoryNote}</p> : null}
         <div className="actions">

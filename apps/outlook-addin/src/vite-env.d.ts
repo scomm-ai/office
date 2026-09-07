@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_AZURE_CLIENT_ID?: string;
   readonly VITE_AZURE_TENANT_ID?: string;
   readonly VITE_AZURE_AUTHORITY?: string;
+  /** Dev-only: "1" skips the "pgp" billing add-on gate. See billing-pgp.ts. */
+  readonly VITE_DEV_SKIP_PGP_ADDON?: string;
 }
 
 interface ImportMeta {

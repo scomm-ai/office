@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPubkeyClient } from "@scomm-office/pubkeys";
-import { publishPgpContentKey, type OfficePubkeySession } from "./pubkey-session";
+import { publishPgpContentKey, pullHostedVault, type OfficePubkeySession } from "./pubkey-session";
 
 // PGP add-on entitlement is billing-pgp.test.ts's concern; these tests exercise
 // key publishing itself and assume an entitled license.
@@ -65,5 +65,74 @@ describe("publishPgpContentKey", () => {
     expect(result.generated).toBe(false);
     expect(called).toBe(1);
     expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
+  });
+});
+
+describe("pullHostedVault", () => {
+  it("merges a remote-only key into the local Vault without uploading", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+
+    let uploadCalled = false;
+    session.client.uploadVault = (async () => {
+      uploadCalled = true;
+      return { generation: 1, created_at: new Date().toISOString() };
+    }) as typeof session.client.uploadVault;
+
+    session.client.downloadCurrentVault = (async ({ vault }: { vault: OfficePubkeySession["vault"] }) => {
+      // Simulate a generation another device published: a PGP encryption
+      // key this local Vault has never seen.
+      vault.addKey({
+        kind: "content",
+        key_id: 99,
+        family: "pgp",
+        purpose: "encryption",
+        algorithm: "openpgp-cv25519",
+        fingerprint: "remote-fingerprint",
+        locator: "remote-fingerprint",
+        status: "active",
+        private_material: new Uint8Array([1, 2, 3]),
+      });
+      vault.generation = 2;
+      return 2;
+    }) as typeof session.client.downloadCurrentVault;
+
+    expect(session.vault.listKeys()).toHaveLength(0);
+
+    const result = await pullHostedVault(session, email);
+
+    expect(result.hasPgp).toBe(true);
+    expect(session.vault.listKeys()).toHaveLength(1);
+    expect(session.vault.getCurrentKey("encryption")?.fingerprint).toBe("remote-fingerprint");
+    expect(uploadCalled).toBe(false);
+  });
+
+  it("is a no-op when nothing changed on the server", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    const generated = await session.pgpEngine.generateKey({ email });
+    session.vault.addKey({
+      kind: "content",
+      key_id: 1,
+      family: "pgp",
+      purpose: "encryption",
+      algorithm: "openpgp-cv25519",
+      fingerprint: generated.fingerprint,
+      locator: generated.fingerprint,
+      status: "active",
+      private_material: generated.privateKey,
+    });
+
+    let downloadCalls = 0;
+    session.client.downloadCurrentVault = (async () => {
+      downloadCalls += 1;
+      return session.vault.generation;
+    }) as typeof session.client.downloadCurrentVault;
+
+    const result = await pullHostedVault(session, email);
+
+    expect(downloadCalls).toBe(1);
+    expect(result.hasPgp).toBe(true);
+    expect(session.vault.listKeys()).toHaveLength(1);
   });
 });

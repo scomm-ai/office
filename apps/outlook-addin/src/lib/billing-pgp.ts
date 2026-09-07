@@ -28,10 +28,22 @@ export function hasPgpEntitlement(gate: PgpAddonGate | null | undefined): boolea
 }
 
 /**
+ * Local-only escape hatch so the "pgp" add-on paywall doesn't block testing
+ * against a dev pubkey server with no real billing backend. Gated on
+ * `import.meta.env.DEV` (false in a production build, regardless of this
+ * flag) so it can never ship — set VITE_DEV_SKIP_PGP_ADDON=1 in an untracked
+ * .env.local to enable it locally.
+ */
+function devSkipsPgpAddon(): boolean {
+  return import.meta.env.DEV && import.meta.env.VITE_DEV_SKIP_PGP_ADDON === "1";
+}
+
+/**
  * Restore the cached license for the current billing origin and answer the `pgp` gate.
  * Empty origin (no Settings value) is not entitled. Restore/network failures fail closed.
  */
 export async function loadPgpEntitlement(apiBaseUrl?: string): Promise<boolean> {
+  if (devSkipsPgpAddon()) return true;
   const origin =
     apiBaseUrl !== undefined
       ? apiBaseUrl.trim()
