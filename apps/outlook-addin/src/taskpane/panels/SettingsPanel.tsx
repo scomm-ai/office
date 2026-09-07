@@ -56,22 +56,6 @@ export function SettingsPanel() {
           onChange={(_, data) => updateSettings({ billingPortalUrl: data.value || undefined })}
         />
       </Field>
-      <Field label="Pubkey read base URL">
-        <Input
-          type="url"
-          placeholder="https://pubkey.example.com"
-          value={settings.pubkeyReadBaseUrl ?? settings.pubkeyServerUrl ?? ""}
-          onChange={(_, data) => updateSettings({ pubkeyReadBaseUrl: data.value || undefined })}
-        />
-      </Field>
-      <Field label="Pubkey write base URL">
-        <Input
-          type="url"
-          placeholder="https://pubkey.scomm.ai"
-          value={settings.pubkeyWriteBaseUrl ?? ""}
-          onChange={(_, data) => updateSettings({ pubkeyWriteBaseUrl: data.value || undefined })}
-        />
-      </Field>
       <Field label="Fixture server URL (optional)">
         <Input
           type="url"

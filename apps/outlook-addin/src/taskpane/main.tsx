@@ -41,10 +41,12 @@ if (isMsalResponseHash()) {
     .catch((error) => {
       console.error("[Scomm.AI][auth] Failed to relay MSAL popup response:", error);
     });
-} else if (typeof Office !== "undefined" && Office.onReady) {
-  Office.onReady(() => {
-    mountTaskPane();
-  });
 } else {
+  // Do NOT gate this on Office.onReady(): outside a real Office host (e.g. a
+  // plain browser tab used for standalone/mock-host testing) that promise
+  // never resolves — Office.js waits for a handshake from a host frame that
+  // never arrives, and the page hangs on the static "Starting…" placeholder
+  // forever. App.tsx's own bootstrapHost() awaits Office.onReady() itself
+  // and falls back to MockMailHost when there's no real Office host.
   mountTaskPane();
 }

@@ -476,6 +476,16 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     <section>
       <h2>Security</h2>
       <dl className="meta-grid">
+        <dt>Identity</dt>
+        <dd>
+          {bootstrapStep === "verified" ? (
+            <span className="status ok">
+              Registered · Vault/MSK on this device{hasPgp ? " · OpenPGP keys published" : ""}
+            </span>
+          ) : (
+            <span className="status muted">Not registered on this device</span>
+          )}
+        </dd>
         <dt>Mail E2EE</dt>
         <dd>
           {engineReady ? (
