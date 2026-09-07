@@ -24,23 +24,23 @@ describe("publishPgpContentKey", () => {
   it("publishes signing and encryption artifacts from a new key", async () => {
     const email = "alice@example.com";
     const session = await buildSession(email);
-    let signingArtifact: { purpose?: string; algorithm?: string } | null = null;
-    let encryptionArtifact: { purpose?: string; algorithm?: string } | null = null;
-    session.client.setSigningKeyWithProof = (async (input: { artifact: typeof signingArtifact }) => {
-      signingArtifact = input.artifact;
+    type KeyArtifact = { purpose?: string; algorithm?: string };
+    const captured: { signing?: KeyArtifact; encryption?: KeyArtifact } = {};
+    session.client.setSigningKeyWithProof = (async (input: { artifact: KeyArtifact }) => {
+      captured.signing = input.artifact;
       return { key_id: 12, keys: [{ purpose: "signing", key_id: 12 }] };
     }) as typeof session.client.setSigningKeyWithProof;
-    session.client.publishEncryptionKey = (async (input: { artifact: typeof encryptionArtifact }) => {
-      encryptionArtifact = input.artifact;
+    session.client.publishEncryptionKey = (async (input: { artifact: KeyArtifact }) => {
+      captured.encryption = input.artifact;
       return { key_id: 11, keys: [{ purpose: "encryption", key_id: 11 }] };
     }) as typeof session.client.publishEncryptionKey;
 
     const result = await publishPgpContentKey(session, email);
     expect(result.generated).toBe(true);
-    expect(signingArtifact?.purpose).toBe("signing");
-    expect(signingArtifact?.algorithm).toBe("openpgp-ed25519");
-    expect(encryptionArtifact?.purpose).toBe("encryption");
-    expect(encryptionArtifact?.algorithm).toBe("openpgp-cv25519");
+    expect(captured.signing?.purpose).toBe("signing");
+    expect(captured.signing?.algorithm).toBe("openpgp-ed25519");
+    expect(captured.encryption?.purpose).toBe("encryption");
+    expect(captured.encryption?.algorithm).toBe("openpgp-cv25519");
     expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
   });
 

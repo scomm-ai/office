@@ -20,7 +20,7 @@ jobs:
     env:
       SCOMM_OFFICE_BASE_URL: https://office.scomm.ai
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Checkout 2key billing SDKs (sibling)
         env:
@@ -38,11 +38,11 @@ jobs:
               "$dest"
           fi
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
@@ -65,7 +65,7 @@ jobs:
           ! grep -q 'https://localhost:5173' apps/outlook-addin/dist/manifest.xml
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: apps/outlook-addin/dist
 
@@ -78,4 +78,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
