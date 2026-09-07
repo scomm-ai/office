@@ -3,7 +3,7 @@ import { attachmentEncryptionNotice } from "@scomm-office/office";
 import { ComposeSecurityControls } from "../components/ComposeSecurityControls";
 import { EcdhEnvelopeControls } from "../components/EcdhEnvelopeControls";
 import { useHostContext } from "../../lib/host-context";
-import { Button } from "../ui/layout";
+import { Button, Divider, Field, Input, Note, PageTitle, StatusBadge, Textarea, tokens, usePaneStyles } from "../ui/layout";
 import {
   ProductionPubkeyDirectory,
   extractPgpMessage,
@@ -52,6 +52,7 @@ function enrollOtpStatus(email: string, result: unknown): string {
 }
 
 export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPaneCryptoAction }) {
+  const styles = usePaneStyles();
   const { settings, currentUserEmail, isMockHost, mailHost, message, refreshMessage, capabilities } =
     useHostContext();
   const [busy, setBusy] = useState(false);
@@ -524,172 +525,194 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
   const attachmentNotice = isMockHost ? null : attachmentEncryptionNotice(capabilities);
 
   return (
-    <section>
-      <h2>Security</h2>
-      <dl className="meta-grid">
-        <dt>Identity</dt>
+    <section className={styles.stack}>
+      <PageTitle title="Security" />
+      <dl className={styles.metaGrid}>
+        <dt className={styles.metaLabel}>Identity</dt>
         <dd>
           {bootstrapStep === "verified" ? (
-            <span className="status ok">
+            <StatusBadge tone="ok">
               Registered · Vault/MSK on this device{hasPgp ? " · OpenPGP keys published" : ""}
-            </span>
+            </StatusBadge>
           ) : (
-            <span className="status muted">Not registered on this device</span>
+            <StatusBadge tone="muted">Not registered on this device</StatusBadge>
           )}
         </dd>
-        <dt>Mail E2EE</dt>
+        <dt className={styles.metaLabel}>Mail E2EE</dt>
         <dd>
           {engineReady ? (
-            <span className="status ok">OpenPGP (openpgp.js)</span>
+            <StatusBadge tone="ok">OpenPGP (openpgp.js)</StatusBadge>
           ) : (
-            <span className="status muted">OpenPGP engine unavailable</span>
+            <StatusBadge tone="muted">OpenPGP engine unavailable</StatusBadge>
           )}
         </dd>
-        <dt>Directory</dt>
+        <dt className={styles.metaLabel}>Directory</dt>
         <dd>{directory ? "GET /v1/keys via @scomm/pubkey" : "—"}</dd>
-        <dt>Pubkey server</dt>
+        <dt className={styles.metaLabel}>Pubkey server</dt>
         <dd>{pubkeyBase || "— (set in Settings)"}</dd>
-        <dt>ECDH envelope</dt>
+        <dt className={styles.metaLabel}>ECDH envelope</dt>
         <dd>
           {settings.experimentalEncryptionEnabled ? (
-            <span className="status ok">experimental (Settings)</span>
+            <StatusBadge tone="ok">experimental (Settings)</StatusBadge>
           ) : (
-            <span className="status muted">off</span>
+            <StatusBadge tone="muted">off</StatusBadge>
           )}
         </dd>
       </dl>
 
-      <section>
-        <h2>Scomm.AI identity</h2>
+      <Divider />
+
+      <section className={styles.stack}>
+        <PageTitle title="Scomm.AI identity" />
         {!userEmail ? (
-          <p className="note">Current user email unknown — sign in via Microsoft to set up Scomm.AI.</p>
+          <Note>Current user email unknown — sign in via Microsoft to set up Scomm.AI.</Note>
         ) : bootstrapStep === "idle" ? (
-          <div className="actions">
-            <p className="note">Set up Scomm.AI on this device for {userEmail}.</p>
-            <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleRequestOtp()}>
-              Create Scomm.AI identity
-            </Button>
-            <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
-              I already have Scomm.AI on another device
-            </Button>
+          <div className={styles.stack}>
+            <Note>Set up Scomm.AI on this device for {userEmail}.</Note>
+            <div className={styles.actions}>
+              <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleRequestOtp()}>
+                Create Scomm.AI identity
+              </Button>
+              <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
+                I already have Scomm.AI on another device
+              </Button>
+            </div>
           </div>
         ) : bootstrapStep === "otp-sent" ? (
-          <div className="actions">
-            <p className="note">Paste the 11-character Scomm.AI code sent to {userEmail}:</p>
-            <input
-              type="text"
-              maxLength={16}
-              placeholder="11-character code"
-              autoComplete="one-time-code"
-              spellCheck={false}
-              value={otpInput}
-              onChange={(e) => setOtpInput(e.target.value.replace(/[-\s]/g, ""))}
-              style={{ padding: "4px 8px", fontSize: "16px", width: "220px", marginBottom: "8px", fontFamily: "monospace" }}
-            />
-            <Button
-              appearance="primary"
-              size="small"
-              disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11}
-              onClick={() => void handleVerifyOtp()}
-            >
-              Verify code
-            </Button>
+          <div className={styles.stack}>
+            <Field label={`Paste the 11-character Scomm.AI code sent to ${userEmail}`}>
+              <Input
+                maxLength={16}
+                placeholder="11-character code"
+                autoComplete="one-time-code"
+                spellCheck={false}
+                value={otpInput}
+                onChange={(_, data) => setOtpInput(data.value.replace(/[-\s]/g, ""))}
+                style={{ fontFamily: tokens.fontFamilyMonospace }}
+              />
+            </Field>
+            <div className={styles.actions}>
+              <Button
+                appearance="primary"
+                size="small"
+                disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11}
+                onClick={() => void handleVerifyOtp()}
+              >
+                Verify code
+              </Button>
+            </div>
           </div>
         ) : bootstrapStep === "unauthorized" ? (
-          <div className="actions">
-            <p className="note">To add this device normally, approve it from an existing SComm device.</p>
-            <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleBeginTransfer()}>
-              Transfer from another SComm device
-            </Button>
-            <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("recover")}>
-              Recover identity
-            </Button>
+          <div className={styles.stack}>
+            <Note>To add this device normally, approve it from an existing SComm device.</Note>
+            <div className={styles.actions}>
+              <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleBeginTransfer()}>
+                Transfer from another SComm device
+              </Button>
+              <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("recover")}>
+                Recover identity
+              </Button>
+            </div>
           </div>
         ) : bootstrapStep === "transfer" ? (
-          <div className="actions">
-            <p className="note">Paste this pairing code on your existing device. Outlook cannot reliably scan a camera QR.</p>
-            <textarea readOnly value={pairingCode} rows={6} style={{ width: "100%" }} />
+          <div className={styles.stack}>
+            <Note>Paste this pairing code on your existing device. Outlook cannot reliably scan a camera QR.</Note>
+            <Textarea readOnly value={pairingCode} rows={6} style={{ width: "100%" }} />
           </div>
         ) : bootstrapStep === "recover" ? (
-          <div className="actions">
-            <p className="note">
+          <div className={styles.stack}>
+            <Note>
               Recovery creates a new Master Identity Key and retires the previous one. It does not restore
               encryption keys that existed only on lost devices.
-            </p>
-            <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleBeginRecovery()}>
-              Continue with recovery
-            </Button>
-            <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
-              Cancel
-            </Button>
+            </Note>
+            <div className={styles.actions}>
+              <Button appearance="primary" size="small" disabled={busy} onClick={() => void handleBeginRecovery()}>
+                Continue with recovery
+              </Button>
+              <Button appearance="secondary" size="small" disabled={busy} onClick={() => setBootstrapStep("unauthorized")}>
+                Cancel
+              </Button>
+            </div>
           </div>
         ) : bootstrapStep === "recover-otp" ? (
-          <div className="actions">
-            <p className="note">Paste the 11-character Scomm.AI code sent to {userEmail}:</p>
-            <input
-              type="text"
-              maxLength={16}
-              placeholder="11-character code"
-              autoComplete="one-time-code"
-              spellCheck={false}
-              value={otpInput}
-              onChange={(e) => setOtpInput(e.target.value.replace(/[-\s]/g, ""))}
-              style={{ padding: "4px 8px", fontSize: "16px", width: "220px", marginBottom: "8px", fontFamily: "monospace" }}
-            />
-            <Button appearance="primary" size="small" disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11} onClick={() => void handleVerifyRecovery()}>
-              Verify
-            </Button>
+          <div className={styles.stack}>
+            <Field label={`Paste the 11-character Scomm.AI code sent to ${userEmail}`}>
+              <Input
+                maxLength={16}
+                placeholder="11-character code"
+                autoComplete="one-time-code"
+                spellCheck={false}
+                value={otpInput}
+                onChange={(_, data) => setOtpInput(data.value.replace(/[-\s]/g, ""))}
+                style={{ fontFamily: tokens.fontFamilyMonospace }}
+              />
+            </Field>
+            <div className={styles.actions}>
+              <Button appearance="primary" size="small" disabled={busy || otpInput.replace(/[-\s]/g, "").length < 11} onClick={() => void handleVerifyRecovery()}>
+                Verify
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="actions">
-            <p className="note status ok">This device is authorized. Master Identity Key is protected.</p>
-            <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleListDevices()}>
-              Show devices
-            </Button>
-            <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleSyncVault()}>
-              Sync vault
-            </Button>
+          <div className={styles.stack}>
+            <StatusBadge tone="ok">This device is authorized. Master Identity Key is protected.</StatusBadge>
+            <div className={styles.actions}>
+              <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleListDevices()}>
+                Show devices
+              </Button>
+              <Button appearance="secondary" size="small" disabled={busy} onClick={() => void handleSyncVault()}>
+                Sync vault
+              </Button>
+            </div>
             {directoryArmed ? null : (
-              <>
-                <p className="note">
+              <div className={styles.stack}>
+                <Note>
                   A restored Vault is not the same as an armed identity on this pubkey directory. If publish
                   fails with “No armed MSK”, register the existing key here, then verify the OTP.
-                </p>
-                <Button
-                  appearance="secondary"
-                  size="small"
-                  disabled={busy}
-                  onClick={() => void handleRegisterOnThisDirectory()}
-                >
-                  Register identity on this directory
-                </Button>
-              </>
-            )}
-            {!hasPgp ? (
-              <>
-                <Button
-                  appearance="primary"
-                  size="small"
-                  disabled={busy || !engineReady || !pgpEntitled}
-                  onClick={() => void handlePublishPgp()}
-                >
-                  Publish OpenPGP key
-                </Button>
-                {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
-              </>
-            ) : (
-              <div>
-                <p className="note">OpenPGP encryption and signing keys are in the local Vault.</p>
-                <button type="button" disabled={busy || !engineReady} onClick={() => void handlePublishPgp()}>
-                  Publish / repair directory keys
-                </button>
+                </Note>
+                <div className={styles.actions}>
+                  <Button
+                    appearance="secondary"
+                    size="small"
+                    disabled={busy}
+                    onClick={() => void handleRegisterOnThisDirectory()}
+                  >
+                    Register identity on this directory
+                  </Button>
+                </div>
               </div>
             )}
-            {devicesNote ? <p className="note">{devicesNote}</p> : null}
+            {!hasPgp ? (
+              <div className={styles.stack}>
+                <div className={styles.actions}>
+                  <Button
+                    appearance="primary"
+                    size="small"
+                    disabled={busy || !engineReady || !pgpEntitled}
+                    onClick={() => void handlePublishPgp()}
+                  >
+                    Publish OpenPGP key
+                  </Button>
+                </div>
+                {!pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
+              </div>
+            ) : (
+              <div className={styles.stack}>
+                <Note>OpenPGP encryption and signing keys are in the local Vault.</Note>
+                <div className={styles.actions}>
+                  <Button appearance="secondary" size="small" disabled={busy || !engineReady} onClick={() => void handlePublishPgp()}>
+                    Publish / repair directory keys
+                  </Button>
+                </div>
+              </div>
+            )}
+            {devicesNote ? <Note>{devicesNote}</Note> : null}
           </div>
         )}
-        {bootstrapStatus ? <p className="note">{bootstrapStatus}</p> : null}
+        {bootstrapStatus ? <Note>{bootstrapStatus}</Note> : null}
       </section>
+
+      <Divider />
 
       <ComposeSecurityControls
         session={sessionFor()}
@@ -699,44 +722,47 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         pgpEntitled={pgpEntitled}
       />
 
-      <section>
-        <h2>OpenPGP (read)</h2>
-        <p className="note">
-          Decrypt and verify stay in this pane so plaintext is not written back to the mailbox.
-          Compose protection is the Encrypt/Sign toggles above — they apply when you press Send.
-          Attachments need Mailbox 1.8+. Encrypt, sign, and key publish require the paid{" "}
-          <code>pgp</code> add-on.
-        </p>
-        {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
-        {composeMode && attachmentNotice ? <p className="note">{attachmentNotice}</p> : null}
-        <div className="actions">
-          <button type="button" disabled={busy || !engineReady} onClick={() => void handleDecrypt()}>
+      <Divider />
+
+      <section className={styles.stack}>
+        <PageTitle
+          title="OpenPGP (read)"
+          description="Decrypt and verify stay in this pane so plaintext is not written back to the mailbox. Compose protection is the Encrypt/Sign toggles above — they apply when you press Send. Attachments need Mailbox 1.8+. Encrypt, sign, and key publish require the paid pgp add-on."
+        />
+        {!pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
+        {composeMode && attachmentNotice ? <Note>{attachmentNotice}</Note> : null}
+        <div className={styles.actions}>
+          <Button appearance="primary" size="small" disabled={busy || !engineReady} onClick={() => void handleDecrypt()}>
             Decrypt
-          </button>
+          </Button>
           <Button appearance="secondary" size="small" disabled={busy || !engineReady} onClick={() => void handleVerify()}>
             Verify signature
           </Button>
         </div>
-        {pgpPresent ? <p className="note">Current item looks like OpenPGP.</p> : null}
-        {mailStatus ? <p className="note">{mailStatus}</p> : null}
-        {decryptedBody ? <pre className="code-block">{decryptedBody}</pre> : null}
+        {pgpPresent ? <Note>Current item looks like OpenPGP.</Note> : null}
+        {mailStatus ? <Note>{mailStatus}</Note> : null}
+        {decryptedBody ? <pre className={styles.code}>{decryptedBody}</pre> : null}
       </section>
 
       {settings.experimentalEncryptionEnabled ? (
-        <EcdhEnvelopeControls directory={directory} userEmail={userEmail} pgpEntitled={pgpEntitled} />
+        <>
+          <Divider />
+          <EcdhEnvelopeControls directory={directory} userEmail={userEmail} pgpEntitled={pgpEntitled} />
+        </>
       ) : null}
 
-      <section>
-        <h2>Vault keys</h2>
-        <p className="note">
-          Tiles show the OpenPGP 64-bit Key-ID. Mailbox 1.5 task pane only — no file-save API.
-          Copy a password-wrapped package to move a key to another device.
-        </p>
+      <Divider />
+
+      <section className={styles.stack}>
+        <PageTitle
+          title="Vault keys"
+          description="Tiles show the OpenPGP 64-bit Key-ID. Mailbox 1.5 task pane only — no file-save API. Copy a password-wrapped package to move a key to another device."
+        />
         {vaultTiles.length === 0 ? (
-          <p className="note">No content keys in this device Vault yet.</p>
+          <Note>No content keys in this device Vault yet.</Note>
         ) : (
           <>
-            <div className="actions">
+            <div className={styles.actions}>
               <Button
                 appearance="secondary"
                 size="small"
@@ -749,7 +775,7 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
               </Button>
             </div>
             {showPurposeFilter ? (
-              <div className="actions" role="tablist" aria-label="Filter by key purpose">
+              <div className={styles.actions} role="tablist" aria-label="Filter by key purpose">
                 {(
                   [
                     { value: "all", label: "All" },
@@ -778,23 +804,29 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
                   ? vaultTiles
                   : vaultTiles.filter((tile) => tile.purpose === keyPurposeFilter);
               return filtered.length === 0 ? (
-                <p className="note">No {keyPurposeFilter} keys in this device Vault.</p>
+                <Note>No {keyPurposeFilter} keys in this device Vault.</Note>
               ) : (
-                filtered.map((tile) => (
-                  <div key={String(tile.fingerprint ?? tile.locator)} className="note" style={{ border: "1px solid #ccc", padding: 8, marginBottom: 8 }}>
-                    <strong>{String(tile.family ?? "KEY").toUpperCase()}</strong>
-                    {tile.status === "active" ? " — DEFAULT" : " — HISTORICAL"}
-                    <div>Key ID {String(tile.locator ?? tile.fingerprint ?? "—")}</div>
-                    <div>{String(tile.algorithm ?? "")}</div>
-                    {showPurposeFilter ? <div>Purpose: {String(tile.purpose ?? "—")}</div> : null}
-                  </div>
-                ))
+                <div className={styles.stack}>
+                  {filtered.map((tile) => (
+                    <div key={String(tile.fingerprint ?? tile.locator)} className={styles.card}>
+                      <div className={styles.cardHeading}>
+                        <span>{String(tile.family ?? "KEY").toUpperCase()}</span>
+                        <StatusBadge tone={tile.status === "active" ? "ok" : "muted"}>
+                          {tile.status === "active" ? "Default" : "Historical"}
+                        </StatusBadge>
+                      </div>
+                      <div>Key ID {String(tile.locator ?? tile.fingerprint ?? "—")}</div>
+                      <div>{String(tile.algorithm ?? "")}</div>
+                      {showPurposeFilter ? <div>Purpose: {String(tile.purpose ?? "—")}</div> : null}
+                    </div>
+                  ))}
+                </div>
               );
             })()}
           </>
         )}
-        {inventoryNote ? <p className="note">{inventoryNote}</p> : null}
-        <div className="actions">
+        {inventoryNote ? <Note>{inventoryNote}</Note> : null}
+        <div className={styles.actions}>
           <Button
             appearance="secondary"
             size="small"
@@ -855,21 +887,24 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
             Sync with Scomm.AI
           </Button>
         </div>
-        <input
-          type="password"
-          placeholder="key-package password"
-          value={keyPackagePass}
-          onChange={(e) => setKeyPackagePass(e.target.value)}
-          style={{ padding: "4px 8px", fontSize: "16px", width: "100%", marginBottom: "8px" }}
-        />
-        <textarea
-          placeholder="paste a password-wrapped key package JSON"
-          value={keyPackageJson}
-          onChange={(e) => setKeyPackageJson(e.target.value)}
-          rows={4}
-          style={{ width: "100%", fontFamily: "monospace", fontSize: "12px", marginBottom: "8px" }}
-        />
-        <div className="actions">
+        <Field label="Key-package password">
+          <Input
+            type="password"
+            placeholder="key-package password"
+            value={keyPackagePass}
+            onChange={(_, data) => setKeyPackagePass(data.value)}
+          />
+        </Field>
+        <Field label="Key-package JSON">
+          <Textarea
+            placeholder="paste a password-wrapped key package JSON"
+            value={keyPackageJson}
+            onChange={(_, data) => setKeyPackageJson(data.value)}
+            rows={4}
+            style={{ width: "100%", fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 }}
+          />
+        </Field>
+        <div className={styles.actions}>
           <Button
             appearance="secondary"
             size="small"
@@ -913,27 +948,31 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
         </div>
       </section>
 
-      <section>
-        <h2>Vault backup</h2>
-        <p className="note">
-          This device unlocks the Vault with a secret in IndexedDB. That store can vanish (new
-          Outlook profile, cleared cache, another browser). Export with a passphrase you choose.
-        </p>
-        <input
-          type="password"
-          placeholder="backup passphrase"
-          value={vaultPassphrase}
-          onChange={(e) => setVaultPassphrase(e.target.value)}
-          style={{ padding: "4px 8px", fontSize: "16px", width: "100%", marginBottom: "8px" }}
+      <Divider />
+
+      <section className={styles.stack}>
+        <PageTitle
+          title="Vault backup"
+          description="This device unlocks the Vault with a secret in IndexedDB. That store can vanish (new Outlook profile, cleared cache, another browser). Export with a passphrase you choose."
         />
-        <textarea
-          placeholder="paste exported Vault JSON to restore"
-          value={vaultBackup}
-          onChange={(e) => setVaultBackup(e.target.value)}
-          rows={6}
-          style={{ width: "100%", fontFamily: "monospace", fontSize: "12px", marginBottom: "8px" }}
-        />
-        <div className="actions">
+        <Field label="Backup passphrase">
+          <Input
+            type="password"
+            placeholder="backup passphrase"
+            value={vaultPassphrase}
+            onChange={(_, data) => setVaultPassphrase(data.value)}
+          />
+        </Field>
+        <Field label="Vault backup JSON">
+          <Textarea
+            placeholder="paste exported Vault JSON to restore"
+            value={vaultBackup}
+            onChange={(_, data) => setVaultBackup(data.value)}
+            rows={6}
+            style={{ width: "100%", fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 }}
+          />
+        </Field>
+        <div className={styles.actions}>
           <Button appearance="secondary" size="small" disabled={busy || !vaultPassphrase.trim()} onClick={() => void handleExportVault()}>
             Export Vault
           </Button>

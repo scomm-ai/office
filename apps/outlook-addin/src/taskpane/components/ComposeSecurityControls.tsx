@@ -1,5 +1,7 @@
 import { CryptoFamily } from "@scomm-office/crypto";
 import { useCallback, useEffect, useState } from "react";
+import { Checkbox, Dropdown, Option } from "@fluentui/react-components";
+import { Note, PageTitle, StatusBadge, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
 import { loadComposeTogglesFromItem, saveComposeTogglesToItem } from "../../lib/compose-security-state";
 import { lookupRecipientStatuses } from "../../lib/mail-crypto-actions";
@@ -72,6 +74,12 @@ export function useComposeSecurity(session: OfficePubkeySession | null, userEmai
   };
 }
 
+const PROTOCOL_LABELS: Record<"automatic" | CryptoFamily, string> = {
+  automatic: "Automatic",
+  [CryptoFamily.OpenPGP]: "OpenPGP",
+  [CryptoFamily.SMIME]: "S/MIME (native Outlook)",
+};
+
 export function ComposeSecurityControls(props: {
   session: OfficePubkeySession | null;
   userEmail: string | undefined;
@@ -81,21 +89,19 @@ export function ComposeSecurityControls(props: {
 }) {
   const security = useComposeSecurity(props.session, props.userEmail);
   const { settings, graphDiagnostics } = useHostContext();
+  const styles = usePaneStyles();
   const pubkeyBase = resolvePubkeyReadBaseUrl(settings);
   const paidReady = props.engineReady && props.pgpEntitled;
   const canUncheckSign = !props.pgpEntitled && security.sign;
   const canUncheckEncrypt = !props.pgpEntitled && security.encrypt;
 
   return (
-    <section>
-      <h2>Message protection</h2>
-      <p className="note">
-        Enable Encrypt and/or Sign, then use Outlook’s Send. Scomm.AI protects the message at send
-        time (Microsoft Graph MIME when signed in silently, otherwise inline OpenPGP in the body).
-        Classical OpenPGP keys come from the pubkey directory (local by default). S/MIME stays in native Outlook.
-        Paid <code>pgp</code> add-on required.
-      </p>
-      <p className="note">
+    <section className={styles.stack}>
+      <PageTitle
+        title="Message protection"
+        description="Enable Encrypt and/or Sign, then use Outlook's Send. Classical OpenPGP keys come from the pubkey directory (local by default); S/MIME stays in native Outlook. Paid pgp add-on required."
+      />
+      <Note>
         Microsoft Graph send:{" "}
         {!graphDiagnostics.clientIdConfigured
           ? `not configured (${graphDiagnostics.error ?? "VITE_AZURE_CLIENT_ID not set"}) — Send will use inline OpenPGP in the compose body.`
@@ -104,63 +110,60 @@ export function ComposeSecurityControls(props: {
             : graphDiagnostics.probedSuccessfully === false
               ? `unavailable (${graphDiagnostics.error ?? "unknown reason"}) — Send will use inline OpenPGP in the compose body.`
               : "configured — Send uses silent Graph when a session exists, otherwise inline OpenPGP."}
-      </p>
-      {!props.pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
-      <div className="actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={security.sign}
-            onChange={(e) => security.setSign(e.target.checked)}
-            disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckSign)}
-          />{" "}
-          Sign
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={security.encrypt}
-            onChange={(e) => security.setEncrypt(e.target.checked)}
-            disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckEncrypt)}
-          />{" "}
-          Encrypt
-        </label>
+      </Note>
+      {!props.pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
+      <div className={styles.stack}>
+        <Checkbox
+          label="Sign"
+          checked={security.sign}
+          onChange={(_, data) => security.setSign(Boolean(data.checked))}
+          disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckSign)}
+        />
+        <Checkbox
+          label="Encrypt"
+          checked={security.encrypt}
+          onChange={(_, data) => security.setEncrypt(Boolean(data.checked))}
+          disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckEncrypt)}
+        />
         {security.recipients.length > 0 ? (
-          <ul className="list-plain">
+          <ul className={styles.list}>
             {security.recipients.map((row) => (
               <li key={row.email}>
                 <strong>{row.email}</strong>{" "}
-                <span
-                  className={`status ${row.addInCanEncrypt ? "ok" : row.status === "missing" ? "warn" : "muted"}`}
+                <StatusBadge
+                  tone={row.addInCanEncrypt ? "ok" : row.status === "missing" ? "warn" : "muted"}
                 >
                   {row.status === "found" ? row.family : row.status}
-                </span>
-                <div className="note">{row.hint}</div>
+                </StatusBadge>
+                <div>
+                  <Note>{row.hint}</Note>
+                </div>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="note">Add To/Cc/Bcc to look up keys on the pubkey directory.</p>
+          <Note>Add To/Cc/Bcc to look up keys on the pubkey directory.</Note>
         )}
         <details>
           <summary>Advanced</summary>
-          <label>
-            Protocol{" "}
-            <select
-              value={security.protocol}
-              onChange={(e) =>
-                security.setProtocol(e.target.value as "automatic" | CryptoFamily)
-              }
+          <div className={styles.fieldRow}>
+            <Dropdown
+              aria-label="Protocol"
+              value={PROTOCOL_LABELS[security.protocol]}
+              selectedOptions={[security.protocol]}
               disabled={!props.composeMode}
+              onOptionSelect={(_, data) =>
+                security.setProtocol(data.optionValue as "automatic" | CryptoFamily)
+              }
             >
-              <option value="automatic">Automatic</option>
-              <option value={CryptoFamily.OpenPGP}>OpenPGP</option>
-              <option value={CryptoFamily.SMIME}>S/MIME (native Outlook)</option>
-            </select>
-          </label>
+              <Option value="automatic">{PROTOCOL_LABELS.automatic}</Option>
+              <Option value={CryptoFamily.OpenPGP}>{PROTOCOL_LABELS[CryptoFamily.OpenPGP]}</Option>
+              <Option value={CryptoFamily.SMIME}>{PROTOCOL_LABELS[CryptoFamily.SMIME]}</Option>
+            </Dropdown>
+          </div>
         </details>
       </div>
-      <p className="note">Directory: {pubkeyBase || "—"}</p>
+      <Note>Directory: {pubkeyBase || "—"}</Note>
     </section>
   );
 }

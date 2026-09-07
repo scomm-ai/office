@@ -6,7 +6,7 @@ import { useHostContext } from "../../lib/host-context";
 import { collectRecipientEmails } from "../../lib/semantic-policy";
 import { extractScommEnvelopeCiphertext, isEcdhP256Algorithm } from "../../lib/ecdh-envelope";
 import { assertPgpAddon, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
-import { Button } from "../ui/layout";
+import { Button, Note, PageTitle, usePaneStyles } from "../ui/layout";
 
 const keyStore = new WebCryptoKeyStore();
 const encryptor = new ScommMessageEncryptor();
@@ -186,20 +186,20 @@ export function EcdhEnvelopeControls({
     }
   }, [message]);
 
+  const styles = usePaneStyles();
+
   return (
-    <section>
-      <h2>Experimental ECDH envelope</h2>
-      <p className="note">
-        Separate from OpenPGP. Local ECDH P-256 keys stay in IndexedDB. Encrypt wraps the compose
-        body in a Scomm.AI envelope; decrypt shows plaintext in this pane. Generate and encrypt
-        require the paid <code>pgp</code> add-on.
-      </p>
-      {!pgpEntitled ? <p className="note">{PGP_ADDON_REQUIRED_MESSAGE}</p> : null}
-      <dl className="meta-grid">
-        <dt>Local ECDH key</dt>
+    <section className={styles.stack}>
+      <PageTitle
+        title="Experimental ECDH envelope"
+        description="Separate from OpenPGP. Local ECDH P-256 keys stay in IndexedDB. Encrypt wraps the compose body in a Scomm.AI envelope; decrypt shows plaintext in this pane. Generate and encrypt require the paid pgp add-on."
+      />
+      {!pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
+      <dl className={styles.metaGrid}>
+        <dt className={styles.metaLabel}>Local ECDH key</dt>
         <dd>{generatedKeyId ?? "none — generate below"}</dd>
       </dl>
-      <div className="actions">
+      <div className={styles.actions}>
         <Button appearance="secondary" size="small" disabled={busy || !pgpEntitled} onClick={() => void handleGenerateKey()}>
           Generate ECDH key
         </Button>
@@ -215,12 +215,12 @@ export function EcdhEnvelopeControls({
           Decrypt ECDH envelope
         </Button>
       </div>
-      {status ? <p className="note">{status}</p> : null}
+      {status ? <Note>{status}</Note> : null}
       {decryptedContent ? (
-        <section>
-          <h3>Decrypted ECDH message</h3>
-          {decryptedContent.subject ? <p className="note">Subject: {decryptedContent.subject}</p> : null}
-          <pre className="code-block">{decryptedContent.body}</pre>
+        <section className={styles.stack}>
+          <PageTitle title="Decrypted ECDH message" />
+          {decryptedContent.subject ? <Note>Subject: {decryptedContent.subject}</Note> : null}
+          <pre className={styles.code}>{decryptedContent.body}</pre>
         </section>
       ) : null}
     </section>
