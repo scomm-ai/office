@@ -21,20 +21,26 @@ async function buildSession(email: string): Promise<OfficePubkeySession> {
 }
 
 describe("publishPgpContentKey", () => {
-  it("publishes encryption and signing artifacts from a new key", async () => {
+  it("publishes signing and encryption artifacts from a new key", async () => {
     const email = "alice@example.com";
     const session = await buildSession(email);
-    let artifacts: Array<{ purpose?: string; algorithm?: string }> = [];
-    session.client.setKeys = (async (input: { artifacts: typeof artifacts }) => {
-      artifacts = input.artifacts;
-      return { key_id: 11, keys: [{ purpose: "encryption", key_id: 11 }, { purpose: "signing", key_id: 12 }] };
-    }) as typeof session.client.setKeys;
+    let signingArtifact: { purpose?: string; algorithm?: string } | null = null;
+    let encryptionArtifact: { purpose?: string; algorithm?: string } | null = null;
+    session.client.setSigningKeyWithProof = (async (input: { artifact: typeof signingArtifact }) => {
+      signingArtifact = input.artifact;
+      return { key_id: 12, keys: [{ purpose: "signing", key_id: 12 }] };
+    }) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async (input: { artifact: typeof encryptionArtifact }) => {
+      encryptionArtifact = input.artifact;
+      return { key_id: 11, keys: [{ purpose: "encryption", key_id: 11 }] };
+    }) as typeof session.client.publishEncryptionKey;
 
     const result = await publishPgpContentKey(session, email);
     expect(result.generated).toBe(true);
-    expect(artifacts.map((row) => row.purpose).sort()).toEqual(["encryption", "signing"]);
-    expect(artifacts.find((row) => row.purpose === "encryption")?.algorithm).toBe("openpgp-cv25519");
-    expect(artifacts.find((row) => row.purpose === "signing")?.algorithm).toBe("openpgp-ed25519");
+    expect(signingArtifact?.purpose).toBe("signing");
+    expect(signingArtifact?.algorithm).toBe("openpgp-ed25519");
+    expect(encryptionArtifact?.purpose).toBe("encryption");
+    expect(encryptionArtifact?.algorithm).toBe("openpgp-cv25519");
     expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
   });
 
@@ -54,16 +60,22 @@ describe("publishPgpContentKey", () => {
       private_material: generated.privateKey,
     });
 
-    let called = 0;
-    session.client.setKeys = (async (input: { artifacts: Array<{ purpose?: string }> }) => {
-      called += 1;
-      expect(input.artifacts).toHaveLength(2);
+    let sigCalled = 0;
+    let encCalled = 0;
+    session.client.setSigningKeyWithProof = (async () => {
+      sigCalled += 1;
       return { key_id: 1 };
-    }) as typeof session.client.setKeys;
+    }) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async (input: { artifact: { purpose?: string } }) => {
+      encCalled += 1;
+      expect(input.artifact.purpose).toBe("encryption");
+      return { key_id: 1 };
+    }) as typeof session.client.publishEncryptionKey;
 
     const result = await publishPgpContentKey(session, email);
     expect(result.generated).toBe(false);
-    expect(called).toBe(1);
+    expect(sigCalled).toBe(1);
+    expect(encCalled).toBe(1);
     expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
   });
 });

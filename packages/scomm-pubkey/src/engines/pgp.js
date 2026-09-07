@@ -383,6 +383,46 @@ export class PgpEngine {
 	 * @param {Uint8Array | string} privateMaterial
 	 * @returns {Promise<{ scalar: Uint8Array, publicKey: Uint8Array }>}
 	 */
+	/**
+	 * Extracts the raw Ed25519 signing seed from the OpenPGP primary key.
+	 *
+	 * @param {Uint8Array | string} privateMaterial
+	 * @returns {Promise<{ seed: Uint8Array, publicKey: Uint8Array | undefined }>}
+	 */
+	async extractEd25519SigningKey(privateMaterial) {
+		this._requireAvailable();
+		try {
+			const key = await readPrivateKey(privateMaterial);
+			if (!key.isDecrypted()) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"OpenPGP private key is passphrase-protected; Vault keys must be stored unencrypted",
+				);
+			}
+			const packet = key.keyPacket;
+			const seed = packet?.privateParams?.seed;
+			if (!seed || seed.length < 32) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"OpenPGP primary key has no Ed25519 seed",
+				);
+			}
+			const A = packet.publicParams?.A;
+			const publicKey =
+				A instanceof Uint8Array && A.length >= 32
+					? new Uint8Array(A.subarray(0, 32))
+					: undefined;
+			return { seed: new Uint8Array(seed.subarray(0, 32)), publicKey };
+		} catch (cause) {
+			if (cause instanceof PubkeyError) throw cause;
+			throw new PubkeyError(
+				ERROR_CODES.key_import_failure,
+				"Could not extract OpenPGP Ed25519 signing key",
+				{ cause },
+			);
+		}
+	}
+
 	async extractX25519EncryptionSubkey(privateMaterial) {
 		this._requireAvailable();
 		try {

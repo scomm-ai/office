@@ -227,12 +227,23 @@ export async function publishPgpContentKey(
     public_material: material,
   };
 
-  // Server requires separate calls: signing via set_keys, encryption via challenge flow
-  await session.client.setKeys({
-    email: canonical,
-    artifacts: [signingArtifact],
-    mskKey: msk,
+  // Signing key: extract raw Ed25519 seed, import as CryptoKey, then PoP
+  const sigSeed = await session.pgpEngine.extractEd25519SigningKey(privateKey);
+  const contentSigningKey = await session.crypto.importPrivateKey({
+    algorithm: "ed25519",
+    encoding: "raw-32",
+    bytes: sigSeed.seed,
+    publicKey: sigSeed.publicKey,
+    purpose: "signing",
   });
+  await session.client.setSigningKeyWithProof({
+    email: canonical,
+    artifact: signingArtifact,
+    mskKey: msk,
+    contentSigningKey,
+  });
+
+  // Encryption key: challenge-response PoP flow
   const encResult = (await session.client.publishEncryptionKey({
     email: canonical,
     artifact: encryptionArtifact,

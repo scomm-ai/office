@@ -163,6 +163,10 @@ export class PgpEngine {
 		algorithm: string;
 	}>;
 	exportPublicKey(privateKey: Uint8Array | string): Promise<Uint8Array>;
+	extractEd25519SigningKey(privateMaterial: Uint8Array | string): Promise<{
+		seed: Uint8Array;
+		publicKey?: Uint8Array;
+	}>;
 	extractX25519EncryptionSubkey(privateMaterial: Uint8Array | string): Promise<{
 		scalar: Uint8Array;
 		publicKey?: Uint8Array;
