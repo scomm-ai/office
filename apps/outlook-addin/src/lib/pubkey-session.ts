@@ -214,27 +214,34 @@ export async function publishPgpContentKey(
   }
 
   const material = encodeBase64Url(publicKey);
-  const result = (await session.client.setKeys({
+  const signingArtifact = {
+    family: "pgp" as const,
+    purpose: "signing" as const,
+    algorithm: "openpgp-ed25519",
+    public_material: material,
+  };
+  const encryptionArtifact = {
+    family: "pgp" as const,
+    purpose: "encryption" as const,
+    algorithm: "openpgp-cv25519",
+    public_material: material,
+  };
+
+  // Server requires separate calls: signing via set_keys, encryption via challenge flow
+  await session.client.setKeys({
     email: canonical,
-    artifacts: [
-      {
-        family: "pgp",
-        purpose: "encryption",
-        algorithm: "openpgp-cv25519",
-        public_material: material,
-      },
-      {
-        family: "pgp",
-        purpose: "signing",
-        algorithm: "openpgp-ed25519",
-        public_material: material,
-      },
-    ],
+    artifacts: [signingArtifact],
+    mskKey: msk,
+  });
+  const encResult = (await session.client.publishEncryptionKey({
+    email: canonical,
+    artifact: encryptionArtifact,
+    privateKey: privateKey,
     mskKey: msk,
   })) as { key_id?: number; keys?: Array<{ key_id?: number; purpose?: string }> };
 
   const encryptionKeyId =
-    result.keys?.find((row) => row.purpose === "encryption")?.key_id ?? result.key_id ?? 0;
+    encResult.keys?.find((row) => row.purpose === "encryption")?.key_id ?? encResult.key_id ?? 0;
 
   if (!existingEnc?.private_material) {
     session.vault.addKey({
