@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractPgpMessage, extractPgpSignedMessage } from "@scomm-office/pubkeys";
 import {
+  ENCRYPTED_PLACEHOLDER,
   armoredPayloadFromEml,
   pgpArmorAsComposeHtml,
   writeArmoredComposeBody,
@@ -38,11 +39,25 @@ describe("pgp armor compose body", () => {
 
   it("keeps the armor extractable when a placeholder intro is prepended", async () => {
     const host = new MockMailHost({ mode: "compose", bodyText: "hello" });
-    const placeholder = "This message is encrypted. Install the add-in to read it.";
+    const placeholder = {
+      text: "This message is encrypted. Install the add-in to read it.",
+      html: '<div style="color:#c4314b;">This message is encrypted</div>',
+    };
     await writeArmoredComposeBody(host, MESSAGE, placeholder);
     const current = await host.getCurrentMessage();
-    expect(current.bodyText).toContain(placeholder);
-    expect(current.bodyHtml).toContain(placeholder);
+    expect(current.bodyText).toContain(placeholder.text);
+    expect(current.bodyHtml).toContain("This message is encrypted");
+    expect(extractPgpMessage(current.bodyText)).toContain("BEGIN PGP MESSAGE");
+    expect(extractPgpMessage(current.bodyHtml)).toContain("BEGIN PGP MESSAGE");
+  });
+
+  it("styled ENCRYPTED_PLACEHOLDER points recipients at the add-in and stays armor-safe", async () => {
+    const host = new MockMailHost({ mode: "compose", bodyText: "hello" });
+    await writeArmoredComposeBody(host, MESSAGE, ENCRYPTED_PLACEHOLDER);
+    const current = await host.getCurrentMessage();
+    expect(current.bodyHtml).toContain("This message is encrypted");
+    expect(current.bodyHtml).toContain("Get Scomm.AI to decrypt");
+    expect(current.bodyHtml).toContain("decrypt automatically");
     expect(extractPgpMessage(current.bodyText)).toContain("BEGIN PGP MESSAGE");
     expect(extractPgpMessage(current.bodyHtml)).toContain("BEGIN PGP MESSAGE");
   });
