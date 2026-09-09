@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MockMailHost } from "@scomm-office/office";
+import { X_SCOMM_ENCRYPTION } from "@scomm-office/protocol";
 import {
   createPubkeyClient,
   encodeBase64Url,
@@ -69,6 +70,22 @@ describe("decryptCurrentBody", () => {
 
     const result = await decryptCurrentBody({ session, mailHost });
     expect(result.plaintext.trim().length).toBeGreaterThan(0);
+  });
+
+  it("sets the X-SComm-Encryption header on the compose item once encrypted", async () => {
+    const session = await buildSession(email);
+    const alice = await addPgpKey(session, email, 1);
+    mockGetBestKey(session, { [email]: alice.publicKey });
+
+    const mailHost = new MockMailHost({
+      mode: "compose",
+      to: [{ emailAddress: email }],
+      bodyText: "hello from the compose pane",
+    });
+    await encryptComposeBody({ session, mailHost, userEmail: email, sign: false });
+
+    const headers = await mailHost.getHeaders();
+    expect(headers[X_SCOMM_ENCRYPTION]).toBe("openpgp-v1");
   });
 
   it("selects the vault key that actually matches the ciphertext among several", async () => {

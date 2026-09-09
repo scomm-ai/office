@@ -8,6 +8,7 @@ import {
   normalizeEmail,
 } from "@scomm-office/pubkeys";
 import { attachmentEncryptionNotice, type MailHost } from "@scomm-office/office";
+import { X_SCOMM_ENCRYPTION } from "@scomm-office/protocol";
 import { collectRecipientEmails } from "./semantic-policy";
 import {
   classifyDirectoryKey,
@@ -195,12 +196,29 @@ export async function encryptComposeBody(options: {
     throw new Error("Message body is empty");
   }
   const privateKey = sign ? await requireUnlockedPgp(session) : undefined;
-  const ciphertext = await session.pgpEngine.encrypt({
-    plaintext,
-    recipientPublicKeys: publicKeys,
-    signingPrivateKey: privateKey,
-  });
+  let ciphertext: Uint8Array;
+  try {
+    ciphertext = await session.pgpEngine.encrypt({
+      plaintext,
+      recipientPublicKeys: publicKeys,
+      signingPrivateKey: privateKey,
+    });
+  } catch (err) {
+    // pgpEngine.encrypt's own message ("OpenPGP encrypt failed") is a generic
+    // wrapper — the actual reason (e.g. a malformed recipient key) is on
+    // `.cause`, set by PubkeyError in packages/scomm-pubkey/src/engines/pgp.js.
+    const cause = (err as { cause?: unknown } | undefined)?.cause;
+    const causeMessage = cause instanceof Error ? cause.message : undefined;
+    const base = err instanceof Error ? err.message : String(err);
+    throw new Error(causeMessage ? `${base}: ${causeMessage}` : base);
+  }
   await writeArmoredComposeBody(mailHost, new TextDecoder().decode(ciphertext));
+  try {
+    await mailHost.setHeaders({ [X_SCOMM_ENCRYPTION]: "openpgp-v1" });
+  } catch {
+    // Header setting may not be available on all hosts (Mailbox 1.8+ only);
+    // body-armor detection still works as the read-side fallback.
+  }
   const notice = options.capabilities ? attachmentEncryptionNotice(options.capabilities) : null;
   const leftover =
     notice ??

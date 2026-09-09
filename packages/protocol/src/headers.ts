@@ -7,6 +7,7 @@ export const X_SCOMM_SEMANTICS = "X-SComm-Semantics" as const;
 export const X_SCOMM_SEMANTIC_DIGEST = "X-SComm-Semantic-Digest" as const;
 export const X_SCOMM_CLASSIFICATION = "X-SComm-Classification" as const;
 export const X_SCOMM_SECURITY = "X-SComm-Security" as const;
+export const X_SCOMM_ENCRYPTION = "X-SComm-Encryption" as const;
 
 export const SCOMM_HEADER_NAMES = [
   X_SCOMM_VERSION,
@@ -16,6 +17,7 @@ export const SCOMM_HEADER_NAMES = [
   X_SCOMM_SEMANTIC_DIGEST,
   X_SCOMM_CLASSIFICATION,
   X_SCOMM_SECURITY,
+  X_SCOMM_ENCRYPTION,
 ] as const;
 
 export type ScommHeaderName = (typeof SCOMM_HEADER_NAMES)[number];

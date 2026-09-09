@@ -11,6 +11,7 @@ import {
   normalizeEmail,
 } from "@scomm-office/pubkeys";
 import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../lib/settings";
+import { X_SCOMM_ENCRYPTION } from "@scomm-office/protocol";
 import { loadPgpEntitlement, PGP_ADDON_REQUIRED_MESSAGE } from "../../lib/billing-pgp";
 import type { TaskPaneCryptoAction } from "../../lib/taskpane-launch";
 import { decryptCurrentBody, verifyCurrentBody } from "../../lib/mail-crypto-actions";
@@ -42,6 +43,16 @@ type BootstrapStep =
   | "recover-otp"
   | "verified";
 
+/** Internet header names aren't guaranteed to preserve casing across hosts (see getHeaders() in outlook-mail-host.ts). */
+function readHeaderValue(headers: Record<string, string> | undefined, name: string): string | undefined {
+  if (!headers) return undefined;
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === lower) return headers[key];
+  }
+  return undefined;
+}
+
 function enrollOtpStatus(email: string, result: unknown): string {
   const otp =
     result && typeof result === "object" && "otp" in result && typeof result.otp === "string"
@@ -67,6 +78,8 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
   const [decryptedBody, setDecryptedBody] = useState<string | null>(null);
   const launchRan = useRef(false);
   const lastItemId = useRef<string | null>(null);
+  const autoDecryptItemId = useRef<string | null>(null);
+  const [autoDecryptLocked, setAutoDecryptLocked] = useState(false);
   const [engineReady, setEngineReady] = useState(false);
   const [pgpEntitled, setPgpEntitled] = useState(false);
   const [vaultPassphrase, setVaultPassphrase] = useState("");
@@ -516,12 +529,57 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     if (launchAction === "verify") void handleVerify();
   }, [launchAction, engineReady, handleDecrypt, handleVerify]);
 
-  const pgpPresent = Boolean(
-    extractPgpMessage(message?.bodyText) ??
-      extractPgpMessage(message?.bodyHtml) ??
-      extractPgpSignedMessage(message?.bodyText) ??
-      extractPgpSignedMessage(message?.bodyHtml),
+  // X-SComm-Encryption isn't set by the current OpenPGP compose path (only the
+  // experimental ECDH envelope sets a header, X-SComm-Security) — so this is
+  // read as an optional signal alongside body-armor parsing, not a replacement.
+  const encryptionHeaderPresent = Boolean(readHeaderValue(message?.headers, X_SCOMM_ENCRYPTION));
+  const encryptedArmorPresent = Boolean(
+    extractPgpMessage(message?.bodyText) ?? extractPgpMessage(message?.bodyHtml),
   );
+  const signedArmorPresent = Boolean(
+    extractPgpSignedMessage(message?.bodyText) ?? extractPgpSignedMessage(message?.bodyHtml),
+  );
+  const isEncryptedMessage = encryptionHeaderPresent || encryptedArmorPresent;
+  const isSignedOnlyMessage = !isEncryptedMessage && signedArmorPresent;
+  const pgpPresent = isEncryptedMessage || isSignedOnlyMessage;
+  // `composeMode` above is forced true whenever isMockHost is set (dev-preview
+  // convenience for ComposeSecurityControls) — that would make auto-decrypt
+  // dead code in the mock host. Use the real mode signal instead.
+  const isComposeItem = liveMode === "compose" || message?.mode === "compose";
+
+  useEffect(() => {
+    const nextId = message?.id ?? null;
+    if (!nextId || isComposeItem || !engineReady) return;
+    if (autoDecryptItemId.current === nextId) return;
+
+    if (isEncryptedMessage) {
+      const session = sessionFor();
+      if (session?.vault.unlocked) {
+        autoDecryptItemId.current = nextId;
+        setAutoDecryptLocked(false);
+        void handleDecrypt();
+      } else {
+        autoDecryptItemId.current = nextId;
+        setAutoDecryptLocked(true);
+      }
+    } else if (isSignedOnlyMessage) {
+      autoDecryptItemId.current = nextId;
+      setAutoDecryptLocked(false);
+      void handleVerify();
+    } else {
+      autoDecryptItemId.current = nextId;
+      setAutoDecryptLocked(false);
+    }
+  }, [
+    message?.id,
+    isComposeItem,
+    engineReady,
+    isEncryptedMessage,
+    isSignedOnlyMessage,
+    sessionFor,
+    handleDecrypt,
+    handleVerify,
+  ]);
   const attachmentNotice = isMockHost ? null : attachmentEncryptionNotice(capabilities);
 
   return (
@@ -740,6 +798,9 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
           </Button>
         </div>
         {pgpPresent ? <Note>Current item looks like OpenPGP.</Note> : null}
+        {autoDecryptLocked && !decryptedBody ? (
+          <Note>This message is encrypted unlock your Vault (Scomm.AI identity above) to auto-decrypt it.</Note>
+        ) : null}
         {mailStatus ? <Note>{mailStatus}</Note> : null}
         {decryptedBody ? <pre className={styles.code}>{decryptedBody}</pre> : null}
       </section>

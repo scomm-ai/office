@@ -98,12 +98,21 @@ async function bootstrapHost(): Promise<{
     // Office host (e.g. a plain browser tab). Fall through to MockMailHost below.
   }
 
+  // Dev/E2E-only seam so Playwright can drive the mock host with a specific
+  // message (e.g. PGP-armored body) instead of the fixed fixture below.
+  // Gated on import.meta.env.DEV so it's always undefined in a production
+  // build (the real Office branch above is taken there anyway).
+  const override = import.meta.env.DEV
+    ? (globalThis as { __SCOMM_MOCK_MESSAGE__?: Partial<MailMessage> }).__SCOMM_MOCK_MESSAGE__
+    : undefined;
+
   const mailHost = new MockMailHost({
     mode: "read",
     subject: "Mock message — browser dev",
     bodyHtml: simpleFixtureHtml,
     from: { emailAddress: "sender@example.com", displayName: "Sender" },
     to: [{ emailAddress: "muzamiltest9@gmail.com", displayName: "You" }],
+    ...override,
   });
   const capabilities = detectOutlookCapabilities();
   return {
