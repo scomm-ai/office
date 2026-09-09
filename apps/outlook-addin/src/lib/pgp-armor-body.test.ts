@@ -35,4 +35,15 @@ describe("pgp armor compose body", () => {
     expect(extractPgpMessage(current.bodyHtml)).toContain("BEGIN PGP MESSAGE");
     expect(current.bodyText).toContain("BEGIN PGP MESSAGE");
   });
+
+  it("keeps the armor extractable when a placeholder intro is prepended", async () => {
+    const host = new MockMailHost({ mode: "compose", bodyText: "hello" });
+    const placeholder = "This message is encrypted. Install the add-in to read it.";
+    await writeArmoredComposeBody(host, MESSAGE, placeholder);
+    const current = await host.getCurrentMessage();
+    expect(current.bodyText).toContain(placeholder);
+    expect(current.bodyHtml).toContain(placeholder);
+    expect(extractPgpMessage(current.bodyText)).toContain("BEGIN PGP MESSAGE");
+    expect(extractPgpMessage(current.bodyHtml)).toContain("BEGIN PGP MESSAGE");
+  });
 });

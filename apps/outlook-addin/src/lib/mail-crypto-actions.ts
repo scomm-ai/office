@@ -17,7 +17,7 @@ import {
   type RecipientDirectoryStatus,
 } from "./directory-key";
 import type { ComposeProtectionToggles } from "./compose-security-state";
-import { writeArmoredComposeBody } from "./pgp-armor-body";
+import { ENCRYPTED_PLACEHOLDER_MESSAGE, writeArmoredComposeBody } from "./pgp-armor-body";
 import {
   restoreOfficeVault,
   vaultPgpPrivateKeys,
@@ -212,7 +212,11 @@ export async function encryptComposeBody(options: {
     const base = err instanceof Error ? err.message : String(err);
     throw new Error(causeMessage ? `${base}: ${causeMessage}` : base);
   }
-  await writeArmoredComposeBody(mailHost, new TextDecoder().decode(ciphertext));
+  await writeArmoredComposeBody(
+    mailHost,
+    new TextDecoder().decode(ciphertext),
+    ENCRYPTED_PLACEHOLDER_MESSAGE,
+  );
   try {
     await mailHost.setHeaders({ [X_SCOMM_ENCRYPTION]: "openpgp-v1" });
   } catch {

@@ -34,12 +34,28 @@ export function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Shown ahead of the armor block so a recipient without the Scomm.AI add-in
+ * (or an OnMessageDecrypt-incapable client) sees guidance instead of raw PGP
+ * text. extractPgpMessage locates the armor by content, not position, so
+ * this prefix never interferes with decryption by an add-in that has one.
+ */
+export const ENCRYPTED_PLACEHOLDER_MESSAGE =
+  "This message is encrypted with the Scomm.AI Outlook add-in. " +
+  "Install Scomm.AI (pubkey.scomm.ai) to read it automatically, or ask the sender to resend it unencrypted.";
+
 /** GpgOL-style HTML wrapper so Outlook’s HTML composer does not reflow armor lines. */
-export function pgpArmorAsComposeHtml(armored: string): string {
+export function pgpArmorAsComposeHtml(armored: string, placeholder?: string): string {
   const escaped = escapeHtml(armored.replace(/\r\n/g, "\n").trim());
-  return `<pre style="font-family:Consolas,monospace;white-space:pre-wrap;word-break:keep-all">${escaped}</pre>`;
+  const intro = placeholder ? `<p>${escapeHtml(placeholder)}</p>` : "";
+  return `${intro}<pre style="font-family:Consolas,monospace;white-space:pre-wrap;word-break:keep-all">${escaped}</pre>`;
 }
 
-export async function writeArmoredComposeBody(mailHost: MailHost, armored: string): Promise<void> {
-  await mailHost.setBody({ html: pgpArmorAsComposeHtml(armored), text: armored });
+export async function writeArmoredComposeBody(
+  mailHost: MailHost,
+  armored: string,
+  placeholder?: string,
+): Promise<void> {
+  const text = placeholder ? `${placeholder}\n\n${armored}` : armored;
+  await mailHost.setBody({ html: pgpArmorAsComposeHtml(armored, placeholder), text });
 }
