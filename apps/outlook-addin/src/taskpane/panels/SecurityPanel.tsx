@@ -529,9 +529,9 @@ export function SecurityPanel({ launchAction = null }: { launchAction?: TaskPane
     if (launchAction === "verify") void handleVerify();
   }, [launchAction, engineReady, handleDecrypt, handleVerify]);
 
-  // X-SComm-Encryption isn't set by the current OpenPGP compose path (only the
-  // experimental ECDH envelope sets a header, X-SComm-Security) — so this is
-  // read as an optional signal alongside body-armor parsing, not a replacement.
+  // X-SComm-Encryption is set on send by encryptComposeBody (mail-crypto-actions.ts)
+  // for both the inline-armor and Graph-submission paths. It's read here alongside
+  // body-armor parsing (not as a replacement) since older messages predate the header.
   const encryptionHeaderPresent = Boolean(readHeaderValue(message?.headers, X_SCOMM_ENCRYPTION));
   const encryptedArmorPresent = Boolean(
     extractPgpMessage(message?.bodyText) ?? extractPgpMessage(message?.bodyHtml),

@@ -1,6 +1,7 @@
 import { captureComposeSnapshot, type MailAddress } from "@scomm-office/message-core";
 import type { MailHost } from "@scomm-office/office";
 import type { ProtectedMessage } from "@scomm-office/crypto";
+import { X_SCOMM_ENCRYPTION } from "@scomm-office/protocol";
 import { collectRecipientEmails } from "./semantic-policy";
 import {
   defaultSecurityPolicy,
@@ -130,7 +131,11 @@ export async function protectOnSend(options: {
         };
       }
       if (result.protectedMessage) {
-        await options.graphSubmit(result.protectedMessage, buildEnvelopeHeaders(snapshot, userEmail));
+        const envelopeHeaders = buildEnvelopeHeaders(snapshot, userEmail);
+        if (toggles.encrypt) {
+          envelopeHeaders[X_SCOMM_ENCRYPTION] = "openpgp-v1";
+        }
+        await options.graphSubmit(result.protectedMessage, envelopeHeaders);
         return { outcome: "graph-sent" };
       }
     } catch {

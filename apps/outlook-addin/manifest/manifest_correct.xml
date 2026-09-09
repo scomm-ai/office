@@ -195,7 +195,7 @@
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.12">
+        <bt:Sets DefaultMinVersion="1.16">
           <bt:Set Name="Mailbox" />
         </bt:Sets>
       </Requirements>
@@ -314,6 +314,7 @@
               <LaunchEvents>
                 <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSend" SendMode="Block" />
                 <LaunchEvent Type="OnMessageCompose" FunctionName="onMessageCompose" />
+                <LaunchEvent Type="OnMessageDecrypt" FunctionName="onMessageDecrypt" HeaderName="X-SComm-Encryption" />
               </LaunchEvents>
               <SourceLocation resid="CommandsUrl" />
             </ExtensionPoint>

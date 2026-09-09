@@ -11,6 +11,7 @@ import {
   saveComposeTogglesToItem,
   type ComposeProtectionToggles,
 } from "../lib/compose-security-state";
+import { decryptCurrentBody } from "../lib/mail-crypto-actions";
 import { protectOnSend } from "../lib/protect-on-send";
 import { SilentOnlyIdentityProvider, isNaaConfigured } from "../lib/msal-auth";
 import { getOfficePubkeySession } from "../lib/pubkey-session";
@@ -224,9 +225,24 @@ function onMessageCompose(event: Office.AddinCommands.Event): void {
   event.completed({ allowEvent: true });
 }
 
-function onMessageDecrypt(event: Office.AddinCommands.Event): void {
-  void session();
-  event.completed({ allowEvent: true });
+function onMessageDecrypt(event: Office.MailboxEvent): void {
+  void (async () => {
+    try {
+      const { mailHost } = mailboxHost();
+      const decrypted = await decryptCurrentBody({ session: session(), mailHost });
+      event.completed({
+        allowEvent: true,
+        emailBody: {
+          coercionType: Office.CoercionType.Text,
+          content: decrypted.plaintext,
+        },
+      } as Office.MessageDecryptEventCompletedOptions);
+    } catch {
+      // Vault locked, no matching key, or the body isn't OpenPGP-armored —
+      // decline so Outlook shows its default "failed to process" notice.
+      event.completed({ allowEvent: false } as Office.MessageDecryptEventCompletedOptions);
+    }
+  })();
 }
 
 Office.onReady(() => {
