@@ -38,11 +38,20 @@ describe("activeAddonCodes", () => {
         hasAddon: (code) => code === "ai_assistant",
         hasOffering: (code) => code === "pgp",
       }),
-    ).toEqual(["ai_assistant", "pgp"]);
+    ).toEqual(["pgp", "ai_assistant"]);
   });
 
   it("fails closed without a gate", () => {
     expect(activeAddonCodes(null)).toEqual([]);
+  });
+
+  it("lists pqc when entitled and never linux", () => {
+    expect(
+      activeAddonCodes({
+        hasAddon: (code) => code === "pqc" || code === "linux",
+        hasOffering: () => false,
+      }),
+    ).toEqual(["pqc"]);
   });
 });
 
