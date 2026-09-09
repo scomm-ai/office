@@ -5,7 +5,6 @@ export type NavModule =
   | "message"
   | "account"
   | "identity"
-  | "semantics"
   | "security"
   | "compliance"
   | "idr"
@@ -17,7 +16,6 @@ const MODULES: Array<{ id: NavModule; label: string }> = [
   { id: "message", label: "Message" },
   { id: "account", label: "Account" },
   { id: "identity", label: "Identity" },
-  { id: "semantics", label: "Semantics" },
   { id: "security", label: "Security" },
   { id: "compliance", label: "Compliance" },
   { id: "idr", label: "AI / IDR" },

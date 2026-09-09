@@ -22,7 +22,6 @@ import { Navigation, type NavModule } from "./Navigation";
 import { MessagePanel } from "./panels/MessagePanel";
 import { AccountBillingPanel } from "./panels/AccountBillingPanel";
 import { IdentityPanel } from "./panels/IdentityPanel";
-import { SemanticsPanel } from "./panels/SemanticsPanel";
 import { SecurityPanel } from "./panels/SecurityPanel";
 import { CompliancePanel } from "./panels/CompliancePanel";
 import { IdrPanel } from "./panels/IdrPanel";
@@ -364,7 +363,6 @@ export function App() {
           {activeModule === "message" ? <MessagePanel /> : null}
           {activeModule === "account" ? <AccountBillingPanel /> : null}
           {activeModule === "identity" ? <IdentityPanel /> : null}
-          {activeModule === "semantics" ? <SemanticsPanel /> : null}
           {activeModule === "security" ? <SecurityPanel launchAction={launch.action} /> : null}
           {activeModule === "compliance" ? <CompliancePanel /> : null}
           {activeModule === "idr" ? <IdrPanel /> : null}

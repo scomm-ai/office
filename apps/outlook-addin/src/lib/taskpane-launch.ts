@@ -6,7 +6,6 @@ const MODULES: NavModule[] = [
   "message",
   "account",
   "identity",
-  "semantics",
   "security",
   "compliance",
   "idr",
