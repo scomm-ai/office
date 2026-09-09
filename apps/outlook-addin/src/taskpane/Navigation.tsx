@@ -14,7 +14,7 @@ export type NavModule =
 
 const MODULES: Array<{ id: NavModule; label: string }> = [
   { id: "message", label: "Message" },
-  { id: "account", label: "Account" },
+  { id: "account", label: "Billing" },
   { id: "identity", label: "Identity" },
   { id: "security", label: "Security" },
   { id: "compliance", label: "Compliance" },

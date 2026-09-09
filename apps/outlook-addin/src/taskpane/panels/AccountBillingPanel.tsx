@@ -28,7 +28,6 @@ import {
 import { createOfficeBillingClient } from "../../lib/billing-client";
 import { openOAuthDialog, type OAuthDialogResult } from "../../lib/billing-oauth-dialog";
 import { useHostContext } from "../../lib/host-context";
-import { DEFAULT_SETTINGS } from "../../lib/settings";
 import { ActionAlert, type AlertKind } from "../components/action-alert";
 import { Button, Field, Input, Note, PageTitle, StatusBadge, Textarea, usePaneStyles } from "../ui/layout";
 
@@ -45,7 +44,7 @@ interface RegionAlert {
 
 export function AccountBillingPanel() {
   const styles = usePaneStyles();
-  const { settings, updateSettings, isMockHost, currentUserEmail } = useHostContext();
+  const { settings, isMockHost, currentUserEmail } = useHostContext();
   const [alert, setAlert] = useState<RegionAlert | null>(null);
   const [busyRegion, setBusyRegion] = useState<AlertRegion | null>(null);
   const [pasteToken, setPasteToken] = useState("");
@@ -169,7 +168,7 @@ export function AccountBillingPanel() {
 
   const persistFriendlyName = async (): Promise<string | null> => {
     if (!billing) {
-      announce("device", "Set billing origin in Settings first.", "error");
+      announce("device", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
       return null;
     }
     const invalid = validateDeviceFriendlyName(friendlyName);
@@ -246,7 +245,7 @@ export function AccountBillingPanel() {
 
   const startSignIn = (providerId: string) => {
     if (!billing) {
-      announce("signin", "Set billing origin in Settings first.", "error");
+      announce("signin", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
       return;
     }
     // Must start the dialog in this click turn (Outlook user-gesture).
@@ -261,7 +260,7 @@ export function AccountBillingPanel() {
 
   const officeSync = async () => {
     if (!billing) {
-      announce("sync", "Set billing origin in Settings first.", "error");
+      announce("sync", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
       return;
     }
     setBusyRegion("sync");
@@ -288,7 +287,7 @@ export function AccountBillingPanel() {
 
   const onlineSync = async (replaceSki?: string) => {
     if (!billing) {
-      announce("sync", "Set billing origin in Settings first.", "error");
+      announce("sync", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
       return;
     }
     const blocked = onlineSyncBlockedReason(signedIn);
@@ -327,7 +326,7 @@ export function AccountBillingPanel() {
 
   const verifyPaste = async () => {
     if (!billing) {
-      announce("paste", "Set billing origin in Settings first.", "error");
+      announce("paste", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
       return;
     }
     setBusyRegion("paste");
@@ -399,7 +398,7 @@ export function AccountBillingPanel() {
       fallbackShopUrl: billing ? shopUrl(billing.config) : "",
     });
     if (!url) {
-      announce("seats", "Set billing portal URL in Settings first.", "error");
+      announce("seats", "Billing portal URL is not configured. Set VITE_BILLING_PORTAL_URL in .env.", "error");
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
@@ -455,7 +454,7 @@ export function AccountBillingPanel() {
           {signedIn ? (payload?.payingParty.billingEmail ?? "Signed in") : "Not signed in"}
         </dd>
         <dt className={styles.metaLabel}>Billing origin</dt>
-        <dd>{billingOrigin || "— (set in Settings)"}</dd>
+        <dd>{billingOrigin || "— (not configured in .env)"}</dd>
         <dt className={styles.metaLabel}>Device</dt>
         <dd>{deviceBoundLabel(deviceBound, deviceSki)}</dd>
         <dt className={styles.metaLabel}>AI add-on</dt>
@@ -467,15 +466,6 @@ export function AccountBillingPanel() {
           <StatusBadge tone={pgpOk ? "ok" : "muted"}>{pgpOk ? "entitled" : "not entitled"}</StatusBadge>
         </dd>
       </dl>
-
-      <Field label="Billing origin">
-        <Input
-          type="url"
-          placeholder={DEFAULT_SETTINGS.billingOrigin ?? "https://billing.scomm.ai"}
-          value={settings.billingOrigin ?? ""}
-          onChange={(_, data) => updateSettings({ billingOrigin: data.value || undefined })}
-        />
-      </Field>
 
       <PageTitle title="Sign in" />
       <div className={styles.actions}>
@@ -494,7 +484,7 @@ export function AccountBillingPanel() {
         ))}
       </div>
       {providers.length === 0 && billingOrigin ? <Note>No sign-in providers discovered.</Note> : null}
-      {!billingOrigin ? <Note>Set billing origin in Settings first.</Note> : null}
+      {!billingOrigin ? <Note>Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.</Note> : null}
       {billingOrigin.startsWith("http:") ? (
         <Note>
           This billing origin is HTTP. Outlook cannot host that in its sign-in window (error 12005),
