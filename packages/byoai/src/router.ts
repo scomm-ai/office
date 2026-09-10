@@ -1,6 +1,6 @@
 import type { IdrTransport } from "@scomm-office/idr";
 import { OllamaViaIdrProvider } from "@scomm-office/idr";
-import type { CloudAiClient } from "./cloud-client.js";
+import type { CloudAiClient, CloudChatMessage } from "./cloud-client.js";
 import {
   BILLING_ADDON_AI_ASSISTANT,
   hasAiEntitlement,
@@ -73,6 +73,38 @@ export class ByoaiRouter {
       prompt: `Summarize this email for the user (plain text only):\n\n${text.slice(0, 12_000)}`,
       stream: false,
     });
+    return response.response;
+  }
+
+  /**
+   * Multi-turn chat, routed the same way as `summarize`. Local (Ollama-via-IDR)
+   * has no native multi-turn API here, so the history is flattened into one prompt.
+   */
+  async chat(messages: CloudChatMessage[]): Promise<string> {
+    this.assertEntitled();
+    const route = this.settings.preferredRoute;
+    if (route === "cloud" || (route !== "local" && this.defaultCloudProfile())) {
+      const profile = this.defaultCloudProfile();
+      if (!profile) {
+        throw new Error("No cloud AI profile configured.");
+      }
+      const result = await this.cloudClient.chat({ profile, messages });
+      return result.content;
+    }
+
+    const transport = this.getIdrTransport();
+    if (!transport) {
+      throw new Error("IDR transport is not connected for local AI.");
+    }
+    const provider = new OllamaViaIdrProvider(transport);
+    const model = this.settings.local.defaultModel;
+    if (!model) {
+      throw new Error("Local AI default model is not set.");
+    }
+    const prompt = messages
+      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .join("\n\n");
+    const response = await provider.generate({ model, prompt, stream: false });
     return response.response;
   }
 }

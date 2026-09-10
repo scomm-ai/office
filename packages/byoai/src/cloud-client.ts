@@ -2,6 +2,7 @@ import type { CloudAiKeyStore } from "./key-store.js";
 import {
   defaultBaseUrlForProvider,
   displayNameForProvider,
+  isLocalProvider,
   type CloudAiProfile,
   type CloudAiProviderKind,
 } from "./types.js";
@@ -17,26 +18,90 @@ export interface CloudChatResult {
   model: string;
 }
 
+/** Runs `run(signal)`, aborting after `timeoutMs` (no-op if unset). Always clears the timer. */
+async function withTimeout<T>(
+  timeoutMs: number | undefined,
+  run: (signal: AbortSignal | undefined) => Promise<T>,
+): Promise<T> {
+  if (!timeoutMs) {
+    return run(undefined);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export class CloudAiClient {
   constructor(
     private readonly keyStore: CloudAiKeyStore,
-    private readonly fetchImpl: typeof fetch = fetch,
+    // Not the bare `fetch` reference: calling it later as `this.fetchImpl(...)`
+    // invokes native fetch with the wrong receiver ("Illegal invocation" in
+    // real browsers — fetch is receiver-checked like other Window methods).
+    // Proxying through a wrapper keeps the call-site correct regardless of
+    // how the stored function is later invoked.
+    private readonly fetchImpl: typeof fetch = (...args) => globalThis.fetch(...args),
   ) {}
 
-  async testConnection(profile: CloudAiProfile, apiKeyOverride?: string): Promise<boolean> {
+  async testConnection(
+    profile: CloudAiProfile,
+    apiKeyOverride?: string,
+    options?: { timeoutMs?: number },
+  ): Promise<boolean> {
     const apiKey = apiKeyOverride?.trim() || (await this.keyStore.readApiKey(profile.id));
-    if (!apiKey) {
+    if (!apiKey && !isLocalProvider(profile.provider)) {
       return false;
     }
     const base = profile.baseUrl.replace(/\/+$/, "");
-    const response = await this.fetchImpl(`${base}/models`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
-      },
-    });
-    return response.ok;
+    try {
+      const response = await withTimeout(options?.timeoutMs, (signal) =>
+        this.fetchImpl(`${base}/models`, {
+          method: "GET",
+          headers: {
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            Accept: "application/json",
+          },
+          signal,
+        }),
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Best-effort model list from the OpenAI-compatible `/models` endpoint.
+   * Throws on network failure / non-OK response (used to probe whether a
+   * local server is running at all) but returns `[]` for an OK response
+   * with no models.
+   */
+  async listModels(
+    profile: CloudAiProfile,
+    options?: { apiKeyOverride?: string; timeoutMs?: number },
+  ): Promise<string[]> {
+    const apiKey = options?.apiKeyOverride?.trim() || (await this.keyStore.readApiKey(profile.id));
+    const base = profile.baseUrl.replace(/\/+$/, "");
+    const response = await withTimeout(options?.timeoutMs, (signal) =>
+      this.fetchImpl(`${base}/models`, {
+        method: "GET",
+        headers: {
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          Accept: "application/json",
+        },
+        signal,
+      }),
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to list models (${response.status})`);
+    }
+    const json = (await response.json()) as { data?: Array<{ id?: string }> };
+    return (json.data ?? [])
+      .map((entry) => entry.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
   }
 
   async chat(options: {
@@ -46,14 +111,14 @@ export class CloudAiClient {
   }): Promise<CloudChatResult> {
     const apiKey =
       options.apiKeyOverride?.trim() || (await this.keyStore.readApiKey(options.profile.id));
-    if (!apiKey) {
+    if (!apiKey && !isLocalProvider(options.profile.provider)) {
       throw new Error("Cloud AI API key is not set for this profile.");
     }
     const base = options.profile.baseUrl.replace(/\/+$/, "");
     const response = await this.fetchImpl(`${base}/chat/completions`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         "Content-Type": "application/json",
         Accept: "application/json",
       },

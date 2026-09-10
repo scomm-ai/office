@@ -4,4 +4,5 @@ export * from "./cloud-client.js";
 export * from "./entitlements.js";
 export * from "./router.js";
 export * from "./ai-extractor.js";
+export * from "./context.js";
 
