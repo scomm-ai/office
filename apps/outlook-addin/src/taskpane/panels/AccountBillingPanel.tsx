@@ -1,32 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  acquireUsingPartyApiToken,
-  authBaseUrl,
-  clearAuthSessionToken,
-  fetchOAuthProviders,
-  readAuthSessionToken,
-  shopUrl,
-  type OAuthProviderInfo,
-} from "@2key/browser-sdk/auth";
+import { shopUrl } from "@2key/browser-sdk/auth";
 import {
   licenseListsSki,
-  TwoKeyError,
+  type BillingSubscription,
   type LicensePayload,
 } from "@2key/browser-sdk/billing";
 import { BILLING_ADDON_AI_ASSISTANT, BILLING_ADDON_PGP } from "../../lib/billing-catalog";
 import {
   deviceBoundLabel,
   encodePublicJwkForPortal,
-  hasBillingAuth,
-  onlineSyncBlockedReason,
-  parseDeviceLimitError,
   resolveBillingPortalOpenUrl,
   validateDeviceFriendlyName,
   copyTextToClipboard,
-  type DeviceLimitState,
 } from "../../lib/billing-account-sync";
 import { createOfficeBillingClient } from "../../lib/billing-client";
-import { openOAuthDialog, type OAuthDialogResult } from "../../lib/billing-oauth-dialog";
 import { useHostContext } from "../../lib/host-context";
 import { ActionAlert, type AlertKind } from "../components/action-alert";
 import { Button, Field, Input, Note, PageTitle, StatusBadge, Textarea, usePaneStyles } from "../ui/layout";
@@ -34,7 +21,7 @@ import { Button, Field, Input, Note, PageTitle, StatusBadge, Textarea, usePaneSt
 const ACCOUNT_KEY = "default";
 const DEFAULT_DEVICE_NAME = "Outlook";
 
-type AlertRegion = "signin" | "sync" | "device" | "paste" | "seats" | "limit";
+type AlertRegion = "sync" | "device" | "paste" | "seats";
 
 interface RegionAlert {
   region: AlertRegion;
@@ -48,15 +35,13 @@ export function AccountBillingPanel() {
   const [alert, setAlert] = useState<RegionAlert | null>(null);
   const [busyRegion, setBusyRegion] = useState<AlertRegion | null>(null);
   const [pasteToken, setPasteToken] = useState("");
-  const [providers, setProviders] = useState<OAuthProviderInfo[]>([]);
   const [payload, setPayload] = useState<LicensePayload | null>(null);
+  const [hostSeats, setHostSeats] = useState<BillingSubscription[]>([]);
   const [deviceSki, setDeviceSki] = useState<string | null>(null);
   const [deviceKeyJson, setDeviceKeyJson] = useState("");
   const [publicJwk, setPublicJwk] = useState<Record<string, unknown> | null>(null);
   const [friendlyName, setFriendlyName] = useState(DEFAULT_DEVICE_NAME);
   const [deviceBound, setDeviceBound] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
-  const [deviceLimit, setDeviceLimit] = useState<DeviceLimitState | null>(null);
   const [aiOk, setAiOk] = useState(false);
   const [pgpOk, setPgpOk] = useState(false);
 
@@ -77,12 +62,12 @@ export function AccountBillingPanel() {
   const refresh = useCallback(async () => {
     if (!billing) {
       setPayload(null);
+      setHostSeats([]);
       setDeviceSki(null);
       setDeviceKeyJson("");
       setPublicJwk(null);
       setFriendlyName(DEFAULT_DEVICE_NAME);
       setDeviceBound(false);
-      setSignedIn(false);
       setAiOk(false);
       setPgpOk(false);
       return;
@@ -96,21 +81,16 @@ export function AccountBillingPanel() {
       setPublicJwk(device.publicJwk);
       setFriendlyName(name);
       setDeviceKeyJson(encodePublicJwkForPortal(device.publicJwk, name));
-      const stored = await billing.session.load(ACCOUNT_KEY);
-      setSignedIn(
-        hasBillingAuth({
-          sessionToken: readAuthSessionToken(billing.config),
-          accessToken: stored?.accessToken,
-        }),
-      );
       const restored = await billing.restore(ACCOUNT_KEY);
       setPayload(restored);
       setDeviceBound(Boolean(restored && licenseListsSki(restored, device.ski)));
       try {
         const e = billing.entitlements();
+        setHostSeats(e.subscriptions);
         setAiOk(e.hasAddon(BILLING_ADDON_AI_ASSISTANT) || e.hasOffering(BILLING_ADDON_AI_ASSISTANT));
         setPgpOk(e.hasAddon(BILLING_ADDON_PGP) || e.hasOffering(BILLING_ADDON_PGP));
       } catch {
+        setHostSeats([]);
         setAiOk(false);
         setPgpOk(false);
       }
@@ -137,35 +117,6 @@ export function AccountBillingPanel() {
     });
   }, [alert]);
 
-  useEffect(() => {
-    if (!billing) {
-      setProviders([]);
-      return;
-    }
-    fetchOAuthProviders(billing.config)
-      .then((doc) => {
-        const enabled = doc.providers.filter((p) => p.enabled && p.id !== "email");
-        setProviders(enabled);
-        if (enabled.length === 0) {
-          announce(
-            "signin",
-            "No sign-in providers are enabled on this billing origin.",
-            "warn",
-          );
-        }
-      })
-      .catch((error) => {
-        setProviders([]);
-        announce(
-          "signin",
-          error instanceof Error
-            ? error.message
-            : "Could not load sign-in providers from billing.",
-          "error",
-        );
-      });
-  }, [billing]);
-
   const persistFriendlyName = async (): Promise<string | null> => {
     if (!billing) {
       announce("device", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
@@ -187,77 +138,6 @@ export function AccountBillingPanel() {
     return name;
   };
 
-  const runOnlineSync = async (accessToken: string, replaceSki?: string) => {
-    if (!billing) return;
-    const name = await persistFriendlyName();
-    if (!name) {
-      throw new Error("Set a valid device name on this Outlook first.");
-    }
-    const nextPayload = await billing.syncLicense({
-      accessToken,
-      accountKey: ACCOUNT_KEY,
-      replaceSki,
-      platform: "web",
-      friendlyName: name,
-    });
-    setPayload(nextPayload);
-    setDeviceLimit(null);
-  };
-
-  const applySyncError = (region: AlertRegion, error: unknown) => {
-    const limit = parseDeviceLimitError(error);
-    if (limit) {
-      setDeviceLimit(limit);
-      announce("limit", limit.message, "error");
-      return;
-    }
-    announce(region, error instanceof Error ? error.message : String(error), "error");
-  };
-
-  const finishSignIn = async (result: OAuthDialogResult) => {
-    if (!billing) return;
-    if (result.status === "cancelled") {
-      announce("signin", "Sign-in cancelled.", "warn");
-      return;
-    }
-    if (result.status === "error") {
-      announce("signin", result.message, "error");
-      return;
-    }
-    announce("signin", "Signed in. Registering this Outlook…", "pending");
-    let token = result.token;
-    if (!token) {
-      const minted = await acquireUsingPartyApiToken(billing.config);
-      if (minted.orgPickRequired || !minted.token) {
-        announce(
-          "signin",
-          "Signed in, but could not open a personal billing context. Try again.",
-          "error",
-        );
-        return;
-      }
-      token = minted.token;
-    }
-    await runOnlineSync(token);
-    announce("signin", "Signed in, device registered, and license synced.", "ok");
-    await refresh();
-  };
-
-  const startSignIn = (providerId: string) => {
-    if (!billing) {
-      announce("signin", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
-      return;
-    }
-    // Must start the dialog in this click turn (Outlook user-gesture).
-    const pending = openOAuthDialog(billing.config, providerId);
-    setBusyRegion("signin");
-    announce("signin", "Waiting for Google to finish — Outlook will pick it up…", "pending");
-    void pending
-      .then((result) => finishSignIn(result))
-      .catch((error) => applySyncError("signin", error))
-      .finally(() => setBusyRegion(null));
-  };
-
   const officeSync = async () => {
     if (!billing) {
       announce("sync", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
@@ -270,55 +150,16 @@ export function AccountBillingPanel() {
       if (!restored) {
         announce(
           "sync",
-          "No cached license. Paste a token or sign in to billing for an online sync.",
+          "No cached license. Copy this Outlook public key into the billing portal, then paste the issued license.",
           "warn",
         );
         await refresh();
         return;
       }
-      announce("sync", "Office sync restored the cached license. Assigned seats are listed below.", "ok");
+      announce("sync", "Restored the cached license. Assigned seats are listed below.", "ok");
       await refresh();
     } catch (error) {
       announce("sync", error instanceof Error ? error.message : String(error), "error");
-    } finally {
-      setBusyRegion(null);
-    }
-  };
-
-  const onlineSync = async (replaceSki?: string) => {
-    if (!billing) {
-      announce("sync", "Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.", "error");
-      return;
-    }
-    const blocked = onlineSyncBlockedReason(signedIn);
-    if (blocked) {
-      announce("sync", blocked, "warn");
-      return;
-    }
-    const region: AlertRegion = replaceSki ? "limit" : "sync";
-    setBusyRegion(region);
-    announce(region, "Syncing license with billing…", "pending");
-    try {
-      const minted = await acquireUsingPartyApiToken(billing.config);
-      if (minted.orgPickRequired || !minted.token) {
-        announce("sync", "Sign in to billing first, then sync online.", "warn");
-        setSignedIn(false);
-        return;
-      }
-      await runOnlineSync(minted.token, replaceSki);
-      announce(
-        region,
-        replaceSki ? "Device replaced and license synced." : "Device registered and license synced.",
-        "ok",
-      );
-      await refresh();
-    } catch (error) {
-      if (error instanceof TwoKeyError && error.code === "unauthorized") {
-        setSignedIn(false);
-        announce("sync", onlineSyncBlockedReason(false) ?? "Sign in to billing first.", "warn");
-        return;
-      }
-      applySyncError(region, error);
     } finally {
       setBusyRegion(null);
     }
@@ -405,35 +246,6 @@ export function AccountBillingPanel() {
     announce("seats", "Opened the billing portal in a browser window.", "ok");
   };
 
-  const signOut = async () => {
-    setBusyRegion("sync");
-    announce("sync", "Signing out…", "pending");
-    try {
-      if (billing) {
-        await fetch(`${authBaseUrl(billing.config)}/sign-out`, {
-          method: "POST",
-          credentials: "include",
-        }).catch(() => undefined);
-        const stored = await billing.session.load(ACCOUNT_KEY);
-        if (stored) {
-          await billing.session.save({
-            ...stored,
-            accessToken: undefined,
-          });
-        }
-        clearAuthSessionToken(billing.config);
-      }
-      setSignedIn(false);
-      setDeviceLimit(null);
-      announce("sync", "Signed out of billing. Cached license remains available for office sync.", "ok");
-      await refresh();
-    } catch (error) {
-      announce("sync", error instanceof Error ? error.message : String(error), "error");
-    } finally {
-      setBusyRegion(null);
-    }
-  };
-
   const regionAlert = (region: AlertRegion) =>
     alert?.region === region ? (
       <ActionAlert id={`alert-${region}`} kind={alert.kind} message={alert.message} />
@@ -443,16 +255,14 @@ export function AccountBillingPanel() {
     <>
       <PageTitle
         title="Account & Billing"
-        description="Outlook mailbox identity is separate from billing SSO. Copy this Outlook public key into the billing portal (Settings → Devices), or sign in and use Online sync to bind it automatically. Office sync only restores a cached license and lists assigned seats (no prices)."
+        description="Outlook mailbox identity is separate from billing. Copy this Outlook public key into the billing portal (Settings → Devices), then paste the issued license here. Restore only reloads a cached license and lists assigned seats (no prices)."
       />
 
       <dl className={styles.metaGrid}>
         <dt className={styles.metaLabel}>Mailbox (host)</dt>
         <dd>{currentUserEmail ?? (isMockHost ? "you@example.com" : "Unknown")}</dd>
         <dt className={styles.metaLabel}>Billing profile</dt>
-        <dd>
-          {signedIn ? (payload?.payingParty.billingEmail ?? "Signed in") : "Not signed in"}
-        </dd>
+        <dd>{payload?.payingParty.billingEmail ?? "No license"}</dd>
         <dt className={styles.metaLabel}>Billing origin</dt>
         <dd>{billingOrigin || "— (not configured in .env)"}</dd>
         <dt className={styles.metaLabel}>Device</dt>
@@ -467,31 +277,7 @@ export function AccountBillingPanel() {
         </dd>
       </dl>
 
-      <PageTitle title="Sign in" />
-      <div className={styles.actions}>
-        {providers.map((p) => (
-          <Button
-            key={p.id}
-            appearance="primary"
-            size="small"
-            disabled={busyRegion === "signin"}
-            onClick={() => startSignIn(p.id)}
-          >
-            {busyRegion === "signin"
-              ? "Signing in…"
-              : `Sign in with ${p.id.charAt(0).toUpperCase()}${p.id.slice(1)}`}
-          </Button>
-        ))}
-      </div>
-      {providers.length === 0 && billingOrigin ? <Note>No sign-in providers discovered.</Note> : null}
       {!billingOrigin ? <Note>Billing origin is not configured. Set VITE_BILLING_ORIGIN in .env.</Note> : null}
-      {billingOrigin.startsWith("http:") ? (
-        <Note>
-          This billing origin is HTTP. Outlook cannot host that in its sign-in window (error 12005),
-          so Sign in opens a separate browser window instead. Prefer https://billing.scomm.ai.
-        </Note>
-      ) : null}
-      {regionAlert("signin")}
       <div className={styles.actions}>
         <Button
           appearance="secondary"
@@ -499,32 +285,14 @@ export function AccountBillingPanel() {
           disabled={busyRegion === "sync"}
           onClick={() => void officeSync()}
         >
-          {busyRegion === "sync" ? "Working…" : "Office sync"}
-        </Button>
-        <Button
-          appearance="secondary"
-          size="small"
-          disabled={busyRegion === "sync" || !signedIn}
-          onClick={() => void onlineSync()}
-        >
-          Online sync
-        </Button>
-        <Button
-          appearance="secondary"
-          size="small"
-          disabled={busyRegion === "sync"}
-          onClick={() => void signOut()}
-        >
-          Sign out
+          {busyRegion === "sync" ? "Working…" : "Restore cached license"}
         </Button>
       </div>
       {regionAlert("sync")}
-      {!signedIn ? (
-        <Note>
-          Online sync needs a billing login. Without it, copy the public device key below into the
-          portal, then paste the issued license JWT here.
-        </Note>
-      ) : null}
+      <Note>
+        Register this Outlook in the billing portal with the public device key below, then paste the
+        issued license. Online license sync is not supported.
+      </Note>
 
       <PageTitle
         title="This Outlook device"
@@ -559,35 +327,6 @@ export function AccountBillingPanel() {
       </div>
       {regionAlert("device")}
 
-      {deviceLimit ? (
-        <>
-          <PageTitle
-            title="Device limit reached"
-            description={
-              deviceLimit.maxDevices != null
-                ? `This seat already has ${deviceLimit.maxDevices} devices. Replace one to register Outlook.`
-                : deviceLimit.message
-            }
-          />
-          <ul className={styles.list}>
-            {deviceLimit.devices.map((d) => (
-              <li key={d.ski}>
-                {d.friendlyName ?? d.platform ?? "device"} · {d.ski.slice(0, 10)}…
-                <Button
-                  appearance="secondary"
-                  size="small"
-                  disabled={busyRegion === "limit"}
-                  onClick={() => void onlineSync(d.ski)}
-                >
-                  Replace with this Outlook
-                </Button>
-              </li>
-            ))}
-          </ul>
-          {regionAlert("limit")}
-        </>
-      ) : null}
-
       <PageTitle title="Offline license paste" />
       <Field label="License JWT">
         <Textarea
@@ -611,11 +350,11 @@ export function AccountBillingPanel() {
 
       <PageTitle
         title="License seats"
-        description="Assigned to you across personal and organization subscriptions. Buy or manage plans in the billing portal."
+        description="Seats this Outlook build can use (catalog ∩ license). Linux and other JWT-only codes stay off. Buy or manage plans in the billing portal."
       />
-      {payload && payload.subscriptions.length > 0 ? (
+      {hostSeats.length > 0 ? (
         <ul className={styles.list}>
-          {payload.subscriptions.map((sub) => (
+          {hostSeats.map((sub) => (
             <li key={sub.subscriptionId}>
               {sub.planName} / {sub.subscriptionStatus}
               {sub.addonCode ? ` [${sub.addonCode}]` : ""}

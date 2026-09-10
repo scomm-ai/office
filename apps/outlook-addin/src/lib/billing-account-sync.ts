@@ -1,37 +1,5 @@
 import type { LicenseEntitlementsView } from "@2key/browser-sdk/billing";
-import { TwoKeyError } from "@2key/browser-sdk/billing";
 import { SCOMM_OFFICE_CATALOG } from "./billing-catalog";
-
-/** Online = billing API (login required). Office = restore cached JWT only. */
-export type LicenseSyncKind = "online" | "office";
-
-export type ReplaceableLicenseDevice = {
-  ski: string;
-  friendlyName?: string;
-  platform?: string;
-};
-
-export type DeviceLimitState = {
-  message: string;
-  maxDevices?: number;
-  devices: ReplaceableLicenseDevice[];
-};
-
-/**
- * Billing SSO is separate from the Outlook mailbox. Online license sync and
- * device bind need a billing session; office sync does not.
- */
-export function hasBillingAuth(input: {
-  sessionToken?: string | null;
-  accessToken?: string | null;
-}): boolean {
-  return Boolean(input.sessionToken?.trim() || input.accessToken?.trim());
-}
-
-export function onlineSyncBlockedReason(signedIn: boolean): string | null {
-  if (signedIn) return null;
-  return "Sign in to billing to sync online and register this device. Office sync can still restore a cached license.";
-}
 
 /**
  * Active catalog add-ons from a verified license. Never includes prices.
@@ -56,39 +24,6 @@ export function activeAddonCodes(
     }
   }
   return out;
-}
-
-export function parseDeviceLimitError(error: unknown): DeviceLimitState | null {
-  if (!(error instanceof TwoKeyError) || error.code !== "conflict") {
-    return null;
-  }
-  const details = asRecord(error.details);
-  const devices: ReplaceableLicenseDevice[] = [];
-  const rawDevices = details.devices;
-  if (Array.isArray(rawDevices)) {
-    for (const item of rawDevices) {
-      const row = asRecord(item);
-      const ski = stringField(row, "ski");
-      if (!ski) continue;
-      devices.push({
-        ski,
-        friendlyName: stringField(row, "friendlyName") || stringField(row, "friendly_name"),
-        platform: stringField(row, "platform"),
-      });
-    }
-  }
-  const maxRaw = details.maxDevices ?? details.max_devices;
-  const maxDevices =
-    typeof maxRaw === "number" && Number.isFinite(maxRaw)
-      ? maxRaw
-      : typeof maxRaw === "string"
-        ? Number(maxRaw) || undefined
-        : undefined;
-  return {
-    message: error.message,
-    maxDevices,
-    devices,
-  };
 }
 
 export function deviceBoundLabel(bound: boolean, ski: string | null): string {
@@ -195,13 +130,4 @@ export async function copyTextToClipboard(
   } finally {
     temp.remove();
   }
-}
-
-function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
-
-function stringField(row: Record<string, unknown>, key: string): string | undefined {
-  const v = row[key];
-  return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }

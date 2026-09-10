@@ -1,0 +1,55 @@
+{
+	"productNames": [
+		"Scomm"
+	],
+	"hosts": {
+		"scommDesktop": {
+			"offeringCodes": [
+				"pqc",
+				"ai_assistant",
+				"scomm_connector",
+				"accent_color",
+				"ai_tokens_1m"
+			],
+			"addonCodes": [
+				"pqc",
+				"ai_assistant",
+				"scomm_connector",
+				"accent_color",
+				"ai_tokens_1m"
+			]
+		},
+		"scommLinux": {
+			"offeringCodes": [
+				"pqc",
+				"linux",
+				"ai_assistant",
+				"scomm_connector",
+				"accent_color",
+				"ai_tokens_1m"
+			],
+			"addonCodes": [
+				"pqc",
+				"linux",
+				"ai_assistant",
+				"scomm_connector",
+				"accent_color",
+				"ai_tokens_1m"
+			]
+		},
+		"office": {
+			"offeringCodes": [
+				"pgp",
+				"pqc",
+				"ai_assistant",
+				"scomm_connector"
+			],
+			"addonCodes": [
+				"pgp",
+				"pqc",
+				"ai_assistant",
+				"scomm_connector"
+			]
+		}
+	}
+}
