@@ -441,14 +441,22 @@ function pubkeyWriteStickyProxy(targetBase: string): Plugin {
   };
 }
 
+function rewriteLocalManifestPort(source: string, port: number): string {
+  const origin = `https://localhost:${port}`;
+  const apiResource = `api://localhost:${port}`;
+  return source
+    .replaceAll(defaultAddinOrigin, origin)
+    .replaceAll(`api://localhost:${defaultAddinPort}`, apiResource);
+}
+
 function writeLocalManifestPlugin(port: number): Plugin {
   const origin = `https://localhost:${port}`;
   return {
     name: "scomm-local-manifest",
     configureServer(server) {
-      const rendered = readFileSync(sourceManifestPath, "utf8").replaceAll(
-        defaultAddinOrigin,
-        origin,
+      const rendered = rewriteLocalManifestPort(
+        readFileSync(sourceManifestPath, "utf8"),
+        port,
       );
       writeFileSync(localManifestPath, rendered, "utf8");
       server.config.logger.info(`Outlook sideload: ${localManifestPath} (${origin})`);

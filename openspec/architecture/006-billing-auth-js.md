@@ -16,10 +16,10 @@ A local `@scomm-office/billing` port of Dart + Better Auth would drift from Flut
 
 ## Goals
 
-- Pin `@2key/browser-sdk` for DeviceID, license restore/sync, and `hasProduct` / `hasOffering` / `hasAddon`
-- Email/password + `acquireApiToken` via SDK HTTP adapters (no Better Auth types)
-- Dual identity: mailbox (Office.js / MSAL) ≠ billing SSO
+- Pin `@2key/browser-sdk` for DeviceID, license restore/paste, and `hasProduct` / `hasOffering` / `hasAddon`
+- Dual identity: mailbox (Office.js / MSAL) ≠ billing portal login
 - Fail-closed gates against a static Outlook catalog intersected with the verified JWT
+- No client `GET /api/v1/license` or in-add-in Better Auth for licensing
 
 ## Non-goals
 
@@ -31,7 +31,7 @@ A local `@scomm-office/billing` port of Dart + Better Auth would drift from Flut
 ## Constraints
 
 - License verify PEM is public only; never embed private signing keys
-- Outlook WebViews: prefer email/password and paste-token; social OAuth via `displayDialogAsync` when needed
+- Outlook WebViews: DeviceID copy → portal bind → paste signed license; restore cached snapshot on start
 - Never send mail bodies or Graph tokens to billing
 - Production add-in origin: `https://office.scomm.ai`
 
@@ -48,7 +48,7 @@ const billing = createBillingClient({
 });
 await billing.ensureDeviceId();
 await billing.restore();
-await billing.syncLicense({ accessToken });
+await billing.pasteLicense(snapshotFromPortal);
 billing.hasAddon("ai_assistant");
 billing.hasAddon("pgp");
 ```
@@ -66,7 +66,7 @@ OpenPGP encrypt, sign, and key publish call `hasAddon("pgp")` (same SecMail SKU)
 | Item | Status |
 |------|--------|
 | Pin `@2key/browser-sdk` | Done |
-| Account/Billing UI on DeviceID + sync + gates | Done |
+| Account/Billing UI on DeviceID + paste + restore | Done |
 | BYOAI `hasAddon("ai_assistant")` / `hasOffering` | Done |
 | OpenPGP encrypt/sign/key publish `hasAddon("pgp")` | Done |
 | Delete `@scomm-office/billing` | Done |
