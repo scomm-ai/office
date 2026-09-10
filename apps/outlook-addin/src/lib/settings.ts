@@ -25,6 +25,10 @@ const defaultPubkeyRead =
 
 const defaultBillingOrigin = import.meta.env.VITE_BILLING_ORIGIN ?? "";
 
+// Opt out with VITE_REQUIRE_AI_ADDON_ENTITLEMENT=false in .env — there is no
+// in-app toggle for this (see AiSetupView / SettingsPanel).
+const defaultRequireAiAddonEntitlement = import.meta.env.VITE_REQUIRE_AI_ADDON_ENTITLEMENT !== "false";
+
 export const DEFAULT_SETTINGS: ResolvedConfiguration = {
   // Fixture-only; product paths ignore this when billing/pubkey envs are set.
   scommServerUrl: import.meta.env.VITE_SCOMM_SERVER_URL || undefined,
@@ -39,7 +43,7 @@ export const DEFAULT_SETTINGS: ResolvedConfiguration = {
   complianceEnabled: true,
   experimentalEncryptionEnabled: false,
   diagnosticsEnabled: true,
-  requireAiAddonEntitlement: true,
+  requireAiAddonEntitlement: defaultRequireAiAddonEntitlement,
 };
 
 export function envHostSnapshot(
@@ -94,6 +98,9 @@ export function loadSettingsFromStorage(): ResolvedConfiguration {
       previousSnapshot = JSON.parse(previousRaw) as Record<string, string>;
     }
     const { settings, snapshot } = applyEnvHostUpdates(stored, DEFAULT_SETTINGS, previousSnapshot);
+    // No UI toggles this — .env is the only source of truth, so it always wins
+    // over whatever a previous (or pre-.env-support) session persisted.
+    settings.requireAiAddonEntitlement = defaultRequireAiAddonEntitlement;
     localStorage.setItem(ENV_HOST_SNAPSHOT_KEY, JSON.stringify(snapshot));
     if (stored && JSON.stringify(stored) !== JSON.stringify(settings)) {
       saveSettingsToStorage(settings);

@@ -14,6 +14,8 @@ interface ImportMetaEnv {
   readonly VITE_AZURE_AUTHORITY?: string;
   /** Dev-only: "1" skips the "pgp" billing add-on gate. See billing-pgp.ts. */
   readonly VITE_DEV_SKIP_PGP_ADDON?: string;
+  /** Set to "false" to let BYOAI work without the ai_assistant billing add-on. Defaults to required. */
+  readonly VITE_REQUIRE_AI_ADDON_ENTITLEMENT?: string;
 }
 
 interface ImportMeta {

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { FluentProvider, webLightTheme, tokens } from "@fluentui/react-components";
+import { AppToaster } from "./toast";
 
 /**
  * Outlook task pane Fluent v9 shell. webLightTheme matches New Outlook / WinUI.
@@ -15,6 +16,7 @@ export function FluentApp({ children }: { children: ReactNode }) {
         color: tokens.colorNeutralForeground1,
       }}
     >
+      <AppToaster />
       {children}
     </FluentProvider>
   );

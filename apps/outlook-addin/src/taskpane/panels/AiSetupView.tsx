@@ -12,9 +12,13 @@ import {
 import { BILLING_ADDON_AI_ASSISTANT } from "../../lib/billing-catalog";
 import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
-import { Dropdown, Option, OptionGroup, Switch } from "@fluentui/react-components";
+import { Dropdown, Option, OptionGroup } from "@fluentui/react-components";
 import { Button, Field, Input, Note, PageTitle, Text, usePaneStyles } from "../ui/layout";
 import { findDuplicateProfile, isProfileReady, loadProfiles, saveProfiles } from "../../lib/byoai-profiles";
+import { useAppToast } from "../ui/toast";
+
+const LOCAL_CONNECT_HINT =
+  "Could not connect. Make sure the local server is running, the base URL is correct, and (for LM Studio) CORS is enabled in its Local Server settings.";
 
 const ACCOUNT_KEY = "default";
 const LOCAL_PROVIDERS: readonly ["ollama", "lmstudio"] = ["ollama", "lmstudio"];
@@ -49,11 +53,11 @@ function defaultModelForProvider(provider: CloudAiProviderKind): string {
 
 export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[]) => void }) {
   const styles = usePaneStyles();
-  const { settings, updateSettings } = useHostContext();
+  const toast = useAppToast();
+  const { settings } = useHostContext();
   const [profiles, setProfiles] = useState<CloudAiProfile[]>(() => loadProfiles());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editDraftApiKey, setEditDraftApiKey] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [entitled, setEntitled] = useState(false);
   const [detection, setDetection] = useState<Record<LocalProviderKind, DetectionState>>({
@@ -141,7 +145,6 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
 
   const pickProvider = (value: string) => {
     setPickerValue(value);
-    setStatus(null);
     if (value.startsWith("detected:")) {
       const provider = value.slice("detected:".length) as LocalProviderKind;
       const models = detection[provider]?.models ?? [];
@@ -168,7 +171,6 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
   const cancelDraft = () => {
     setDraft(null);
     setPickerValue("");
-    setStatus(null);
   };
 
   /**
@@ -181,7 +183,6 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       return;
     }
     setFetchingDraftModels(true);
-    setStatus(null);
     try {
       const probeProfile: CloudAiProfile = {
         id: "draft-probe",
@@ -197,7 +198,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
         timeoutMs: 8000,
       });
       if (models.length === 0) {
-        setStatus("Connected, but the provider returned no models.");
+        toast.showWarning("Connected, but the provider returned no models.");
       }
       setDraft((prev) =>
         prev
@@ -205,7 +206,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
           : prev,
       );
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      toast.showError(error instanceof Error ? error.message : String(error));
     } finally {
       setFetchingDraftModels(false);
     }
@@ -216,11 +217,10 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       return;
     }
     if (requireEntitlement && !entitled) {
-      setStatus(`Requires billing add-on "${BILLING_ADDON_AI_ASSISTANT}". Sync Billing first.`);
+      toast.showError(`Requires billing add-on "${BILLING_ADDON_AI_ASSISTANT}". Sync Billing first.`);
       return;
     }
     setTesting(true);
-    setStatus(null);
     try {
       if (billing) {
         await billing.restore(ACCOUNT_KEY);
@@ -237,15 +237,13 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       const ok = await cloudClient.testConnection(probeProfile, draft.apiKey || undefined, {
         timeoutMs: 5000,
       });
-      setStatus(
-        ok
-          ? "Reachable."
-          : isLocalProvider(draft.provider)
-            ? "Could not connect. Make sure the local server is running and the base URL is correct."
-            : "Could not connect (check key / URL).",
-      );
+      if (ok) {
+        toast.showSuccess("Reachable.");
+      } else {
+        toast.showError(isLocalProvider(draft.provider) ? LOCAL_CONNECT_HINT : "Could not connect (check key / URL).");
+      }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      toast.showError(error instanceof Error ? error.message : String(error));
     } finally {
       setTesting(false);
     }
@@ -258,7 +256,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
     const baseUrl = draft.baseUrl.trim();
     const model = draft.model.trim();
     if (!baseUrl || !model) {
-      setStatus("Base URL and model are required.");
+      toast.showError("Base URL and model are required.");
       return;
     }
 
@@ -270,7 +268,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
         setSelectedId(dupe.id);
         setDraft(null);
         setPickerValue("");
-        setStatus(`Already added as "${dupe.name}" — selected it below.`);
+        toast.showInfo(`Already added as "${dupe.name}" — selected it below.`);
         return;
       }
 
@@ -288,7 +286,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       setSelectedId(profile.id);
       setDraft(null);
       setPickerValue("");
-      setStatus(`Added "${profile.name}".`);
+      toast.showSuccess(`Added "${profile.name}".`);
     } finally {
       addInFlightRef.current = false;
       setAdding(false);
@@ -313,7 +311,6 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       return;
     }
     setFetchingEditModels(true);
-    setStatus(null);
     try {
       const models = await cloudClient.listModels(selected, {
         apiKeyOverride: editDraftApiKey || undefined,
@@ -321,10 +318,10 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       });
       setEditModels(models);
       if (models.length === 0) {
-        setStatus("Connected, but the provider returned no models.");
+        toast.showWarning("Connected, but the provider returned no models.");
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      toast.showError(error instanceof Error ? error.message : String(error));
     } finally {
       setFetchingEditModels(false);
     }
@@ -337,7 +334,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
     await keyStore.writeApiKey(selected.id, editDraftApiKey.trim());
     updateSelected({ hasApiKey: true });
     setEditDraftApiKey("");
-    setStatus("API key saved locally in this WebView only.");
+    toast.showSuccess("API key saved locally in this WebView only.");
   };
 
   const testSelected = async () => {
@@ -345,27 +342,26 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       return;
     }
     if (requireEntitlement && !entitled) {
-      setStatus(`Requires billing add-on "${BILLING_ADDON_AI_ASSISTANT}". Sync Billing first.`);
+      toast.showError(`Requires billing add-on "${BILLING_ADDON_AI_ASSISTANT}". Sync Billing first.`);
       return;
     }
     setBusy(true);
-    setStatus(null);
     try {
       if (billing) {
         await billing.restore(ACCOUNT_KEY);
       }
       const ok = await cloudClient.testConnection(selected, editDraftApiKey || undefined, { timeoutMs: 5000 });
       if (ok) {
-        setStatus("Reachable.");
+        toast.showSuccess("Reachable.");
         const hasKey = selected.hasApiKey || Boolean(editDraftApiKey.trim());
         if (hasKey !== selected.hasApiKey) {
           updateSelected({ hasApiKey: hasKey });
         }
       } else {
-        setStatus(selectedIsLocal ? "Could not connect. Make sure the local server is running." : "Could not connect (check key / URL).");
+        toast.showError(selectedIsLocal ? LOCAL_CONNECT_HINT : "Could not connect (check key / URL).");
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      toast.showError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -383,7 +379,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
     persist(next);
     setSelectedId(null);
     setEditDraftApiKey("");
-    setStatus(`Removed "${selected.name}".`);
+    toast.showSuccess(`Removed "${selected.name}".`);
   };
 
   const anyReady = profiles.some(isProfileReady);
@@ -401,11 +397,6 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       <PageTitle
         title="AI providers"
         description="External AI sends requests from this WebView to your provider with your API key — keys never go to an Office server. Local AI talks directly to a model server running on this device (Ollama, LM Studio, or any OpenAI-compatible server) — nothing leaves the machine."
-      />
-      <Switch
-        label="Require AI add-on entitlement"
-        checked={requireEntitlement}
-        onChange={(_, data) => updateSettings({ requireAiAddonEntitlement: data.checked })}
       />
       <Note>Entitlement status: {entitled ? "ai_assistant active" : "not entitled (or not synced)"}</Note>
 
@@ -636,8 +627,6 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
           </div>
         </div>
       ) : null}
-
-      {status ? <Note>{status}</Note> : null}
 
       {anyReady ? (
         <div className={styles.actions}>
