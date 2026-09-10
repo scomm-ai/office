@@ -139,6 +139,99 @@ export class CloudAiClient {
     const content = json.choices?.[0]?.message?.content ?? "";
     return { content, model: json.model ?? options.profile.model };
   }
+
+  /**
+   * Same as `chat`, but requests SSE streaming (`stream: true`) from the
+   * OpenAI-compatible endpoint and invokes `onDelta` as each token chunk
+   * arrives, so callers can render the reply incrementally instead of
+   * waiting for the full completion. Falls back to a single `onDelta` call
+   * with the whole message if the environment's `fetch` doesn't expose a
+   * readable response body (e.g. older runtimes).
+   */
+  async chatStream(options: {
+    profile: CloudAiProfile;
+    messages: CloudChatMessage[];
+    onDelta: (delta: string) => void;
+    apiKeyOverride?: string;
+    signal?: AbortSignal;
+  }): Promise<CloudChatResult> {
+    const apiKey =
+      options.apiKeyOverride?.trim() || (await this.keyStore.readApiKey(options.profile.id));
+    if (!apiKey && !isLocalProvider(options.profile.provider)) {
+      throw new Error("Cloud AI API key is not set for this profile.");
+    }
+    const base = options.profile.baseUrl.replace(/\/+$/, "");
+    const response = await this.fetchImpl(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({
+        model: options.profile.model,
+        messages: options.messages,
+        temperature: 0.2,
+        stream: true,
+      }),
+      signal: options.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Cloud AI request failed (${response.status}): ${text.slice(0, 200)}`);
+    }
+    if (!response.body) {
+      const json = (await response.json()) as {
+        model?: string;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = json.choices?.[0]?.message?.content ?? "";
+      if (content) {
+        options.onDelta(content);
+      }
+      return { content, model: json.model ?? options.profile.model };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let content = "";
+    let model = options.profile.model;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) {
+          continue;
+        }
+        const data = trimmed.slice("data:".length).trim();
+        if (!data || data === "[DONE]") {
+          continue;
+        }
+        let parsed: { model?: string; choices?: Array<{ delta?: { content?: string } }> };
+        try {
+          parsed = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        if (parsed.model) {
+          model = parsed.model;
+        }
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta) {
+          content += delta;
+          options.onDelta(delta);
+        }
+      }
+    }
+    return { content, model };
+  }
 }
 
 export function createCloudProfile(input: {

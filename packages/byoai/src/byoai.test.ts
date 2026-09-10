@@ -167,6 +167,72 @@ describe("CloudAiClient.testConnection", () => {
   });
 });
 
+describe("CloudAiClient.chatStream", () => {
+  function sseResponse(chunks: string[]): Response {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder();
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200 });
+  }
+
+  it("invokes onDelta per streamed chunk and assembles the full content", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      sseResponse([
+        `data: ${JSON.stringify({ model: "llama-3.3", choices: [{ delta: { content: "Hel" } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "lo!" } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ]),
+    );
+    const client = new CloudAiClient(new InMemoryCloudAiKeyStore(), fetchImpl as unknown as typeof fetch);
+    const profile = createCloudProfile({ provider: "openai_compatible" });
+    const deltas: string[] = [];
+    const result = await client.chatStream({
+      profile,
+      messages: [{ role: "user", content: "hi" }],
+      apiKeyOverride: "sk-test",
+      onDelta: (delta) => deltas.push(delta),
+    });
+    expect(deltas).toEqual(["Hel", "lo!"]);
+    expect(result).toEqual({ content: "Hello!", model: "llama-3.3" });
+  });
+
+  it("falls back to a single onDelta call when the response has no readable body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      body: null,
+      json: async () => ({ model: "gpt-4o-mini", choices: [{ message: { content: "Hi!" } }] }),
+    });
+    const client = new CloudAiClient(new InMemoryCloudAiKeyStore(), fetchImpl as unknown as typeof fetch);
+    const profile = createCloudProfile({ provider: "openai" });
+    const deltas: string[] = [];
+    const result = await client.chatStream({
+      profile,
+      messages: [{ role: "user", content: "hi" }],
+      apiKeyOverride: "sk-test",
+      onDelta: (delta) => deltas.push(delta),
+    });
+    expect(deltas).toEqual(["Hi!"]);
+    expect(result).toEqual({ content: "Hi!", model: "gpt-4o-mini" });
+  });
+
+  it("throws on a non-OK response without calling onDelta", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => "bad key" });
+    const client = new CloudAiClient(new InMemoryCloudAiKeyStore(), fetchImpl as unknown as typeof fetch);
+    const profile = createCloudProfile({ provider: "openai" });
+    const onDelta = vi.fn();
+    await expect(
+      client.chatStream({ profile, messages: [], apiKeyOverride: "sk-test", onDelta }),
+    ).rejects.toThrow(/401/);
+    expect(onDelta).not.toHaveBeenCalled();
+  });
+});
+
 describe("CloudAiClient.listModels", () => {
   it("parses OpenAI-compatible model ids and drops malformed entries", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({

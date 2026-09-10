@@ -31,6 +31,10 @@ export async function sendChatTurn(params: {
   profile: CloudAiProfile;
   history: ChatMessage[];
   userText: string;
+  /** Invoked synchronously once ids are assigned, before the request starts. */
+  onStart?: (userMessage: ChatMessage, assistantMessageId: string) => void;
+  /** Invoked for each streamed token chunk as the reply arrives. */
+  onDelta?: (delta: string) => void;
 }): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage; mode: "read" | "compose" }> {
   const mode = params.mailHost.getMode();
   const contextInput =
@@ -56,15 +60,18 @@ export async function sendChatTurn(params: {
     content: message.content,
   }));
   const userMessage: ChatMessage = { id: nextId(), role: "user", content: params.userText };
+  const assistantMessageId = nextId();
+  params.onStart?.(userMessage, assistantMessageId);
 
-  const result = await params.cloudClient.chat({
+  const result = await params.cloudClient.chatStream({
     profile: params.profile,
     messages: [systemMessage, ...priorTurns, { role: "user", content: params.userText }],
+    onDelta: (delta) => params.onDelta?.(delta),
   });
 
   const proposedDraft = mode === "compose" ? extractProposedDraft(result.content) : null;
   const assistantMessage: ChatMessage = {
-    id: nextId(),
+    id: assistantMessageId,
     role: "assistant",
     content: result.content,
     proposedDraft,

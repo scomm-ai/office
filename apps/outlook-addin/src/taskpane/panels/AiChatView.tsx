@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { makeStyles, mergeClasses } from "@fluentui/react-components";
 import { CloudAiClient, LocalStorageCloudAiKeyStore } from "@scomm-office/byoai";
 import { Button, Note, PageTitle, StatusBadge, Text, Textarea, tokens, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
@@ -6,8 +7,36 @@ import { defaultProfile, loadProfiles } from "../../lib/byoai-profiles";
 import { sendChatTurn, type ChatMessage } from "../../lib/byoai-chat";
 import { ApplyDraftDialog } from "./ApplyDraftDialog";
 
+const useBubbleStyles = makeStyles({
+  bubble: {
+    borderRadius: "16px",
+    boxShadow: tokens.shadow2,
+  },
+  userBubble: {
+    borderBottomRightRadius: "4px",
+  },
+  assistantBubble: {
+    borderBottomLeftRadius: "4px",
+  },
+  cursor: {
+    display: "inline-block",
+    width: "0.5em",
+    height: "1em",
+    marginLeft: "2px",
+    verticalAlign: "text-bottom",
+    backgroundColor: tokens.colorNeutralForeground3,
+    animationName: {
+      "0%, 49%": { opacity: 1 },
+      "50%, 100%": { opacity: 0 },
+    },
+    animationDuration: "1s",
+    animationIterationCount: "infinite",
+  },
+});
+
 export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
   const styles = usePaneStyles();
+  const bubbleStyles = useBubbleStyles();
   const { mailHost, message, refreshMessage } = useHostContext();
   const [profiles] = useState(() => loadProfiles());
   const profile = useMemo(() => defaultProfile(profiles), [profiles]);
@@ -20,8 +49,13 @@ export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [applyTarget, setApplyTarget] = useState<{ current: string; proposed: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const streamingIdRef = useRef<string | null>(null);
 
   const isCompose = message?.mode === "compose";
+
+  const scrollToEnd = () => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -32,16 +66,38 @@ export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
     setError(null);
     setInput("");
     try {
-      const { userMessage, assistantMessage } = await sendChatTurn({
+      const { assistantMessage } = await sendChatTurn({
         mailHost,
         cloudClient,
         profile,
         history: messages,
         userText: text,
+        onStart: (userMessage, assistantMessageId) => {
+          streamingIdRef.current = assistantMessageId;
+          setMessages((prev) => [
+            ...prev,
+            userMessage,
+            { id: assistantMessageId, role: "assistant", content: "" },
+          ]);
+          scrollToEnd();
+        },
+        onDelta: (delta) => {
+          const id = streamingIdRef.current;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === id ? { ...m, content: m.content + delta } : m)),
+          );
+          scrollToEnd();
+        },
       });
-      setMessages((prev) => [...prev, userMessage, assistantMessage]);
-      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      streamingIdRef.current = null;
+      setMessages((prev) => prev.map((m) => (m.id === assistantMessage.id ? assistantMessage : m)));
+      scrollToEnd();
     } catch (err) {
+      const failedId = streamingIdRef.current;
+      streamingIdRef.current = null;
+      if (failedId) {
+        setMessages((prev) => prev.filter((m) => m.id !== failedId || m.content));
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
@@ -104,18 +160,28 @@ export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
               : "Ask the assistant about this email — summarize it, pull out action items, or answer questions."}
           </Note>
         ) : null}
-        {messages.map((m) => (
+        {messages.map((m) => {
+          const isStreaming = busy && streamingIdRef.current === m.id;
+          return (
           <div
             key={m.id}
-            className={styles.card}
+            className={mergeClasses(
+              styles.card,
+              bubbleStyles.bubble,
+              m.role === "user" ? bubbleStyles.userBubble : bubbleStyles.assistantBubble,
+            )}
             style={{
               alignSelf: m.role === "user" ? "flex-end" : "flex-start",
               backgroundColor:
                 m.role === "user" ? tokens.colorBrandBackground2 : tokens.colorNeutralBackground1,
+              border: m.role === "user" ? "none" : `1px solid ${tokens.colorNeutralStroke2}`,
               maxWidth: "90%",
             }}
           >
-            <Text size={200}>{m.content}</Text>
+            <Text size={200}>
+              {m.content}
+              {isStreaming ? <span className={bubbleStyles.cursor} /> : null}
+            </Text>
             {m.proposedDraft ? (
               <Button
                 appearance="primary"
@@ -127,7 +193,8 @@ export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
               </Button>
             ) : null}
           </div>
-        ))}
+          );
+        })}
         <div ref={transcriptEndRef} />
       </div>
 
