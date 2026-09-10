@@ -64,6 +64,9 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
   const [draft, setDraft] = useState<Draft | null>(null);
   const [testing, setTesting] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [fetchingDraftModels, setFetchingDraftModels] = useState(false);
+  const [editModels, setEditModels] = useState<string[]>([]);
+  const [fetchingEditModels, setFetchingEditModels] = useState(false);
   const addInFlightRef = useRef(false);
 
   const keyStore = useMemo(() => new LocalStorageCloudAiKeyStore(), []);
@@ -168,6 +171,46 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
     setStatus(null);
   };
 
+  /**
+   * Works for any OpenAI-compatible provider (OpenAI, Groq, OpenRouter, a
+   * self-hosted proxy, etc.) since they all serve the same `/models` shape —
+   * nothing here is provider-specific.
+   */
+  const fetchDraftModels = async () => {
+    if (!draft || !draft.baseUrl.trim()) {
+      return;
+    }
+    setFetchingDraftModels(true);
+    setStatus(null);
+    try {
+      const probeProfile: CloudAiProfile = {
+        id: "draft-probe",
+        name: "",
+        provider: draft.provider,
+        baseUrl: draft.baseUrl,
+        model: draft.model,
+        hasApiKey: false,
+        isDefault: false,
+      };
+      const models = await cloudClient.listModels(probeProfile, {
+        apiKeyOverride: draft.apiKey || undefined,
+        timeoutMs: 8000,
+      });
+      if (models.length === 0) {
+        setStatus("Connected, but the provider returned no models.");
+      }
+      setDraft((prev) =>
+        prev
+          ? { ...prev, detectedModels: models, model: models.includes(prev.model) ? prev.model : (models[0] ?? prev.model) }
+          : prev,
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFetchingDraftModels(false);
+    }
+  };
+
   const testDraft = async () => {
     if (!draft) {
       return;
@@ -263,6 +306,28 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       }
     }
     persist(next);
+  };
+
+  const fetchEditModels = async () => {
+    if (!selected) {
+      return;
+    }
+    setFetchingEditModels(true);
+    setStatus(null);
+    try {
+      const models = await cloudClient.listModels(selected, {
+        apiKeyOverride: editDraftApiKey || undefined,
+        timeoutMs: 8000,
+      });
+      setEditModels(models);
+      if (models.length === 0) {
+        setStatus("Connected, but the provider returned no models.");
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFetchingEditModels(false);
+    }
   };
 
   const saveEditedKey = async () => {
@@ -432,6 +497,14 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
               {testing ? "Testing…" : "Test connection"}
             </Button>
             <Button
+              appearance="secondary"
+              size="small"
+              disabled={fetchingDraftModels || !draft.baseUrl.trim()}
+              onClick={() => void fetchDraftModels()}
+            >
+              {fetchingDraftModels ? "Fetching models…" : "Fetch models"}
+            </Button>
+            <Button
               appearance="primary"
               size="small"
               disabled={adding || !draft.baseUrl.trim() || !draft.model.trim()}
@@ -456,7 +529,11 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
               <Button
                 appearance={profile.id === selectedId ? "primary" : "secondary"}
                 size="small"
-                onClick={() => setSelectedId(profile.id === selectedId ? null : profile.id)}
+                onClick={() => {
+                  setSelectedId(profile.id === selectedId ? null : profile.id);
+                  setEditModels([]);
+                  setEditDraftApiKey("");
+                }}
               >
                 {profile.name}
                 {profile.isDefault ? " (default)" : ""}
@@ -476,7 +553,11 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
               <Button
                 appearance={profile.id === selectedId ? "primary" : "secondary"}
                 size="small"
-                onClick={() => setSelectedId(profile.id === selectedId ? null : profile.id)}
+                onClick={() => {
+                  setSelectedId(profile.id === selectedId ? null : profile.id);
+                  setEditModels([]);
+                  setEditDraftApiKey("");
+                }}
               >
                 {profile.name}
                 {profile.isDefault ? " (default)" : ""}
@@ -497,7 +578,21 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
             />
           </Field>
           <Field label="Model">
-            <Input value={selected.model} onChange={(_, data) => updateSelected({ model: data.value })} />
+            {editModels.length > 0 ? (
+              <Dropdown
+                value={selected.model}
+                selectedOptions={[selected.model]}
+                onOptionSelect={(_, data) => updateSelected({ model: data.optionValue ?? selected.model })}
+              >
+                {editModels.map((m) => (
+                  <Option key={m} value={m}>
+                    {m}
+                  </Option>
+                ))}
+              </Dropdown>
+            ) : (
+              <Input value={selected.model} onChange={(_, data) => updateSelected({ model: data.value })} />
+            )}
           </Field>
           <Field label={selectedIsLocal ? "API key (optional)" : "API key"}>
             <Input
@@ -518,6 +613,14 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
             </Button>
             <Button appearance="secondary" size="small" disabled={busy} onClick={() => void testSelected()}>
               {busy ? "Testing…" : "Test connection"}
+            </Button>
+            <Button
+              appearance="secondary"
+              size="small"
+              disabled={fetchingEditModels || (!selected.hasApiKey && !editDraftApiKey.trim() && !selectedIsLocal)}
+              onClick={() => void fetchEditModels()}
+            >
+              {fetchingEditModels ? "Fetching models…" : "Fetch models"}
             </Button>
             <Button
               appearance="secondary"
