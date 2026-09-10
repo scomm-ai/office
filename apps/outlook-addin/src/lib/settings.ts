@@ -25,7 +25,7 @@ const defaultPubkeyRead =
 
 const defaultBillingOrigin = import.meta.env.VITE_BILLING_ORIGIN ?? "";
 
-// Opt out with VITE_REQUIRE_AI_ADDON_ENTITLEMENT=false in .env — there is no
+// Opt out with VITE_REQUIRE_AI_ADDON_ENTITLEMENT=false in .env â€” there is no
 // in-app toggle for this (see AiSetupView / SettingsPanel).
 const defaultRequireAiAddonEntitlement = import.meta.env.VITE_REQUIRE_AI_ADDON_ENTITLEMENT !== "false";
 
@@ -98,7 +98,7 @@ export function loadSettingsFromStorage(): ResolvedConfiguration {
       previousSnapshot = JSON.parse(previousRaw) as Record<string, string>;
     }
     const { settings, snapshot } = applyEnvHostUpdates(stored, DEFAULT_SETTINGS, previousSnapshot);
-    // No UI toggles this — .env is the only source of truth, so it always wins
+    // No UI toggles this â€” .env is the only source of truth, so it always wins
     // over whatever a previous (or pre-.env-support) session persisted.
     settings.requireAiAddonEntitlement = defaultRequireAiAddonEntitlement;
     localStorage.setItem(ENV_HOST_SNAPSHOT_KEY, JSON.stringify(snapshot));
@@ -119,7 +119,7 @@ export function formatAddresses(
   addresses: Array<{ emailAddress: string; displayName?: string }> | undefined,
 ): string {
   if (!addresses?.length) {
-    return "—";
+    return "â€”";
   }
   return addresses
     .map((address) =>
@@ -129,7 +129,7 @@ export function formatAddresses(
 }
 
 /** Production pubkey origin used for both read and write. */
-export const PRODUCTION_PUBKEY_ORIGIN = "https://pubkey.scomm.ai";
+export const PRODUCTION_PUBKEY_ORIGIN = "https://discovery.scomm.ai";
 
 /**
  * True for localhost / loopback hosts, including IPv6 (`::1`) used by some WebViews.
@@ -146,12 +146,12 @@ export function isLoopbackHostname(hostname: string | undefined): boolean {
 }
 
 /**
- * Production read and write share pubkey.scomm.ai. api.pubkey.scomm.ai is not in DNS.
+ * Production read and write share discovery.scomm.ai. api.discovery.scomm.ai is not in DNS.
  */
 export function normalizePubkeyWriteBaseUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === "api.pubkey.scomm.ai") {
+    if (parsed.hostname === "api.discovery.scomm.ai") {
       return PRODUCTION_PUBKEY_ORIGIN;
     }
   } catch {
@@ -171,7 +171,7 @@ function configuredPubkeyReadBaseUrl(settings: ResolvedConfiguration): string {
 
 /**
  * Resolve the read API base. On localhost the Vite proxy avoids mixed content
- * (HTTPS task pane → HTTP pubkey) — traffic goes to `/pubkey-read`.
+ * (HTTPS task pane â†’ HTTP pubkey) â€” traffic goes to `/pubkey-read`.
  */
 export function resolvePubkeyReadBaseUrl(
   settings: ResolvedConfiguration,

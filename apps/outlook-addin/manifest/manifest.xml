@@ -10,7 +10,7 @@
   <ProviderName>Scomm.AI</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Scomm.AI" />
-  <Description DefaultValue="OpenPGP encrypt/sign/decrypt, pubkey.scomm.ai discovery, semantics, and compliance for Outlook." />
+  <Description DefaultValue="OpenPGP encrypt/sign/decrypt, discovery.scomm.ai discovery, semantics, and compliance for Outlook." />
   <IconUrl DefaultValue="https://localhost:5173/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:5173/assets/icon-64.png" />
   <SupportUrl DefaultValue="https://localhost:5173/taskpane.html" />
@@ -187,10 +187,10 @@
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="TaskPaneButtonDesc" DefaultValue="Open Scomm.AI for identity, OpenPGP, semantics, and compliance." />
-        <bt:String id="EncryptButtonDesc" DefaultValue="Encrypt this draft with classical OpenPGP keys from pubkey.scomm.ai." />
+        <bt:String id="EncryptButtonDesc" DefaultValue="Encrypt this draft with classical OpenPGP keys from discovery.scomm.ai." />
         <bt:String id="SignButtonDesc" DefaultValue="Clearsign this draft with your Scomm.AI OpenPGP key." />
         <bt:String id="DecryptButtonDesc" DefaultValue="Decrypt the OpenPGP body in the Scomm.AI pane. Plaintext stays in the pane." />
-        <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on pubkey.scomm.ai." />
+        <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on discovery.scomm.ai." />
       </bt:LongStrings>
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
@@ -343,14 +343,14 @@
         </bt:ShortStrings>
         <bt:LongStrings>
           <bt:String id="TaskPaneButtonDesc" DefaultValue="Open Scomm.AI for identity, OpenPGP, semantics, and compliance." />
-          <bt:String id="EncryptButtonDesc" DefaultValue="Encrypt this draft with classical OpenPGP keys from pubkey.scomm.ai." />
+          <bt:String id="EncryptButtonDesc" DefaultValue="Encrypt this draft with classical OpenPGP keys from discovery.scomm.ai." />
           <bt:String id="SignButtonDesc" DefaultValue="Clearsign this draft with your Scomm.AI OpenPGP key." />
           <bt:String id="DecryptButtonDesc" DefaultValue="Decrypt the OpenPGP body in the Scomm.AI pane. Plaintext stays in the pane." />
-          <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on pubkey.scomm.ai." />
+          <bt:String id="VerifyButtonDesc" DefaultValue="Verify an OpenPGP signature using the sender key on discovery.scomm.ai." />
         </bt:LongStrings>
       </Resources>
       <!-- Replace YOUR_AZURE_CLIENT_ID below with the Entra app registration's
-           Application (client) ID — the same value as VITE_AZURE_CLIENT_ID in
+           Application (client) ID â€” the same value as VITE_AZURE_CLIENT_ID in
            apps/outlook-addin/.env. Required for Nested App Authentication (NAA),
            which GraphSubmissionAdapter needs to send PGP/MIME-correct mail. -->
       <WebApplicationInfo>

@@ -55,8 +55,8 @@ function bytesEqual(a, b) {
  */
 export class PubkeyClient {
 	constructor({
-		readBaseUrl = "https://pubkey.scomm.ai",
-		writeBaseUrl = "https://pubkey.scomm.ai",
+		readBaseUrl = "https://discovery.scomm.ai",
+		writeBaseUrl = "https://discovery.scomm.ai",
 		crypto,
 		vault,
 		pgpEngine,
@@ -508,13 +508,13 @@ export class PubkeyClient {
 	// the server, or `createPairingSession` 404s. Wire-compatible with
 	// secMail10's `PubkeyClient.createPairingSession` /
 	// `getPairingSession` / `respondToPairingSession` (packages/scomm_pubkey/
-	// lib/src/client/pubkey_client.dart) — these previously targeted
+	// lib/src/client/pubkey_client.dart) â€” these previously targeted
 	// `/v1/device-enrollments*`, which the server has never implemented
 	// (it only ever exposed `/v1/pairing/:sessionId[/response]`).
 
 	/**
 	 * Device B (the new device) creates a pairing mailbox and returns the
-	 * session id — display it (or the returned `pairingCode`, the same
+	 * session id â€” display it (or the returned `pairingCode`, the same
 	 * value) for the user to type into their existing SComm device.
 	 */
 	async createPairingSession({
@@ -550,7 +550,7 @@ export class PubkeyClient {
 	 * Polls a pairing mailbox. Used by both roles: device A (fetching the
 	 * pending request, then just checking for COMPLETED) and device B
 	 * (polling for A's response). Only B's own poll should pass
-	 * `retrieverDeviceId` (its own device id from `createPairingSession`) —
+	 * `retrieverDeviceId` (its own device id from `createPairingSession`) â€”
 	 * that is what lets the server distinguish B's one-time retrieval of
 	 * the RESPONDED envelope from A's routine "did B finish?" status check.
 	 */
@@ -567,7 +567,7 @@ export class PubkeyClient {
 	 * Device A (already holds an unlocked Vault) delivers the wrapped
 	 * envelope(s) to device B. `peerEphemeralPublicKey` is B's
 	 * `b_ephemeral_public_key` from the PENDING session. Envelope contents
-	 * are opaque to the server — this only relays ciphertext and an
+	 * are opaque to the server â€” this only relays ciphertext and an
 	 * ephemeral public key, never raw VRK/AEK (never mistake this for a
 	 * `set_keys`/`mutate` call; the server does not validate or inspect it).
 	 */
@@ -605,7 +605,7 @@ export class PubkeyClient {
 	 * Device B side: poll until A responds, then unwrap VRK (and AEK, if
 	 * granted). The server flips PENDING -> RESPONDED -> COMPLETED as a
 	 * side effect of this device's own `retrieverDeviceId`-tagged GET, so
-	 * there is no separate "complete" call — unlike the old
+	 * there is no separate "complete" call â€” unlike the old
 	 * `/v1/device-enrollments/:id/complete` endpoint this replaces.
 	 */
 	async completePairingAsNewDevice({
@@ -683,7 +683,7 @@ export class PubkeyClient {
 	// Server-synced vault (`/v1/vault/*`, CKVF spec Section 8). Wire-compatible
 	// with secMail10's `PubkeyClient.uploadVault` / `downloadCurrentVault` /
 	// `downloadVaultGeneration` (packages/scomm_pubkey/lib/src/client/
-	// pubkey_client.dart) — this previously called `vault_list` /
+	// pubkey_client.dart) â€” this previously called `vault_list` /
 	// `vault_get_records` / `vault_put_record` mutate operations that
 	// `mutateService.ts`'s `applyMutation` switch has never recognized (every
 	// call 400'd). The real protocol uploads the whole encrypted vault as one
@@ -777,7 +777,7 @@ export class PubkeyClient {
 	/**
 	 * Fetches and applies the server's latest vault generation onto `vault`
 	 * (default `this.vault`). Verifies `ciphertext_hash` and `msk_signature`
-	 * before ever decrypting — deliberately unauthenticated (no MSK-signed
+	 * before ever decrypting â€” deliberately unauthenticated (no MSK-signed
 	 * request envelope): a freshly-paired device holds VRK but no live MSK
 	 * signing capability yet, since the MSK envelope lives *inside* the vault
 	 * content this call fetches. Returns `null` if nothing has been uploaded
@@ -807,7 +807,7 @@ export class PubkeyClient {
 		if (target?.unlocked && key) {
 			if (target.lastCiphertextHash && bytesEqual(target.lastCiphertextHash, record.ciphertextHash)) {
 				// Already holds this exact generation (most commonly because it
-				// just uploaded it itself) — nothing to apply.
+				// just uploaded it itself) â€” nothing to apply.
 				target.generation = record.generation;
 				return record.generation;
 			}
@@ -833,7 +833,7 @@ export class PubkeyClient {
 	/**
 	 * Fetches one specific, immutable historical vault generation and decrypts
 	 * it with `vrk` (the *old* VRK a re-importing device already holds
-	 * locally — never derived or fetched here). Does not mutate `vault`
+	 * locally â€” never derived or fetched here). Does not mutate `vault`
 	 * state; returns the decrypted entries for the caller to merge. The MSK
 	 * that signed this generation may since have been replaced, so this
 	 * verifies against ANY key the identity has ever armed

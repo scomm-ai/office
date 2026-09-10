@@ -10,7 +10,7 @@ import {
 
 describe("formatAddresses", () => {
   it("returns em dash when empty", () => {
-    expect(formatAddresses(undefined)).toBe("—");
+    expect(formatAddresses(undefined)).toBe("â€”");
   });
 
   it("formats display names", () => {
@@ -22,7 +22,7 @@ describe("resolvePubkeyWriteBaseUrl", () => {
   it("uses the sticky same-origin proxy on localhost", () => {
     expect(
       resolvePubkeyWriteBaseUrl(
-        { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: "https://pubkey.scomm.ai" },
+        { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: "https://discovery.scomm.ai" },
         { hostname: "localhost", origin: "https://localhost:5175" },
       ),
     ).toBe("https://localhost:5175/pubkey-write");
@@ -31,7 +31,7 @@ describe("resolvePubkeyWriteBaseUrl", () => {
   it("uses the sticky same-origin proxy on IPv6 loopback", () => {
     expect(
       resolvePubkeyWriteBaseUrl(
-        { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: "https://pubkey.scomm.ai" },
+        { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: "https://discovery.scomm.ai" },
         { hostname: "[::1]", origin: "https://[::1]:5175" },
       ),
     ).toBe("https://[::1]:5175/pubkey-write");
@@ -43,16 +43,16 @@ describe("resolvePubkeyWriteBaseUrl", () => {
         { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: undefined },
         { hostname: "addin.scomm.ai", origin: "https://addin.scomm.ai" },
       ),
-    ).toBe("https://pubkey.scomm.ai");
+    ).toBe("https://discovery.scomm.ai");
   });
 
   it("rewrites the non-resolving api.pubkey host to production", () => {
     expect(
       resolvePubkeyWriteBaseUrl(
-        { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: "https://api.pubkey.scomm.ai" },
+        { ...DEFAULT_SETTINGS, pubkeyWriteBaseUrl: "https://api.discovery.scomm.ai" },
         { hostname: "addin.scomm.ai", origin: "https://addin.scomm.ai" },
       ),
-    ).toBe("https://pubkey.scomm.ai");
+    ).toBe("https://discovery.scomm.ai");
   });
 
   it("keeps a custom write host off loopback", () => {
@@ -88,7 +88,7 @@ describe("resolvePubkeyReadBaseUrl", () => {
 describe("applyEnvHostUpdates", () => {
   it("replaces stale stored pubkey URLs when env snapshot is missing", () => {
     const { settings } = applyEnvHostUpdates(
-      { ...DEFAULT_SETTINGS, pubkeyReadBaseUrl: "https://pubkey.scomm.ai" },
+      { ...DEFAULT_SETTINGS, pubkeyReadBaseUrl: "https://discovery.scomm.ai" },
       { ...DEFAULT_SETTINGS, pubkeyReadBaseUrl: "http://localhost:3030" },
       null,
     );
@@ -102,10 +102,10 @@ describe("applyEnvHostUpdates", () => {
       billingOrigin: "http://localhost:3000",
     };
     const { settings } = applyEnvHostUpdates(
-      { ...env, pubkeyReadBaseUrl: "https://pubkey.scomm.ai", billingOrigin: "https://billing.example" },
+      { ...env, pubkeyReadBaseUrl: "https://discovery.scomm.ai", billingOrigin: "https://billing.example" },
       env,
       {
-        pubkeyReadBaseUrl: "https://pubkey.scomm.ai",
+        pubkeyReadBaseUrl: "https://discovery.scomm.ai",
         pubkeyWriteBaseUrl: env.pubkeyWriteBaseUrl ?? "",
         pubkeyServerUrl: env.pubkeyServerUrl ?? "",
         scommServerUrl: env.scommServerUrl ?? "",

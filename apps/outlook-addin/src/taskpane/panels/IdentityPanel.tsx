@@ -118,7 +118,7 @@ export function IdentityPanel() {
 
   const publishDevKey = async () => {
     if (!userEmail) {
-      setPublishState("Current user email unknown — cannot publish dev key.");
+      setPublishState("Current user email unknown â€” cannot publish dev key.");
       return;
     }
     setBusy(true);
@@ -159,14 +159,14 @@ export function IdentityPanel() {
     <>
       <PageTitle
         title="Identity"
-        description="Keys are discovered on pubkey.scomm.ai — the same directory as the Scomm.AI mail client."
+        description="Keys are discovered on discovery.scomm.ai â€” the same directory as the Scomm.AI mail client."
       />
       <dl className={styles.metaGrid}>
         <dt className={styles.metaLabel}>Current user (mailbox)</dt>
         <dd>{userEmail ?? "Unknown (Outlook profile not exposed in MVP)"}</dd>
         <dt className={styles.metaLabel}>Pubkey directory</dt>
         <dd>
-          {pubkeyBase || "— (set pubkey read URL in Settings)"} ({mode})
+          {pubkeyBase || "â€” (set pubkey read URL in Settings)"} ({mode})
         </dd>
       </dl>
 
@@ -196,7 +196,7 @@ export function IdentityPanel() {
         </>
       ) : (
         <Note>
-          Recipient key lookup runs in compose mode. Current mode: {message?.mode ?? "—"} (
+          Recipient key lookup runs in compose mode. Current mode: {message?.mode ?? "â€”"} (
           {formatAddresses(message?.to)}).
         </Note>
       )}
@@ -216,7 +216,7 @@ export function IdentityPanel() {
       {publishState ? <Note>{publishState}</Note> : null}
       {!capabilities.internetHeaders ? (
         <MessageBar intent="error">
-          <MessageBarBody>Internet headers unavailable — Mailbox 1.8+ required for header stamping.</MessageBarBody>
+          <MessageBarBody>Internet headers unavailable â€” Mailbox 1.8+ required for header stamping.</MessageBarBody>
         </MessageBar>
       ) : null}
     </>
@@ -238,7 +238,7 @@ function KeyStatusRow({ status, label }: { status: KeyStatus; label: string }) {
       <strong>{label}</strong>{" "}
       <StatusBadge tone={tone}>
         {status.status === "loading"
-          ? "loading…"
+          ? "loadingâ€¦"
           : status.status === "found"
             ? `${status.count} key(s)`
             : status.status === "missing"

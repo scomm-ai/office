@@ -5,8 +5,8 @@
 Microsoft **disabled Add from URL** for custom Outlook add-ins (security). That control stays dimmed. Install from a **file**.
 
 1. Download **[scomm-ai-outlook.xml](https://office.scomm.ai/manifest.xml)** (or open that URL and **Save As** `.xml`).
-2. In a browser go to **[https://aka.ms/olksideload](https://aka.ms/olksideload)** (Outlook on the web add-in dialog). Classic Outlook: **File → Info → Manage Add-ins**.
-3. **My add-ins** → **Custom add-ins** → **Add a custom add-in** → **Add from File** → the XML → **Install**.
+2. In a browser go to **[https://aka.ms/olksideload](https://aka.ms/olksideload)** (Outlook on the web add-in dialog). Classic Outlook: **File â†’ Info â†’ Manage Add-ins**.
+3. **My add-ins** â†’ **Custom add-ins** â†’ **Add a custom add-in** â†’ **Add from File** â†’ the XML â†’ **Install**.
 4. Restart Outlook. Open a **mail** item. Ribbon group **Scomm.AI**: Decrypt / Verify on read; Encrypt / Sign on compose.
 
 Install page: **https://office.scomm.ai/**
@@ -17,18 +17,18 @@ Classic Outlook can take up to ~24 hours to show a sideloaded add-in because of 
 
 ### Classic Outlook (Windows)
 
-Classic is the Win32 client (**New Outlook** toggle off). This is an Office.js add-in, not COM — it will not appear under File → Options → COM Add-ins.
+Classic is the Win32 client (**New Outlook** toggle off). This is an Office.js add-in, not COM â€” it will not appear under File â†’ Options â†’ COM Add-ins.
 
 Use **Add from File** as above. Microsoft 365 / Exchange Online mailbox required (POP/IMAP-only profiles usually cannot install).
 
-Admins can deploy the XML in **Microsoft 365 admin center → Integrated apps** (that path can still use a hosted URL even though user sideload cannot).
+Admins can deploy the XML in **Microsoft 365 admin center â†’ Integrated apps** (that path can still use a hosted URL even though user sideload cannot).
 
 ---
 
 ## Local development
 
 Committed template: `apps/outlook-addin/manifest/manifest.xml` (default **https://localhost:5173**).  
-After `pnpm dev`, sideload **`manifest.local.xml`** — it is rewritten from `ADDIN_PORT` in the repo-root `.env` (default `5173`).  
+After `pnpm dev`, sideload **`manifest.local.xml`** â€” it is rewritten from `ADDIN_PORT` in the repo-root `.env` (default `5173`).  
 Do **not** share those files or URLs for production installs.
 
 ### 1. Start the add-in dev server
@@ -48,7 +48,7 @@ Outlook loads the task pane over HTTPS. If the certificate is untrusted, the pan
 
 ### 3. Sideload the localhost manifest
 
-**Outlook on the web / New Outlook / Classic:** **My add-ins → Add a custom add-in → Add from file** → `apps/outlook-addin/manifest/manifest.local.xml` (generated when the Vite server starts). Re-install that file whenever `ADDIN_PORT` changes.
+**Outlook on the web / New Outlook / Classic:** **My add-ins â†’ Add a custom add-in â†’ Add from file** â†’ `apps/outlook-addin/manifest/manifest.local.xml` (generated when the Vite server starts). Re-install that file whenever `ADDIN_PORT` changes.
 
 Keep the Vite server running.
 
@@ -67,12 +67,12 @@ Keep the Vite server running.
 | Symptom | Check |
 |---------|--------|
 | Blank task pane | Dev server running? Cert trusted in WebView2? |
-| “Add-in may not load properly” | Sideloaded `manifest.local.xml` (not the 5173 template)? `ADDIN_PORT` matches the running Vite server? |
+| â€œAdd-in may not load properlyâ€ | Sideloaded `manifest.local.xml` (not the 5173 template)? `ADDIN_PORT` matches the running Vite server? |
 | Add-in not in ribbon | Sideloaded? Mail item (not calendar)? Restart Outlook |
 | Add from URL dimmed | Microsoft removed that option. Download the XML and **Add from File** |
-| Pubkey errors | Production default is `https://pubkey.scomm.ai` |
+| Pubkey errors | Production default is `https://discovery.scomm.ai` |
 | Icons 404 | PNGs under `apps/outlook-addin/public/assets/` |
 
 ### 7. Browser-only (no Outlook)
 
-Open `https://localhost:<ADDIN_PORT>/taskpane.html` (default 5173) — **MockMailHost** and a **Mock host** banner. Real encrypt/decrypt against a mailbox still needs Outlook + a sideloaded manifest.
+Open `https://localhost:<ADDIN_PORT>/taskpane.html` (default 5173) â€” **MockMailHost** and a **Mock host** banner. Real encrypt/decrypt against a mailbox still needs Outlook + a sideloaded manifest.

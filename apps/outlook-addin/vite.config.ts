@@ -44,12 +44,12 @@ function parseAddinPort(raw: string | undefined): number {
   return port;
 }
 
-/** Production write host. api.pubkey.scomm.ai is not in DNS. */
+/** Production write host. api.discovery.scomm.ai is not in DNS. */
 function rewriteLegacyPubkeyWriteHost(raw: string): string {
   const trimmed = raw.replace(/\/+$/, "");
   try {
-    if (new URL(trimmed).hostname === "api.pubkey.scomm.ai") {
-      return "https://pubkey.scomm.ai";
+    if (new URL(trimmed).hostname === "api.discovery.scomm.ai") {
+      return "https://discovery.scomm.ai";
     }
   } catch {
     return trimmed;
@@ -391,7 +391,7 @@ function pubkeyWriteStickyProxy(targetBase: string): Plugin {
 
   function attach(server: ViteDevServer | PreviewServer): void {
     server.config.logger.info(
-      `Pubkey write proxy ${pubkeyWriteProxyPath} → ${target.origin} (raw sticky HTTP/1.1)`,
+      `Pubkey write proxy ${pubkeyWriteProxyPath} â†’ ${target.origin} (raw sticky HTTP/1.1)`,
     );
     server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
       const url = req.url ?? "";
@@ -415,7 +415,7 @@ function pubkeyWriteStickyProxy(targetBase: string): Plugin {
         const result = await upstreamRequest(method, pathName, body, req.headers.cookie);
         const cookieNames = [...cookieJar.keys()].join(",") || "-";
         server.config.logger.info(
-          `pubkey-write ${method} ${pathName} → ${result.status} (http1 port=${result.localPort ?? "?"} set-cookie=${setCookieCount(result.headers)} jar=${cookieNames} proof=${bodyFlag(body, "decrypt_proof")} err=${errorCode(result.body) || "-"} hdr=${headerNames(result.headers)})`,
+          `pubkey-write ${method} ${pathName} â†’ ${result.status} (http1 port=${result.localPort ?? "?"} set-cookie=${setCookieCount(result.headers)} jar=${cookieNames} proof=${bodyFlag(body, "decrypt_proof")} err=${errorCode(result.body) || "-"} hdr=${headerNames(result.headers)})`,
         );
         writeClientResponse(res, result.status, result.headers, result.body);
       }).catch((error) => {
@@ -504,14 +504,14 @@ export default defineConfig(({ mode }) => {
   const pubkeyWriteTarget = rewriteLegacyPubkeyWriteHost(
     process.env.VITE_PUBKEY_WRITE_BASE_URL ||
       viteEnv.VITE_PUBKEY_WRITE_BASE_URL ||
-      "https://pubkey.scomm.ai",
+      "https://discovery.scomm.ai",
   );
   const pubkeyReadTarget = rewriteLegacyPubkeyWriteHost(
     process.env.VITE_PUBKEY_READ_BASE_URL ||
       viteEnv.VITE_PUBKEY_READ_BASE_URL ||
       process.env.VITE_PUBKEY_SERVER_URL ||
       viteEnv.VITE_PUBKEY_SERVER_URL ||
-      "https://pubkey.scomm.ai",
+      "https://discovery.scomm.ai",
   );
 
   return {
@@ -524,7 +524,7 @@ export default defineConfig(({ mode }) => {
         name: "scomm-pubkey-read-proxy-log",
         configureServer(server) {
           server.config.logger.info(
-            `Pubkey read proxy ${pubkeyReadProxyPath} → ${pubkeyReadTarget}`,
+            `Pubkey read proxy ${pubkeyReadProxyPath} â†’ ${pubkeyReadTarget}`,
           );
         },
       },

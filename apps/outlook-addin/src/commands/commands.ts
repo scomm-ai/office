@@ -23,8 +23,8 @@ import {
   resolvePubkeyReadBaseUrl,
 } from "../lib/settings";
 
-const DEFAULT_READ = "https://pubkey.scomm.ai";
-const DEFAULT_WRITE = "https://pubkey.scomm.ai";
+const DEFAULT_READ = "https://discovery.scomm.ai";
+const DEFAULT_WRITE = "https://discovery.scomm.ai";
 
 function envUrl(name: string, fallback: string): string {
   const value =
@@ -213,7 +213,7 @@ function onMessageSend(event: Office.AddinCommands.Event): void {
           return;
         }
       } catch {
-        /* lookup of toggles failed — do not brick send */
+        /* lookup of toggles failed â€” do not brick send */
       }
       event.completed({ allowEvent: true });
     }
@@ -238,7 +238,7 @@ function onMessageDecrypt(event: Office.MailboxEvent): void {
         },
       } as Office.MessageDecryptEventCompletedOptions);
     } catch {
-      // Vault locked, no matching key, or the body isn't OpenPGP-armored —
+      // Vault locked, no matching key, or the body isn't OpenPGP-armored â€”
       // decline so Outlook shows its default "failed to process" notice.
       event.completed({ allowEvent: false } as Office.MessageDecryptEventCompletedOptions);
     }
