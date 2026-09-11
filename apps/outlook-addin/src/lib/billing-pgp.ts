@@ -1,4 +1,8 @@
-import { BILLING_ADDON_PGP } from "./billing-catalog";
+import {
+  BILLING_ADDON_PGP,
+  licenseGrantsFeature,
+  type LicenseNormalizedProducts,
+} from "./billing-catalog";
 import { createOfficeBillingClient } from "./billing-client";
 import { loadSettingsFromStorage } from "./settings";
 
@@ -6,14 +10,13 @@ import { loadSettingsFromStorage } from "./settings";
 export const PGP_ADDON_REQUIRED_MESSAGE =
   'OpenPGP encrypt, sign, and key publish require the "pgp" add-on. Sync Account & Billing or open the billing portal.';
 
-/** Gate shape from `@2key/browser-sdk` — do not parse JWTs here. */
+/** Gate JSON from `@2key/browser-sdk` `normalizedEntitlements()`. Do not parse JWTs here. */
 export interface PgpAddonGate {
-  hasAddon: (code: string) => boolean;
-  hasOffering?: (code: string) => boolean;
+  products?: LicenseNormalizedProducts;
 }
 
 /**
- * Fail-closed: true only when the verified license lists `pgp`.
+ * Fail-closed: true only when the verified license lists `pgp` with count >= 1.
  * Decrypt and signature verify stay available without this add-on.
  */
 export function hasPgpEntitlement(gate: PgpAddonGate | null | undefined): boolean {
@@ -21,7 +24,7 @@ export function hasPgpEntitlement(gate: PgpAddonGate | null | undefined): boolea
     return false;
   }
   try {
-    return gate.hasAddon(BILLING_ADDON_PGP) || Boolean(gate.hasOffering?.(BILLING_ADDON_PGP));
+    return licenseGrantsFeature(gate.products, BILLING_ADDON_PGP);
   } catch {
     return false;
   }
@@ -54,7 +57,7 @@ export async function loadPgpEntitlement(apiBaseUrl?: string): Promise<boolean> 
   try {
     const billing = createOfficeBillingClient(origin);
     await billing.restore();
-    return hasPgpEntitlement(billing);
+    return hasPgpEntitlement(billing.normalizedEntitlements());
   } catch {
     return false;
   }

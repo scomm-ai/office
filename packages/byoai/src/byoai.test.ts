@@ -29,19 +29,18 @@ describe("createCloudProfile", () => {
 });
 
 describe("hasAiEntitlement", () => {
-  it("requires ai_assistant add-on by default", () => {
+  it("requires ai_assistant count >= 1 by default", () => {
     expect(hasAiEntitlement(null)).toBe(false);
     expect(
       hasAiEntitlement({
-        hasAddon: (code) => code === BILLING_ADDON_AI_ASSISTANT,
+        products: { Scomm: { [BILLING_ADDON_AI_ASSISTANT]: { count: 1 } } },
       }),
     ).toBe(true);
     expect(
       hasAiEntitlement({
-        hasAddon: () => false,
-        hasOffering: (code) => code === BILLING_ADDON_AI_ASSISTANT,
+        products: { Scomm: { pgp: { count: 1 } } },
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -113,7 +112,7 @@ describe("ByoaiRouter.chat", () => {
       settings,
       cloudClient,
       () => null,
-      () => ({ hasAddon: () => true }),
+      () => ({ products: { Scomm: { [BILLING_ADDON_AI_ASSISTANT]: { count: 1 } } } }),
     );
     const reply = await router.chat([{ role: "user", content: "Draft a reply" }]);
     expect(reply).toBe("Hi!");

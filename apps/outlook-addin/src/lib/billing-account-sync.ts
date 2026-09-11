@@ -1,26 +1,25 @@
-import type { LicenseEntitlementsView } from "@2key/browser-sdk/billing";
-import { SCOMM_OFFICE_CATALOG } from "./billing-catalog";
+import {
+  SCOMM_OFFICE_CATALOG,
+  licenseGrantsFeature,
+  type LicenseNormalizedProducts,
+} from "./billing-catalog";
 
 /**
  * Active catalog add-ons from a verified license. Never includes prices.
  */
 export function activeAddonCodes(
-  gate: Pick<LicenseEntitlementsView, "hasAddon" | "hasOffering"> | null | undefined,
+  products: LicenseNormalizedProducts | null | undefined,
   catalogAddonCodes: readonly string[] = SCOMM_OFFICE_CATALOG.addonCodes,
 ): string[] {
-  if (!gate) return [];
+  if (!products) return [];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const code of catalogAddonCodes) {
     const key = code.trim();
     if (!key || seen.has(key)) continue;
-    try {
-      if (gate.hasAddon(key) || gate.hasOffering(key)) {
-        seen.add(key);
-        out.push(key);
-      }
-    } catch {
-      /* fail closed for this code */
+    if (licenseGrantsFeature(products, key)) {
+      seen.add(key);
+      out.push(key);
     }
   }
   return out;
