@@ -7,16 +7,12 @@
 			"offeringCodes": [
 				"pqc",
 				"ai_assistant",
-				"scomm_connector",
-				"accent_color",
-				"ai_tokens_1m"
+				"accent_color"
 			],
 			"addonCodes": [
 				"pqc",
 				"ai_assistant",
-				"scomm_connector",
-				"accent_color",
-				"ai_tokens_1m"
+				"accent_color"
 			]
 		},
 		"scommLinux": {
@@ -24,31 +20,25 @@
 				"pqc",
 				"linux",
 				"ai_assistant",
-				"scomm_connector",
-				"accent_color",
-				"ai_tokens_1m"
+				"accent_color"
 			],
 			"addonCodes": [
 				"pqc",
 				"linux",
 				"ai_assistant",
-				"scomm_connector",
-				"accent_color",
-				"ai_tokens_1m"
+				"accent_color"
 			]
 		},
 		"office": {
 			"offeringCodes": [
 				"pgp",
 				"pqc",
-				"ai_assistant",
-				"scomm_connector"
+				"ai_assistant"
 			],
 			"addonCodes": [
 				"pgp",
 				"pqc",
-				"ai_assistant",
-				"scomm_connector"
+				"ai_assistant"
 			]
 		}
 	}
