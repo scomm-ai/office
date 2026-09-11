@@ -354,8 +354,8 @@
            apps/outlook-addin/.env. Required for Nested App Authentication (NAA),
            which GraphSubmissionAdapter needs to send PGP/MIME-correct mail. -->
       <WebApplicationInfo>
-        <Id>a464330e-1a4f-4c58-a066-ab325ba595bd</Id>
-        <Resource>api://localhost:5173/a464330e-1a4f-4c58-a066-ab325ba595bd</Resource>
+        <Id>7555f958-ecf8-47d2-b088-b903001e3cbc</Id>
+        <Resource>api://localhost:5173/7555f958-ecf8-47d2-b088-b903001e3cbc</Resource>
         <Scopes>
           <Scope>User.Read</Scope>
           <Scope>Mail.ReadWrite</Scope>
