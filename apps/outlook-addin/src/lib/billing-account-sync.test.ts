@@ -1,35 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { TwoKeyError } from "@2key/browser-sdk/billing";
+import { licenseEntitlements, type BillingSubscription } from "@2key/browser-sdk/billing";
 import {
   activeAddonCodes,
   deviceBoundLabel,
   encodePublicJwkForPortal,
-  hasBillingAuth,
-  onlineSyncBlockedReason,
-  parseDeviceLimitError,
   copyTextToClipboard,
   validateDeviceFriendlyName,
   resolveBillingPortalOpenUrl,
 } from "./billing-account-sync";
-
-describe("hasBillingAuth", () => {
-  it("is false without tokens", () => {
-    expect(hasBillingAuth({})).toBe(false);
-    expect(hasBillingAuth({ sessionToken: "  ", accessToken: "" })).toBe(false);
-  });
-
-  it("is true with a billing session or API token", () => {
-    expect(hasBillingAuth({ sessionToken: "sess" })).toBe(true);
-    expect(hasBillingAuth({ accessToken: "api" })).toBe(true);
-  });
-});
-
-describe("onlineSyncBlockedReason", () => {
-  it("blocks online sync when signed out", () => {
-    expect(onlineSyncBlockedReason(false)).toMatch(/Sign in to billing/);
-    expect(onlineSyncBlockedReason(true)).toBeNull();
-  });
-});
+import { SCOMM_OFFICE_CATALOG } from "./billing-catalog";
 
 describe("activeAddonCodes", () => {
   it("lists catalog add-ons that the license grants, without prices", () => {
@@ -55,27 +34,51 @@ describe("activeAddonCodes", () => {
   });
 });
 
-describe("parseDeviceLimitError", () => {
-  it("reads replaceable devices from a 409 payload", () => {
-    const err = new TwoKeyError(
-      "conflict",
-      "Device limit reached (5).",
-      "DEVICE_LIMIT_REACHED",
+describe("office SDK catalog seats", () => {
+  const seat = (addonCode: string, planName: string): BillingSubscription => ({
+    subscriptionId: addonCode,
+    planId: addonCode,
+    productId: "Scomm",
+    planName,
+    productName: "Scomm",
+    quantity: 1,
+    subscriptionStatus: "active",
+    validUntilUnix: 4102444800,
+    addonCode,
+    offerings: [
       {
-        maxDevices: 5,
-        devices: [{ ski: "abc", friendlyName: "laptop", platform: "web" }],
+        offeringId: addonCode,
+        offeringCode: addonCode,
+        productId: "Scomm",
+        productName: "Scomm",
+        units: 1,
+        resources: { addon_code: addonCode },
       },
-    );
-    expect(parseDeviceLimitError(err)).toEqual({
-      message: "Device limit reached (5).",
-      maxDevices: 5,
-      devices: [{ ski: "abc", friendlyName: "laptop", platform: "web" }],
-    });
+    ],
+    devices: [],
   });
 
-  it("ignores unrelated errors", () => {
-    expect(parseDeviceLimitError(new Error("nope"))).toBeNull();
-    expect(parseDeviceLimitError(new TwoKeyError("unauthorized", "no"))).toBeNull();
+  it("licenseEntitlements hides linux seats and keeps local AI", () => {
+    const e = licenseEntitlements(
+      {
+        payloadVersion: 3,
+        payingParty: {
+          id: "pp",
+          identityProvider: "google",
+          identitySubject: "sub",
+          billingEmail: "a@b.com",
+        },
+        subscriptions: [
+          seat("linux", "Linux Version"),
+          seat("ai_assistant", "Local AI"),
+        ],
+      },
+      1_700_000_000,
+      SCOMM_OFFICE_CATALOG,
+    );
+    expect(e.hasAddon("linux")).toBe(false);
+    expect(e.hasAddon("ai_assistant")).toBe(true);
+    expect(e.subscriptions.map((s) => s.addonCode)).toEqual(["ai_assistant"]);
   });
 });
 

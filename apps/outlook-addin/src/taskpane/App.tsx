@@ -29,8 +29,6 @@ import { AiSettingsPanel } from "./panels/AiSettingsPanel";
 import { DiagnosticsPanel } from "./panels/DiagnosticsPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { MessageBar, MessageBarBody, Spinner, Text, Title3 } from "@fluentui/react-components";
-import { acquireUsingPartyApiToken } from "@2key/browser-sdk/auth";
-import { createOfficeBillingClient } from "../lib/billing-client";
 import { usePaneStyles } from "./ui/layout";
 
 const settingsStore = new MemoryUserSettingsStore<ResolvedConfiguration>();
@@ -233,29 +231,6 @@ export function App() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!ready) {
-      return;
-    }
-    const origin = settings.billingOrigin?.trim();
-    if (!origin) {
-      return;
-    }
-    const client = createOfficeBillingClient(origin, settings.billingPortalUrl?.trim());
-    client.startPolling({
-      accountKey: "default",
-      accessToken: async () => {
-        try {
-          const minted = await acquireUsingPartyApiToken(client.config);
-          return minted.token ?? "";
-        } catch {
-          return "";
-        }
-      },
-    });
-    return () => client.stopPolling();
-  }, [ready, settings.billingOrigin, settings.billingPortalUrl]);
 
   const updateSettings = useCallback((patch: Partial<ResolvedConfiguration>) => {
     setSettings((prev) => {
