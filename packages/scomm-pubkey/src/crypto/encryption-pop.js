@@ -86,6 +86,32 @@ export function unwrapDecryptChallenge(body) {
 	return body;
 }
 
+function decodeMaybeBase64Url(value) {
+	return typeof value === "string" ? decodeBase64Url(value) : value;
+}
+
+/**
+ * Splits the server's `iv(12) || tag(16) || ciphertext` wrap framing and
+ * decrypts it with an already-derived AES-256-GCM key.
+ *
+ * @param {import("./provider.js").CryptoProvider} crypto
+ * @param {Uint8Array} aesKey
+ * @param {Uint8Array} wrapped
+ * @returns {Promise<Uint8Array>}
+ */
+async function decryptChallengeWrap(crypto, aesKey, wrapped) {
+	if (wrapped.length < AES_GCM_IV_BYTES + AES_GCM_TAG_BYTES) {
+		throw new PubkeyError(
+			ERROR_CODES.invalid_proof_of_possession,
+			"Malformed decrypt challenge from server",
+		);
+	}
+	const iv = wrapped.subarray(0, AES_GCM_IV_BYTES);
+	const tag = wrapped.subarray(AES_GCM_IV_BYTES, AES_GCM_IV_BYTES + AES_GCM_TAG_BYTES);
+	const encrypted = wrapped.subarray(AES_GCM_IV_BYTES + AES_GCM_TAG_BYTES);
+	return crypto.decryptAead(aesKey, iv, concatBytes(encrypted, tag));
+}
+
 /**
  * Recovers the wrapped nonce from a directory decrypt challenge.
  *
@@ -108,23 +134,55 @@ export async function solveDecryptChallenge(crypto, contentKey, challenge) {
 			"Malformed decrypt challenge from server",
 		);
 	}
-	const wrapped =
-		typeof wrappedRaw === "string" ? decodeBase64Url(wrappedRaw) : wrappedRaw;
-	if (wrapped.length < AES_GCM_IV_BYTES + AES_GCM_TAG_BYTES) {
-		throw new PubkeyError(
-			ERROR_CODES.invalid_proof_of_possession,
-			"Malformed decrypt challenge from server",
-		);
-	}
-	const iv = wrapped.subarray(0, AES_GCM_IV_BYTES);
-	const tag = wrapped.subarray(AES_GCM_IV_BYTES, AES_GCM_IV_BYTES + AES_GCM_TAG_BYTES);
-	const encrypted = wrapped.subarray(AES_GCM_IV_BYTES + AES_GCM_TAG_BYTES);
-	const ephemeralBytes =
-		typeof ephemeralRaw === "string" ? decodeBase64Url(ephemeralRaw) : ephemeralRaw;
+	const wrapped = decodeMaybeBase64Url(wrappedRaw);
+	const ephemeralBytes = decodeMaybeBase64Url(ephemeralRaw);
 	const ephemeralPublic = stripX25519Public(ephemeralBytes);
 	const sharedSecret = await crypto.deriveSecret(contentKey, ephemeralPublic);
 	const aesKey = await crypto.hash("sha-256", sharedSecret);
-	return crypto.decryptAead(aesKey, iv, concatBytes(encrypted, tag));
+	return decryptChallengeWrap(crypto, aesKey, wrapped);
+}
+
+/**
+ * Recovers the wrapped nonce from a hybrid PQC (ML-KEM-768+X25519) decrypt
+ * challenge — the directory issues this instead of {@link solveDecryptChallenge}
+ * when the published encryption artifact is an RFC 9980 composite key.
+ *
+ * Combiner matches the pubkey server / secMail10's Rust engine exactly (no
+ * JS-side spec of its own to derive from): shared key is
+ * `SHA-256(mlkemSharedSecret(32) || x25519SharedSecret(32))` — ML-KEM secret
+ * first, plain concatenation, no domain-separation label. Same AES-GCM wrap
+ * framing as the classical challenge.
+ *
+ * @param {import("./provider.js").CryptoProvider} crypto
+ * @param {import("../engines/pq.js").PqEngine} pqEngine
+ * @param {import("./provider.js").KeyHandle} contentKey X25519 private handle (classical half)
+ * @param {Uint8Array} mlkemSeed 64-byte ML-KEM-768 seed (d||z, PQC half)
+ * @param {{ challenge_id?: string, ciphertext?: string, ephemeral_public?: string, kem_ciphertext?: string, data?: object }} challenge
+ * @returns {Promise<Uint8Array>}
+ */
+export async function solveHybridDecryptChallenge(crypto, pqEngine, contentKey, mlkemSeed, challenge) {
+	const unwrapped = unwrapDecryptChallenge(challenge);
+	const challengeId = unwrapped?.challenge_id;
+	const wrappedRaw = unwrapped?.ciphertext;
+	const ephemeralRaw = unwrapped?.ephemeral_public;
+	const kemCiphertextRaw = unwrapped?.kem_ciphertext;
+	if (!challengeId || !wrappedRaw || !ephemeralRaw || !kemCiphertextRaw) {
+		throw new PubkeyError(
+			ERROR_CODES.invalid_proof_of_possession,
+			"Malformed hybrid decrypt challenge from server",
+		);
+	}
+	const wrapped = decodeMaybeBase64Url(wrappedRaw);
+	const ephemeralBytes = decodeMaybeBase64Url(ephemeralRaw);
+	const ephemeralPublic = stripX25519Public(ephemeralBytes);
+	const kemCiphertext = decodeMaybeBase64Url(kemCiphertextRaw);
+
+	const [mlkemShared, x25519Shared] = await Promise.all([
+		pqEngine.decapsulate({ seed: mlkemSeed, ciphertext: kemCiphertext }),
+		crypto.deriveSecret(contentKey, ephemeralPublic),
+	]);
+	const aesKey = await crypto.hash("sha-256", concatBytes(mlkemShared, x25519Shared));
+	return decryptChallengeWrap(crypto, aesKey, wrapped);
 }
 
 /**

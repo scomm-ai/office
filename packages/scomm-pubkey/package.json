@@ -20,8 +20,9 @@
 		"test": "node --test test/*.test.js"
 	},
 	"dependencies": {
+		"@noble/post-quantum": "^0.7.1",
 		"@scomm/pubkey-protocol": "workspace:*",
-		"openpgp": "^6.3.1"
+		"openpgp": "github:openpgpjs/openpgpjs#d35228cc0253c0d093989ff10232a750fd0b6489"
 	},
 	"engines": {
 		"node": ">=22.6.0"

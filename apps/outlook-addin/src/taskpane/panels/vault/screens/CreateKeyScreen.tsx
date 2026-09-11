@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Note, usePaneStyles } from "../../../ui/layout";
-import type { PgpKeyPurpose } from "../../../../lib/pubkey-session";
+import type { PgpKeyAlgorithm, PgpKeyPurpose } from "../../../../lib/pubkey-session";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
 import type { useVaultKeys } from "../hooks/useVaultKeys";
 import { DoneScreen } from "./DoneScreen";
@@ -25,17 +25,30 @@ export function CreateKeyScreen({
   const styles = usePaneStyles();
   const [step, setStep] = useState<"keytype" | "keypurpose" | "publishing" | "done" | "error">("keytype");
   const [purpose, setPurpose] = useState<PgpKeyPurpose | null>(null);
+  const [algorithm, setAlgorithm] = useState<PgpKeyAlgorithm>("openpgp-cv25519");
 
   const handleSelectPurpose = async (selected: PgpKeyPurpose) => {
     setPurpose(selected);
     setStep("publishing");
-    const ok = await identity.publishPgp([selected]);
+    const ok = await identity.publishPgp([selected], algorithm);
     keys.refreshTiles();
     setStep(ok ? "done" : "error");
   };
 
   if (step === "keytype") {
-    return <KeyTypeScreen busy={false} onSelectOpenPgp={() => setStep("keypurpose")} />;
+    return (
+      <KeyTypeScreen
+        busy={false}
+        onSelectOpenPgp={() => {
+          setAlgorithm("openpgp-cv25519");
+          setStep("keypurpose");
+        }}
+        onSelectPqc={() => {
+          setAlgorithm("openpgp-pqc");
+          setStep("keypurpose");
+        }}
+      />
+    );
   }
 
   if (step === "keypurpose") {

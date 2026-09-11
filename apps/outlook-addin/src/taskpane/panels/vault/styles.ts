@@ -85,8 +85,4 @@ export const useVaultStyles = makeStyles({
     padding: tokens.spacingHorizontalM,
     cursor: "pointer",
   },
-  optionCardDisabled: {
-    cursor: "not-allowed",
-    opacity: 0.6,
-  },
 });

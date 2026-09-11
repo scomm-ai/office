@@ -5,12 +5,17 @@ import { PgpEngine, createPgpEngine, matchDecryptionKeys } from "../src/engines/
 import { PubkeyClient } from "../src/client.js";
 
 describe("PgpEngine", () => {
-	it("is available and advertises Curve25519 algorithms", () => {
+	it("is available and advertises Curve25519 and PQC algorithms", () => {
 		const engine = createPgpEngine(new WebCryptoProvider());
 		assert.equal(engine.available, true);
+		// Must be real directory-registry wire names (registry.dart algorithm_id
+		// 116/117), not the "openpgp-pqc" generateKey() request-time selector —
+		// this list is sent to the server as-is in discoveryCapabilities().
 		assert.deepEqual(engine.advertisedAlgorithms, [
 			"openpgp-cv25519",
 			"openpgp-ed25519",
+			"openpgp-mldsa65-ed25519",
+			"openpgp-mlkem768-x25519",
 		]);
 	});
 
@@ -238,7 +243,12 @@ describe("PgpEngine", () => {
 			pgpEngine: new PgpEngine(crypto),
 		});
 		const caps = await withEngine.discoveryCapabilities();
-		assert.deepEqual(caps.families.pgp, ["openpgp-cv25519", "openpgp-ed25519"]);
+		assert.deepEqual(caps.families.pgp, [
+			"openpgp-cv25519",
+			"openpgp-ed25519",
+			"openpgp-mldsa65-ed25519",
+			"openpgp-mlkem768-x25519",
+		]);
 	});
 
 	it("extracts a native X25519 scalar that agrees with WebCrypto ECDH", async () => {
@@ -249,6 +259,133 @@ describe("PgpEngine", () => {
 		}
 		const engine = new PgpEngine(crypto);
 		const generated = await engine.generateKey({ email: "alice@example.com" });
+		const subkey = await engine.extractX25519EncryptionSubkey(generated.privateKey);
+		assert.equal(subkey.scalar.length, 32);
+		assert.equal(subkey.publicKey.length, 32);
+		const imported = await crypto.importPrivateKey({
+			algorithm: "x25519",
+			encoding: "raw-32",
+			bytes: subkey.scalar,
+			publicKey: subkey.publicKey,
+		});
+		const eph = await crypto.generateKey({ algorithm: "x25519" });
+		const ab = await crypto.deriveSecret(imported, eph.publicKey);
+		const ba = await crypto.deriveSecret(eph, subkey.publicKey);
+		assert.deepEqual(ab, ba);
+	});
+
+	it("generates an RFC 9980 PQC composite key (ML-DSA-65+Ed25519, ML-KEM-768+X25519)", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({
+			name: "Alice",
+			email: "alice@example.com",
+			algorithm: "openpgp-pqc",
+		});
+		assert.equal(alice.algorithm, "openpgp-pqc");
+		assert.match(alice.fingerprint, /^[0-9a-f]{64}$/);
+
+		const plaintext = "post-quantum hello";
+		const ciphertext = await engine.encrypt({
+			plaintext,
+			recipientPublicKey: alice.publicKey,
+		});
+		const decrypted = await engine.decrypt({
+			ciphertext,
+			privateKey: alice.privateKey,
+		});
+		assert.equal(new TextDecoder().decode(decrypted), plaintext);
+	});
+
+	it("clearsigns and verifies with a PQC composite key (ML-DSA-65+Ed25519)", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({
+			name: "Alice",
+			email: "alice@example.com",
+			algorithm: "openpgp-pqc",
+		});
+		const signed = await engine.sign({
+			plaintext: "post-quantum signed from outlook",
+			privateKey: alice.privateKey,
+		});
+		const armor = new TextDecoder().decode(signed);
+		assert.match(armor, /-----BEGIN PGP SIGNED MESSAGE-----/);
+		const verified = await engine.verify({
+			signed: armor,
+			publicKeys: [alice.publicKey],
+		});
+		assert.equal(verified.valid, true);
+		assert.equal(verified.plaintext, "post-quantum signed from outlook");
+
+		// Tampering must still fail verification against the composite signature.
+		const tampered = armor.replace(
+			"post-quantum signed from outlook",
+			"post-quantum tampered message",
+		);
+		const verifiedTampered = await engine.verify({
+			signed: tampered,
+			publicKeys: [alice.publicKey],
+		});
+		assert.equal(verifiedTampered.valid, false);
+	});
+
+	it("full lifecycle: two PQC identities encrypt+sign to each other and decrypt+verify", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		const alice = await engine.generateKey({
+			name: "Alice",
+			email: "alice@example.com",
+			algorithm: "openpgp-pqc",
+		});
+		const bob = await engine.generateKey({
+			name: "Bob",
+			email: "bob@example.com",
+			algorithm: "openpgp-pqc",
+		});
+
+		// Alice signs-and-encrypts to Bob.
+		const ciphertext = await engine.encrypt({
+			plaintext: "meet at dawn",
+			recipientPublicKey: bob.publicKey,
+			signingPrivateKey: alice.privateKey,
+		});
+		const decrypted = await engine.decrypt({
+			ciphertext,
+			privateKey: bob.privateKey,
+		});
+		assert.equal(new TextDecoder().decode(decrypted), "meet at dawn");
+
+		// Bob replies with a detached signature Alice can verify independently.
+		const detached = await engine.sign({
+			plaintext: "acknowledged",
+			privateKey: bob.privateKey,
+			detached: true,
+		});
+		assert.doesNotMatch(new TextDecoder().decode(detached), /BEGIN PGP SIGNED MESSAGE/);
+	});
+
+	it("rejects an unknown algorithm, including the pre-PQC 'openpgp-mlkem-x25519' spelling", async () => {
+		const engine = new PgpEngine(new WebCryptoProvider());
+		await assert.rejects(
+			engine.generateKey({ email: "alice@example.com", algorithm: "openpgp-mlkem-x25519" }),
+			/cannot generate/i,
+		);
+	});
+
+	it("extracts the classical Ed25519/X25519 halves of a PQC composite key for the MSK PoP flow", async () => {
+		const crypto = new WebCryptoProvider();
+		const caps = await crypto.capabilities();
+		if (!caps.keyAgreement.includes("x25519")) {
+			return;
+		}
+		const engine = new PgpEngine(crypto);
+		const generated = await engine.generateKey({
+			email: "alice@example.com",
+			algorithm: "openpgp-pqc",
+		});
+
+		const sig = await engine.extractEd25519SigningKey(generated.privateKey);
+		assert.equal(sig.seed.length, 32);
+		assert.equal(sig.publicKey.length, 32);
+
 		const subkey = await engine.extractX25519EncryptionSubkey(generated.privateKey);
 		assert.equal(subkey.scalar.length, 32);
 		assert.equal(subkey.publicKey.length, 32);

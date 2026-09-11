@@ -450,8 +450,8 @@ importers:
         specifier: workspace:*
         version: link:../mime
       openpgp:
-        specifier: ^6.1.0
-        version: 6.3.1
+        specifier: github:openpgpjs/openpgpjs#d35228cc0253c0d093989ff10232a750fd0b6489
+        version: https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -695,12 +695,15 @@ importers:
 
   packages/scomm-pubkey:
     dependencies:
+      '@noble/post-quantum':
+        specifier: ^0.7.1
+        version: 0.7.1
       '@scomm/pubkey-protocol':
         specifier: workspace:*
         version: link:../scomm-pubkey-protocol
       openpgp:
-        specifier: ^6.3.1
-        version: 6.3.1
+        specifier: github:openpgpjs/openpgpjs#d35228cc0253c0d093989ff10232a750fd0b6489
+        version: https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489
 
   packages/scomm-pubkey-protocol: {}
 
@@ -1824,12 +1827,28 @@ packages:
     cpu: [x64]
     os: [linux]
 
+  '@noble/ciphers@2.4.0':
+    resolution: {integrity: sha512-AnjFn0Jv92laAkvMrghlFZq4qQCIN/4DxFV/eooqtC2YTjB7kBeLMS2T9KJX4Dn+ZVXLOwK0lSgqDtx9gvxtiw==}
+    engines: {node: '>= 20.19.0'}
+
+  '@noble/curves@2.4.0':
+    resolution: {integrity: sha512-P4/62zrgfH33CneE3Dn4WhJVA22YUU0eR51wKIan4NVRvwsA0YnPTwWGpNbpuacSujmSFLvyzpyuR30+fbq2Ew==}
+    engines: {node: '>= 20.19.0'}
+
   '@noble/ed25519@2.3.0':
     resolution: {integrity: sha512-M7dvXL2B92/M7dw9+gzuydL8qn/jiqNHaoR3Q+cb1q1GHV7uwE17WCyFMG+Y+TZb5izcaXk5TdJRrDUxHXL78A==}
 
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
+
+  '@noble/post-quantum@0.7.1':
+    resolution: {integrity: sha512-+P9981IiAnVh+rmcubozzVwrEy3XsN/tMhTnvsjV9VDaYpOnNCqWqKo2FLWxbu92YHfjGIlE5XnW175UK+ln+Q==}
+    engines: {node: '>= 20.19.0'}
 
   '@peculiar/asn1-cms@2.9.4':
     resolution: {integrity: sha512-cben7oxmQsUGZqotus7yt0srYdncOT6RNWcTQ77T2RFOXejYVYkXadrfePdRcrVpO9K95IRLKKglG2k38jKXuw==}
@@ -2635,9 +2654,10 @@ packages:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
     engines: {node: '>=14.0.0'}
 
-  openpgp@6.3.1:
-    resolution: {integrity: sha512-7oSPvmlKPojxFoyelT5DWPIAVmqWZh4qU/5pO6bdoShEtRpCw9Sye9IXUQj6EFM3XpgGssqccAr705YtTcLNQw==}
-    engines: {node: '>= 18.0.0', typescript: '>= 5.0.0'}
+  openpgp@https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489:
+    resolution: {tarball: https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489}
+    version: 6.3.1
+    engines: {node: '>= 22.0.0', typescript: '>= 5.0.0'}
     peerDependencies:
       '@openpgp/web-stream-tools': ~0.3.0
     peerDependenciesMeta:
@@ -4723,9 +4743,23 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
+  '@noble/ciphers@2.4.0': {}
+
+  '@noble/curves@2.4.0':
+    dependencies:
+      '@noble/hashes': 2.4.0
+
   '@noble/ed25519@2.3.0': {}
 
   '@noble/hashes@1.8.0': {}
+
+  '@noble/hashes@2.4.0': {}
+
+  '@noble/post-quantum@0.7.1':
+    dependencies:
+      '@noble/ciphers': 2.4.0
+      '@noble/curves': 2.4.0
+      '@noble/hashes': 2.4.0
 
   '@peculiar/asn1-cms@2.9.4':
     dependencies:
@@ -5595,7 +5629,7 @@ snapshots:
 
   on-exit-leak-free@2.1.2: {}
 
-  openpgp@6.3.1: {}
+  openpgp@https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489: {}
 
   optionator@0.9.4:
     dependencies:

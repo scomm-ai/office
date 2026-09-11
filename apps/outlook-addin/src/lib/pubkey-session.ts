@@ -13,7 +13,15 @@ import {
 } from "@scomm-office/pubkeys";
 import { IndexedDbDeviceSecretStore, IndexedDbVaultStore } from "@scomm-office/storage";
 import { assertPgpAddon } from "./billing-pgp";
+import { classifyDirectoryKey } from "./directory-key";
 import { DEFAULT_SETTINGS, resolvePubkeyWriteBaseUrl } from "./settings";
+
+// Matches the directory's naming convention for RFC 9980 composite
+// algorithms (see directory-key.ts's PQC_RE / classifyDirectoryKey), so
+// recipients' clients and this add-in's own key-status UI both recognize
+// these as PQC without a separate parallel convention.
+const PQC_SIGNING_ALGORITHM = "openpgp-mldsa65-ed25519";
+const PQC_ENCRYPTION_ALGORITHM = "openpgp-mlkem768-x25519";
 
 type PubkeyBundle = ReturnType<typeof createPubkeyClient>;
 
@@ -175,8 +183,10 @@ export async function persistMsk(session: OfficePubkeySession, email: string): P
 }
 
 export type PgpKeyPurpose = "encryption" | "signing";
+export type PgpKeyAlgorithm = "openpgp-cv25519" | "openpgp-pqc";
 
 const BOTH_PGP_PURPOSES: PgpKeyPurpose[] = ["encryption", "signing"];
+const DEFAULT_PGP_ALGORITHM: PgpKeyAlgorithm = "openpgp-cv25519";
 
 /**
  * Generates (or reuses) a local OpenPGP keypair and publishes the requested
@@ -189,6 +199,7 @@ export async function publishPgpContentKey(
   session: OfficePubkeySession,
   email: string,
   purposes: PgpKeyPurpose[] = BOTH_PGP_PURPOSES,
+  algorithm: PgpKeyAlgorithm = DEFAULT_PGP_ALGORITHM,
 ): Promise<{ generated: boolean }> {
   await assertPgpAddon();
   const msk = session.msk;
@@ -201,9 +212,15 @@ export async function publishPgpContentKey(
   const canonical = normalizeEmail(email);
   // Any existing local PGP content key (either purpose) carries the same
   // underlying keypair — reuse it so publishing the "other" purpose later
-  // doesn't generate a second, unrelated key.
+  // doesn't generate a second, unrelated key. Only reuse it if it actually
+  // matches the requested algorithm — otherwise "create another key" with a
+  // different algorithm would silently republish the old one.
   const existing = session.vault.getCurrentKey();
-  const existingPrivate = existing?.family === "pgp" ? existing.private_material : undefined;
+  const existingIsPqc = existing
+    ? classifyDirectoryKey({ family: existing.family, algorithm: existing.algorithm }).isPqc
+    : false;
+  const existingMatches = existing?.family === "pgp" && existingIsPqc === (algorithm === "openpgp-pqc");
+  const existingPrivate = existingMatches ? existing?.private_material : undefined;
 
   let generated = false;
   let publicKey: Uint8Array;
@@ -218,6 +235,7 @@ export async function publishPgpContentKey(
     const created = await session.pgpEngine.generateKey({
       name: canonical,
       email: canonical,
+      algorithm,
     });
     generated = true;
     publicKey = created.publicKey;
@@ -228,6 +246,9 @@ export async function publishPgpContentKey(
   const material = encodeBase64Url(publicKey);
   const publishSigning = purposes.includes("signing");
   const publishEncryption = purposes.includes("encryption");
+  const isPqc = algorithm === "openpgp-pqc";
+  const signingAlgorithm = isPqc ? PQC_SIGNING_ALGORITHM : "openpgp-ed25519";
+  const encryptionAlgorithm = isPqc ? PQC_ENCRYPTION_ALGORITHM : "openpgp-cv25519";
   let signingKeyId = 0;
   let encryptionKeyId = 0;
 
@@ -235,7 +256,7 @@ export async function publishPgpContentKey(
     const signingArtifact = {
       family: "pgp" as const,
       purpose: "signing" as const,
-      algorithm: "openpgp-ed25519",
+      algorithm: signingAlgorithm,
       public_material: material,
     };
     // Extract raw Ed25519 seed, import as CryptoKey, then PoP
@@ -261,7 +282,7 @@ export async function publishPgpContentKey(
     const encryptionArtifact = {
       family: "pgp" as const,
       purpose: "encryption" as const,
-      algorithm: "openpgp-cv25519",
+      algorithm: encryptionAlgorithm,
       public_material: material,
     };
     // Challenge-response PoP flow
@@ -279,14 +300,18 @@ export async function publishPgpContentKey(
   // this single OpenPGP keypair covers both purposes). Prefer tagging it
   // "encryption" once that purpose is published, since that's the tag
   // `restoreOfficeVault`/`hasPgp` and the compose/read screens key off.
-  const currentEntry = session.vault.getCurrentKey();
+  // Looked up by fingerprint, not getCurrentKey() — a second keypair with a
+  // different algorithm (e.g. adding a PQC key alongside an existing
+  // classical one) must land in its own entry, not overwrite the mismatched
+  // one that getCurrentKey() would return.
+  const currentEntry = session.vault.getKeyByFingerprint(fingerprint);
   if (!currentEntry) {
     session.vault.addKey({
       kind: "content",
       key_id: publishEncryption ? encryptionKeyId : signingKeyId,
       family: "pgp",
       purpose: publishEncryption ? "encryption" : "signing",
-      algorithm: publishEncryption ? "openpgp-cv25519" : "openpgp-ed25519",
+      algorithm: publishEncryption ? encryptionAlgorithm : signingAlgorithm,
       fingerprint,
       locator: formatOpenPgpLocator(fingerprint),
       status: "active",
@@ -294,7 +319,7 @@ export async function publishPgpContentKey(
     });
   } else if (publishEncryption && currentEntry.purpose !== "encryption") {
     currentEntry.purpose = "encryption";
-    currentEntry.algorithm = "openpgp-cv25519";
+    currentEntry.algorithm = encryptionAlgorithm;
     currentEntry.key_id = encryptionKeyId;
   }
 

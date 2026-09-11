@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Note, usePaneStyles } from "../../../ui/layout";
-import type { PgpKeyPurpose } from "../../../../lib/pubkey-session";
+import type { PgpKeyAlgorithm, PgpKeyPurpose } from "../../../../lib/pubkey-session";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
 import { DoneScreen } from "./DoneScreen";
 import { KeyPurposeScreen } from "./KeyPurposeScreen";
@@ -29,6 +29,7 @@ export function SetupFlowScreen({
   const styles = usePaneStyles();
   const [step, setStep] = useState<"intro" | "keytype" | "keypurpose">("intro");
   const [keyPurpose, setKeyPurpose] = useState<PgpKeyPurpose | null>(null);
+  const [keyAlgorithm, setKeyAlgorithm] = useState<PgpKeyAlgorithm>("openpgp-cv25519");
   // null = not attempted / still publishing, true = succeeded, false = failed
   // (only false shows the "Publish again" retry link).
   const [publishOk, setPublishOk] = useState<boolean | null>(null);
@@ -41,6 +42,7 @@ export function SetupFlowScreen({
   useEffect(() => {
     if (identity.status === "idle") {
       setKeyPurpose(null);
+      setKeyAlgorithm("openpgp-cv25519");
       setPublishOk(null);
       publishAttempted.current = false;
     }
@@ -53,14 +55,24 @@ export function SetupFlowScreen({
     if (identity.status !== "verified" || identity.busy) return;
     if (publishAttempted.current) return;
     publishAttempted.current = true;
-    void identity.publishPgp(keyPurpose ? [keyPurpose] : undefined).then(setPublishOk);
+    void identity.publishPgp(keyPurpose ? [keyPurpose] : undefined, keyAlgorithm).then(setPublishOk);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity.status, identity.busy]);
 
   if (identity.status === "idle") {
     if (step === "keytype") {
       return (
-        <KeyTypeScreen busy={identity.busy} onSelectOpenPgp={() => setStep("keypurpose")} />
+        <KeyTypeScreen
+          busy={identity.busy}
+          onSelectOpenPgp={() => {
+            setKeyAlgorithm("openpgp-cv25519");
+            setStep("keypurpose");
+          }}
+          onSelectPqc={() => {
+            setKeyAlgorithm("openpgp-pqc");
+            setStep("keypurpose");
+          }}
+        />
       );
     }
     if (step === "keypurpose") {
@@ -172,7 +184,7 @@ export function SetupFlowScreen({
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              void identity.publishPgp(keyPurpose ? [keyPurpose] : undefined).then(setPublishOk);
+              void identity.publishPgp(keyPurpose ? [keyPurpose] : undefined, keyAlgorithm).then(setPublishOk);
             }}
           >
             Publish again
