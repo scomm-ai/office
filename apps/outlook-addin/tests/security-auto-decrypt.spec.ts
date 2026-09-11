@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { MailMessage } from "@scomm-office/office";
 
 /**
- * Auto-decrypt/auto-verify on message open (SecurityPanel.tsx). These run
+ * Auto-decrypt/auto-verify on message open (VaultPanel.tsx). These run
  * against the mock host (no real Office, no pubkey-server) via a dev-only
  * seam — window.__SCOMM_MOCK_MESSAGE__, read once in App.tsx's bootstrapHost
  * behind import.meta.env.DEV — so they cover the trigger logic (header +
@@ -43,7 +43,7 @@ async function gotoSecurityWithMockMessage(page: Page, message: Partial<MailMess
   await expect(page.getByText(/OpenPGP \(read\)/i)).toBeVisible({ timeout: 30_000 });
 }
 
-test.describe("SecurityPanel auto-decrypt on open (mock host)", () => {
+test.describe("VaultPanel auto-decrypt on open (mock host)", () => {
   test("encrypted message, locked vault: shows unlock note, never a passphrase prompt", async ({
     page,
   }) => {

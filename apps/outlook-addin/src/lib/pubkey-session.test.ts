@@ -78,6 +78,81 @@ describe("publishPgpContentKey", () => {
     expect(encCalled).toBe(1);
     expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
   });
+
+  it("publishes only the signing purpose when requested", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    let sigCalled = 0;
+    let encCalled = 0;
+    session.client.setSigningKeyWithProof = (async (input: { artifact: { purpose?: string } }) => {
+      sigCalled += 1;
+      expect(input.artifact.purpose).toBe("signing");
+      return { key_id: 21, keys: [{ purpose: "signing", key_id: 21 }] };
+    }) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => {
+      encCalled += 1;
+      return { key_id: 0 };
+    }) as typeof session.client.publishEncryptionKey;
+
+    const result = await publishPgpContentKey(session, email, ["signing"]);
+
+    expect(result.generated).toBe(true);
+    expect(sigCalled).toBe(1);
+    expect(encCalled).toBe(0);
+    expect(session.vault.getCurrentKey("signing")?.private_material).toBeTruthy();
+    expect(session.vault.getCurrentKey("encryption")).toBeNull();
+  });
+
+  it("publishes only the encryption purpose when requested", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    let sigCalled = 0;
+    let encCalled = 0;
+    session.client.setSigningKeyWithProof = (async () => {
+      sigCalled += 1;
+      return { key_id: 0 };
+    }) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async (input: { artifact: { purpose?: string } }) => {
+      encCalled += 1;
+      expect(input.artifact.purpose).toBe("encryption");
+      return { key_id: 33, keys: [{ purpose: "encryption", key_id: 33 }] };
+    }) as typeof session.client.publishEncryptionKey;
+
+    const result = await publishPgpContentKey(session, email, ["encryption"]);
+
+    expect(result.generated).toBe(true);
+    expect(sigCalled).toBe(0);
+    expect(encCalled).toBe(1);
+    expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
+    expect(session.vault.getCurrentKey("signing")).toBeNull();
+  });
+
+  it("retags the existing local entry to 'encryption' when that purpose is added to a signing-only key", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 21,
+      keys: [{ purpose: "signing", key_id: 21 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 33,
+      keys: [{ purpose: "encryption", key_id: 33 }],
+    })) as typeof session.client.publishEncryptionKey;
+
+    await publishPgpContentKey(session, email, ["signing"]);
+    expect(session.vault.listKeys()).toHaveLength(1);
+    expect(session.vault.getCurrentKey()?.purpose).toBe("signing");
+
+    await publishPgpContentKey(session, email, ["encryption"]);
+
+    // Same underlying keypair reused (Vault dedupes by fingerprint) — still
+    // exactly one local entry, now tagged "encryption" so hasPgp/decrypt
+    // gating recognizes it. The "signing" tag is not preserved alongside it
+    // — a known limitation of the single-purpose-per-entry vault schema.
+    expect(session.vault.listKeys()).toHaveLength(1);
+    expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
+    expect(session.vault.getCurrentKey("signing")).toBeNull();
+  });
 });
 
 describe("pullHostedVault", () => {

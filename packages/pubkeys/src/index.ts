@@ -22,6 +22,7 @@ export {
   PURPOSES,
   formatOpenPgpLocator,
   KEY_PACKAGE_KIND,
+  emailSha256Hex,
 } from "@scomm/pubkey";
 export type { KeyHandle, VaultStore, VaultEntry } from "@scomm/pubkey";
 

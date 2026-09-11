@@ -3,6 +3,7 @@ import {
   PURPOSES,
   createPubkeyClient,
   decodeBase64Url,
+  emailSha256Hex,
   encodeBase64Url,
   formatOpenPgpLocator,
   normalizeEmail,
@@ -173,12 +174,21 @@ export async function persistMsk(session: OfficePubkeySession, email: string): P
   session.pendingMsk = null;
 }
 
+export type PgpKeyPurpose = "encryption" | "signing";
+
+const BOTH_PGP_PURPOSES: PgpKeyPurpose[] = ["encryption", "signing"];
+
 /**
- * Generates a local OpenPGP encryption key and publishes it with decrypt proof-of-possession.
+ * Generates (or reuses) a local OpenPGP keypair and publishes the requested
+ * purpose(s) — `signing` (proof-of-possession via the MSK chain) and/or
+ * `encryption` (challenge-response PoP). Defaults to both for callers that
+ * don't care (e.g. "repair directory keys"); the guided setup flow passes a
+ * single purpose so only the key the user actually chose gets uploaded.
  */
 export async function publishPgpContentKey(
   session: OfficePubkeySession,
   email: string,
+  purposes: PgpKeyPurpose[] = BOTH_PGP_PURPOSES,
 ): Promise<{ generated: boolean }> {
   await assertPgpAddon();
   const msk = session.msk;
@@ -189,9 +199,11 @@ export async function publishPgpContentKey(
     throw new Error("OpenPGP engine is not available");
   }
   const canonical = normalizeEmail(email);
-  const existingEnc = session.vault.getCurrentKey("encryption");
-  const existingPrivate =
-    existingEnc?.family === "pgp" ? existingEnc.private_material : undefined;
+  // Any existing local PGP content key (either purpose) carries the same
+  // underlying keypair — reuse it so publishing the "other" purpose later
+  // doesn't generate a second, unrelated key.
+  const existing = session.vault.getCurrentKey();
+  const existingPrivate = existing?.family === "pgp" ? existing.private_material : undefined;
 
   let generated = false;
   let publicKey: Uint8Array;
@@ -201,7 +213,7 @@ export async function publishPgpContentKey(
   if (existingPrivate) {
     publicKey = await session.pgpEngine.exportPublicKey(existingPrivate);
     privateKey = existingPrivate;
-    fingerprint = existingEnc?.fingerprint || "local";
+    fingerprint = existing?.fingerprint || "local";
   } else {
     const created = await session.pgpEngine.generateKey({
       name: canonical,
@@ -214,58 +226,76 @@ export async function publishPgpContentKey(
   }
 
   const material = encodeBase64Url(publicKey);
-  const signingArtifact = {
-    family: "pgp" as const,
-    purpose: "signing" as const,
-    algorithm: "openpgp-ed25519",
-    public_material: material,
-  };
-  const encryptionArtifact = {
-    family: "pgp" as const,
-    purpose: "encryption" as const,
-    algorithm: "openpgp-cv25519",
-    public_material: material,
-  };
+  const publishSigning = purposes.includes("signing");
+  const publishEncryption = purposes.includes("encryption");
+  let signingKeyId = 0;
+  let encryptionKeyId = 0;
 
-  // Signing key: extract raw Ed25519 seed, import as CryptoKey, then PoP
-  const sigSeed = await session.pgpEngine.extractEd25519SigningKey(privateKey);
-  const contentSigningKey = await session.crypto.importPrivateKey({
-    algorithm: "ed25519",
-    encoding: "raw-32",
-    bytes: sigSeed.seed,
-    publicKey: sigSeed.publicKey,
-    purpose: "signing",
-  });
-  await session.client.setSigningKeyWithProof({
-    email: canonical,
-    artifact: signingArtifact,
-    mskKey: msk,
-    contentSigningKey,
-  });
+  if (publishSigning) {
+    const signingArtifact = {
+      family: "pgp" as const,
+      purpose: "signing" as const,
+      algorithm: "openpgp-ed25519",
+      public_material: material,
+    };
+    // Extract raw Ed25519 seed, import as CryptoKey, then PoP
+    const sigSeed = await session.pgpEngine.extractEd25519SigningKey(privateKey);
+    const contentSigningKey = await session.crypto.importPrivateKey({
+      algorithm: "ed25519",
+      encoding: "raw-32",
+      bytes: sigSeed.seed,
+      publicKey: sigSeed.publicKey,
+      purpose: "signing",
+    });
+    const sigResult = (await session.client.setSigningKeyWithProof({
+      email: canonical,
+      artifact: signingArtifact,
+      mskKey: msk,
+      contentSigningKey,
+    })) as { key_id?: number; keys?: Array<{ key_id?: number; purpose?: string }> };
+    signingKeyId =
+      sigResult.keys?.find((row) => row.purpose === "signing")?.key_id ?? sigResult.key_id ?? 0;
+  }
 
-  // Encryption key: challenge-response PoP flow
-  const encResult = (await session.client.publishEncryptionKey({
-    email: canonical,
-    artifact: encryptionArtifact,
-    privateKey: privateKey,
-    mskKey: msk,
-  })) as { key_id?: number; keys?: Array<{ key_id?: number; purpose?: string }> };
+  if (publishEncryption) {
+    const encryptionArtifact = {
+      family: "pgp" as const,
+      purpose: "encryption" as const,
+      algorithm: "openpgp-cv25519",
+      public_material: material,
+    };
+    // Challenge-response PoP flow
+    const encResult = (await session.client.publishEncryptionKey({
+      email: canonical,
+      artifact: encryptionArtifact,
+      privateKey: privateKey,
+      mskKey: msk,
+    })) as { key_id?: number; keys?: Array<{ key_id?: number; purpose?: string }> };
+    encryptionKeyId =
+      encResult.keys?.find((row) => row.purpose === "encryption")?.key_id ?? encResult.key_id ?? 0;
+  }
 
-  const encryptionKeyId =
-    encResult.keys?.find((row) => row.purpose === "encryption")?.key_id ?? encResult.key_id ?? 0;
-
-  if (!existingEnc?.private_material) {
+  // One local vault entry per fingerprint (the Vault dedupes by fingerprint —
+  // this single OpenPGP keypair covers both purposes). Prefer tagging it
+  // "encryption" once that purpose is published, since that's the tag
+  // `restoreOfficeVault`/`hasPgp` and the compose/read screens key off.
+  const currentEntry = session.vault.getCurrentKey();
+  if (!currentEntry) {
     session.vault.addKey({
       kind: "content",
-      key_id: encryptionKeyId,
+      key_id: publishEncryption ? encryptionKeyId : signingKeyId,
       family: "pgp",
-      purpose: "encryption",
-      algorithm: "openpgp-cv25519",
+      purpose: publishEncryption ? "encryption" : "signing",
+      algorithm: publishEncryption ? "openpgp-cv25519" : "openpgp-ed25519",
       fingerprint,
       locator: formatOpenPgpLocator(fingerprint),
       status: "active",
       private_material: privateKey,
     });
+  } else if (publishEncryption && currentEntry.purpose !== "encryption") {
+    currentEntry.purpose = "encryption";
+    currentEntry.algorithm = "openpgp-cv25519";
+    currentEntry.key_id = encryptionKeyId;
   }
 
   const secret = await ensureDeviceSecret(session);
@@ -355,7 +385,7 @@ export async function fetchVaultInventory(session: OfficePubkeySession, email: s
 
 /**
  * Applies the VRK (and, for a "full" tier grant, AEK) received from
- * `PubkeyClient.completePairingAsNewDevice` (see SecurityPanel.tsx's
+ * `PubkeyClient.completePairingAsNewDevice` (see VaultPanel.tsx's
  * "Add device" flow): creates a local vault if this device has none yet,
  * stores the keys, pulls the real vault content from `/v1/vault/*` (pairing
  * itself only transfers key material, not the vault ciphertext), and
@@ -438,4 +468,140 @@ export async function pullHostedVault(
         entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
     );
   return { hasPgp };
+}
+
+export interface VaultDevice {
+  deviceId: string;
+  name: string;
+  active: boolean;
+}
+
+/** Devices authorized to hold this identity's keys. See Settings → Devices. */
+export async function listVaultDevices(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<VaultDevice[]> {
+  if (!session.msk) {
+    const restored = await restoreOfficeVault(session);
+    if (!restored.restored || !session.msk) {
+      throw new Error("MSK is not armed");
+    }
+  }
+  const listed = (await session.client.listDevices({
+    email: normalizeEmail(email),
+    mskKey: session.msk,
+  })) as { devices?: Array<{ device_id: string; active: boolean; device_name?: string }> };
+  return (listed.devices ?? []).map((device) => ({
+    deviceId: device.device_id,
+    name: device.device_name || device.device_id,
+    active: device.active,
+  }));
+}
+
+/**
+ * `client.revokeDevice` exists and works (see `client.js`) but isn't declared
+ * in `index.d.ts` yet, so the call needs a local shape.
+ */
+type RevokeDeviceClient = {
+  revokeDevice: (input: { email: string; deviceId: string; mskKey: KeyHandle }) => Promise<unknown>;
+};
+
+/** Revokes a device's authorization to open this identity's vault. */
+export async function revokeVaultDevice(
+  session: OfficePubkeySession,
+  email: string,
+  deviceId: string,
+): Promise<void> {
+  if (!session.msk) {
+    const restored = await restoreOfficeVault(session);
+    if (!restored.restored || !session.msk) {
+      throw new Error("MSK is not armed");
+    }
+  }
+  await (session.client as unknown as RevokeDeviceClient).revokeDevice({
+    email: normalizeEmail(email),
+    deviceId,
+    mskKey: session.msk,
+  });
+}
+
+export interface DevicePairingStart {
+  pairingCode: string;
+  sessionId: string;
+  ephemeral: KeyHandle;
+  deviceId: string;
+}
+
+/**
+ * Device B (this, unauthorized) opens a pairing mailbox and returns a code to
+ * type into an already-authorized device (see `approveDevicePairing`).
+ */
+export async function startDevicePairing(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<DevicePairingStart> {
+  const started = await session.client.createPairingSession({
+    email: normalizeEmail(email),
+    deviceName: "Outlook",
+    requestedTier: "full",
+  });
+  return {
+    pairingCode: started.pairingCode,
+    sessionId: started.sessionId,
+    ephemeral: started.ephemeral,
+    deviceId: started.deviceId,
+  };
+}
+
+/**
+ * Device B waits for an authorized device to approve `started`, then applies
+ * the transferred vault locally. Resolves once approval lands (see
+ * `approveDevicePairing` for the other side of this exchange).
+ */
+export async function awaitDevicePairing(
+  session: OfficePubkeySession,
+  email: string,
+  started: DevicePairingStart,
+): Promise<{ hasPgp: boolean; hasMsk: boolean }> {
+  const { vrk, aek } = await session.client.completePairingAsNewDevice({
+    email: normalizeEmail(email),
+    sessionId: started.sessionId,
+    ephemeral: started.ephemeral,
+    deviceId: started.deviceId,
+  });
+  return completeDeviceTransfer(session, email, { vrk, aek });
+}
+
+/**
+ * Device A (already authorized, vault unlocked) approves a device B pairing
+ * code: fetches B's ephemeral key from the pairing mailbox and delivers a
+ * wrapped copy of this vault's VRK (and AEK, for a "full" tier grant).
+ */
+export async function approveDevicePairing(
+  session: OfficePubkeySession,
+  email: string,
+  sessionId: string,
+): Promise<void> {
+  if (!session.vault.unlocked) {
+    const restored = await restoreOfficeVault(session);
+    if (!restored.restored) {
+      throw new Error("Unlock the Vault before approving a device");
+    }
+  }
+  const canonical = normalizeEmail(email);
+  const sha256 = await emailSha256Hex(canonical);
+  const status = (await session.client.getPairingSession({
+    sessionId,
+    emailSha256: sha256,
+  })) as { b_ephemeral_public_key?: Uint8Array | string };
+  if (!status.b_ephemeral_public_key) {
+    throw new Error("No pairing request found for that code. Ask for a fresh code.");
+  }
+  await session.client.respondToPairingSession({
+    email: canonical,
+    sessionId,
+    peerEphemeralPublicKey: status.b_ephemeral_public_key,
+    vrk: session.vault.ensureVrk(),
+    aek: session.vault.aek ?? undefined,
+  });
 }

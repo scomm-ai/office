@@ -16,7 +16,7 @@ const MODULES: Array<{ id: NavModule; label: string }> = [
   { id: "message", label: "Message" },
   { id: "account", label: "Billing" },
   { id: "identity", label: "Identity" },
-  { id: "security", label: "Security" },
+  { id: "security", label: "Vault" },
   { id: "compliance", label: "Compliance" },
   { id: "idr", label: "AI / IDR" },
   { id: "ai", label: "BYOAI" },

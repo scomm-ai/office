@@ -1,0 +1,340 @@
+import { useCallback, useEffect, useState } from "react";
+import { normalizeEmail } from "@scomm-office/pubkeys";
+import { loadPgpEntitlement } from "../../../../lib/billing-pgp";
+import {
+  awaitDevicePairing,
+  publishPgpContentKey,
+  persistMsk,
+  restoreOfficeVault,
+  startDevicePairing,
+  type OfficePubkeySession,
+  type PgpKeyPurpose,
+} from "../../../../lib/pubkey-session";
+
+export type IdentityStatus =
+  | "idle"
+  | "otp-sent"
+  | "unauthorized"
+  | "transfer"
+  | "recover"
+  | "recover-otp"
+  | "verified";
+
+function enrollOtpStatus(email: string, result: unknown): string {
+  const otp =
+    result && typeof result === "object" && "otp" in result && typeof result.otp === "string"
+      ? result.otp
+      : "";
+  if (otp) return `Verification code for ${email}: ${otp}`;
+  return `Verification code sent to ${email}. If SMTP is off, set DEV_RETURN_OTP=1 on the local pubkey server and retry.`;
+}
+
+/**
+ * Identity/vault bootstrap state machine: create-or-restore the Scomm.AI
+ * identity on this device, verify by email OTP, publish OpenPGP keys, or
+ * transfer/recover an existing identity. Extracted from the pre-redesign
+ * VaultPanel so screens can consume it without owning ~10 useStates each.
+ */
+export function useVaultIdentity(
+  session: OfficePubkeySession | null,
+  userEmail: string | undefined,
+  billingOrigin: string | undefined,
+) {
+  const [status, setStatus] = useState<IdentityStatus>("idle");
+  const [busy, setBusy] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [otpInput, setOtpInputState] = useState("");
+  const [hasPgp, setHasPgp] = useState(false);
+  const [engineReady, setEngineReady] = useState(false);
+  const [pgpEntitled, setPgpEntitled] = useState(false);
+  const [directoryArmed, setDirectoryArmed] = useState(false);
+  const [pairingCode, setPairingCode] = useState("");
+  // True only right after a publish attempt genuinely failed (not the
+  // "master_key_not_armed" retry path) — drives whether Settings shows a
+  // "repair" action or just a plain "Published" status.
+  const [publishFailed, setPublishFailed] = useState(false);
+
+  const setOtpInput = useCallback(
+    (value: string) => setOtpInputState(value.replace(/[-\s]/g, "")),
+    [],
+  );
+
+  const refreshFromVault = useCallback(async () => {
+    if (!session) return;
+    const state = await restoreOfficeVault(session);
+    if (state.restored) {
+      setStatus("verified");
+      setDirectoryArmed(true);
+    }
+    setHasPgp(state.hasPgp);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    setEngineReady(session.pgpEngine.available === true);
+    let cancelled = false;
+    void restoreOfficeVault(session).then((state) => {
+      if (cancelled) return;
+      if (state.restored) {
+        setStatus("verified");
+        setDirectoryArmed(true);
+      }
+      setHasPgp(state.hasPgp);
+    });
+    void loadPgpEntitlement(billingOrigin).then((ok) => {
+      if (!cancelled) setPgpEntitled(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, billingOrigin]);
+
+  const requestOtp = useCallback(async () => {
+    if (!userEmail || !session) return;
+    setBusy(true);
+    setStatusMessage(null);
+    try {
+      let principalExists = false;
+      try {
+        const found = await session.client.getBestKey({
+          email: normalizeEmail(userEmail),
+          purpose: "encryption",
+        });
+        principalExists = Boolean(found);
+      } catch {
+        principalExists = false;
+      }
+      session.client.assertNoSilentMsk({
+        principalExists,
+        localMsk: Boolean(session.msk),
+        explicitRecovery: false,
+      });
+      const msk = await session.crypto.generateMSK();
+      if (!msk.publicKey) throw new Error("MSK public key missing");
+      session.pendingMsk = msk;
+      session.msk = msk;
+      const result = await session.client.enrollMsk({
+        email: normalizeEmail(userEmail),
+        mskPublicKey: msk.publicKey,
+      });
+      setStatus("otp-sent");
+      setStatusMessage(enrollOtpStatus(userEmail, result));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("already") || message.includes("replace") || message.includes("transfer")) {
+        setStatus("unauthorized");
+        setStatusMessage("This mailbox already has a SComm identity. Transfer from another device or recover identity.");
+      } else {
+        setStatusMessage(`Could not start identity setup: ${message}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
+
+  const registerOnDirectory = useCallback(async () => {
+    if (!userEmail || !session) return;
+    if (!session.msk) {
+      await restoreOfficeVault(session);
+    }
+    const publicKey =
+      session.msk?.publicKey && session.msk.publicKey.length > 0 ? session.msk.publicKey : null;
+    if (!publicKey) {
+      setStatusMessage("Unlock the local Vault MSK first, then register it on this directory.");
+      return;
+    }
+    setBusy(true);
+    setStatusMessage(null);
+    try {
+      const result = await session.client.enrollMsk({
+        email: normalizeEmail(userEmail),
+        mskPublicKey: publicKey,
+      });
+      setStatus("otp-sent");
+      setStatusMessage(enrollOtpStatus(userEmail, result));
+    } catch (err) {
+      const httpStatus = err && typeof err === "object" && "status" in err ? Number(err.status) : 0;
+      const message = err instanceof Error ? err.message : String(err);
+      if (httpStatus === 409 && /already has an armed msk/i.test(message)) {
+        setDirectoryArmed(true);
+        setStatusMessage("This identity is already registered on the directory — no action needed.");
+        return;
+      }
+      setStatusMessage(`Could not register this identity on the directory: ${message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
+
+  const verifyOtp = useCallback(async () => {
+    if (!userEmail || !session || !otpInput.trim()) return;
+    setBusy(true);
+    setStatusMessage(null);
+    try {
+      const msk = session.msk ?? session.pendingMsk;
+      if (!msk) throw new Error("Enroll an MSK before verifying OTP");
+      const deviceKey = await session.crypto.generateDeviceKey({ extractable: true });
+      await session.client.verifyEnroll({
+        email: normalizeEmail(userEmail),
+        otp: otpInput.trim(),
+        mskKey: msk,
+        device: { identityKey: deviceKey, publicKey: deviceKey.publicKey, name: "Outlook" },
+      });
+      await persistMsk(session, userEmail);
+      setStatus("verified");
+      setDirectoryArmed(true);
+      setStatusMessage("SComm identity created on this device. Synchronize the Vault before creating a new encryption key.");
+    } catch (err) {
+      setStatusMessage(`OTP verify failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session, otpInput]);
+
+  /** Resolves true once the requested purpose(s) actually reached the directory. */
+  const publishPgp = useCallback(
+    async (purposes?: PgpKeyPurpose[]): Promise<boolean> => {
+      if (!userEmail || !session) return false;
+      setBusy(true);
+      setStatusMessage(null);
+      try {
+        await publishPgpContentKey(session, userEmail, purposes);
+        if (!purposes || purposes.includes("encryption")) setHasPgp(true);
+        setStatusMessage(
+          !purposes
+            ? "OpenPGP encryption and signing keys published to the directory."
+            : `OpenPGP ${purposes.join(" and ")} key published to the directory.`,
+        );
+        setPublishFailed(false);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const code =
+          err && typeof err === "object" && "code" in err ? String((err as { code: unknown }).code) : "";
+        if (code === "master_key_not_armed" || message.includes("No armed MSK")) {
+          await registerOnDirectory();
+          return false;
+        }
+        setStatusMessage(`Publish failed: ${message} (${session.client.writeBaseUrl})`);
+        setPublishFailed(true);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [userEmail, session, registerOnDirectory],
+  );
+
+  const beginTransfer = useCallback(async () => {
+    if (!userEmail || !session) return;
+    setBusy(true);
+    try {
+      const started = await startDevicePairing(session, userEmail);
+      setPairingCode(started.pairingCode);
+      setStatus("transfer");
+      setStatusMessage("On your existing SComm device, choose Approve a new device and enter this pairing code.");
+      void awaitDevicePairing(session, userEmail, started)
+        .then(({ hasPgp: synced, hasMsk }) => {
+          setHasPgp(synced);
+          setStatus("verified");
+          setDirectoryArmed(true);
+          setStatusMessage(
+            hasMsk
+              ? "Paired and synced — this device can now sign and decrypt with your identity."
+              : "Paired and synced, but no signing authority was granted (limited tier) — content keys only.",
+          );
+        })
+        .catch((err: unknown) => {
+          setStatusMessage(`Pairing failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+    } catch (err) {
+      setStatusMessage(`Transfer failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
+
+  const beginRecovery = useCallback(async () => {
+    if (!userEmail || !session) return;
+    setBusy(true);
+    try {
+      const msk = await session.crypto.generateMSK();
+      if (!msk.publicKey) throw new Error("MSK public key missing");
+      session.pendingMsk = msk;
+      session.msk = msk;
+      await session.client.beginIdentityRecovery({
+        email: normalizeEmail(userEmail),
+        mskPublicKey: msk.publicKey,
+      });
+      setStatus("recover-otp");
+      setStatusMessage("Recovery issues a new identity key and retires the old one. Enter the email verification code to continue.");
+    } catch (err) {
+      setStatusMessage(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
+
+  const verifyRecovery = useCallback(async () => {
+    if (!userEmail || !session || !otpInput.trim()) return;
+    setBusy(true);
+    try {
+      const msk = session.msk ?? session.pendingMsk;
+      if (!msk) throw new Error("Start recovery first");
+      const deviceKey = await session.crypto.generateDeviceKey({ extractable: true });
+      await session.client.replaceMasterSigningKey({
+        email: normalizeEmail(userEmail),
+        otp: otpInput.trim(),
+        mskKey: msk,
+        device: { identityKey: deviceKey, publicKey: deviceKey.publicKey, name: "Outlook" },
+      });
+      await persistMsk(session, userEmail);
+      setStatus("verified");
+      setDirectoryArmed(true);
+      setHasPgp(false);
+      setStatusMessage("Identity recovered with a new key. Mail encrypted under your previous identity is no longer readable — publish a new OpenPGP key to resume sending and receiving encrypted mail.");
+    } catch (err) {
+      setStatusMessage(`Recovery verify failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session, otpInput]);
+
+  const goUnauthorized = useCallback(() => {
+    setOtpInputState("");
+    setStatusMessage(null);
+    setStatus("unauthorized");
+  }, []);
+
+  const goRecoverConfirm = useCallback(() => {
+    setOtpInputState("");
+    setStatusMessage(null);
+    setStatus("recover");
+  }, []);
+
+  return {
+    status,
+    busy,
+    statusMessage,
+    otpInput,
+    setOtpInput,
+    hasPgp,
+    engineReady,
+    pgpEntitled,
+    directoryArmed,
+    publishFailed,
+    pairingCode,
+    requestOtp,
+    registerOnDirectory,
+    verifyOtp,
+    publishPgp,
+    beginTransfer,
+    beginRecovery,
+    verifyRecovery,
+    goUnauthorized,
+    goRecoverConfirm,
+    refreshFromVault,
+  };
+}
+
+export type UseVaultIdentityResult = ReturnType<typeof useVaultIdentity>;
