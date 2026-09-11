@@ -115,10 +115,28 @@ export function useVaultIdentity(
         setDirectoryArmed(true);
       } else if (userEmail) {
         // No local vault — find out up front whether this is a genuinely
-        // first-time user (nothing to offer "I already have an identity
-        // elsewhere" for) before the setup screens render.
-        void probeIdentityExists(session, userEmail).then((exists) => {
-          if (!cancelled) setIdentityExists(exists);
+        // first-time user. If an identity already exists remotely, this is
+        // NOT a "create a new vault" situation — skip straight past
+        // SetupIntroScreen into the same Case 1/2 recovery branch
+        // requestOtp's catch would otherwise only discover reactively.
+        void probeIdentityExists(session, userEmail).then(async (exists) => {
+          if (cancelled) return;
+          setIdentityExists(exists);
+          if (!exists) return;
+          let recoveryExists = false;
+          try {
+            recoveryExists = await checkRecoveryEnvelope(session, userEmail);
+          } catch {
+            recoveryExists = false;
+          }
+          if (cancelled) return;
+          setHasRecoveryEnvelope(recoveryExists);
+          setStatus(recoveryExists ? "recovery-code" : "unauthorized");
+          setStatusMessage(
+            recoveryExists
+              ? "This mailbox already has an identity, and a recovery code is set up for it."
+              : "This mailbox already has an identity. Approve this device from one you've already set up.",
+          );
         });
       }
       setHasPgp(state.hasPgp);
