@@ -23,7 +23,7 @@ There is **no** SComm-proprietary ECDH envelope (`scomm-v1-ecdh-p256-aes256gcm` 
 - Encrypt UTF-8 body text to armored `PGP MESSAGE`. Include self as recipient so Sent items decrypt.
 - Sign as clearsigned OpenPGP. Encrypt may embed a signature when Sign is also on.
 - Decrypt into the Security pane `<pre>` only. Do not `setBody` plaintext.
-- Verify using the sender signing key from pubkey.scomm.ai.
+- Verify using the sender signing key from discovery.scomm.ai.
 - Harden HTML unwrap (`<br>`, split spans, `\r\n`) before OpenPGP parse.
 - Ribbon Encrypt / Sign persist compose flags; `OnMessageSend` **Block** when To/Cc/Bcc have a directory OpenPGP key the add-in can encrypt to and the body has no OpenPGP protection **and** the user has the paid `pgp` add-on. Without `pgp`, plaintext send is allowed; Encrypt / Sign / key publish fail closed.
 - Decrypt and signature verify do **not** require `pgp` so inbound mail stays readable.

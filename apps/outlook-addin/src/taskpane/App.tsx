@@ -60,7 +60,7 @@ async function bootstrapHost(): Promise<{
 
       // Graph submission requires auth (NAA, falling back to popup); it's also
       // our fallback for user email. Interactive auth is deferred to the actual
-      // send (a real button click) — never triggered here at boot, since a
+      // send (a real button click) â€” never triggered here at boot, since a
       // background/init popup attempt would just get blocked by the browser.
       let graphSubmissionAdapter: GraphSubmissionAdapter | null = null;
       const graphDiagnostics: GraphDiagnostics = {
@@ -73,7 +73,7 @@ async function bootstrapHost(): Promise<{
         graphSubmissionAdapter = new GraphSubmissionAdapter(new HttpMicrosoftGraphClient(identity));
 
         // Silent-only best-effort: only succeeds if a session is already
-        // cached (e.g. NAA SSO through the host) — never prompts.
+        // cached (e.g. NAA SSO through the host) â€” never prompts.
         const user = await identity.trySilentUser();
         if (user && !userEmail) {
           userEmail = user.mail ?? user.userPrincipalName ?? undefined;
@@ -91,7 +91,7 @@ async function bootstrapHost(): Promise<{
         graphDiagnostics,
       };
     }
-    // Not an Outlook mailbox session — office.js loaded standalone outside any
+    // Not an Outlook mailbox session â€” office.js loaded standalone outside any
     // Office host (e.g. a plain browser tab). Fall through to MockMailHost below.
   }
 
@@ -105,7 +105,7 @@ async function bootstrapHost(): Promise<{
 
   const mailHost = new MockMailHost({
     mode: "read",
-    subject: "Mock message — browser dev",
+    subject: "Mock message â€” browser dev",
     bodyHtml: simpleFixtureHtml,
     from: { emailAddress: "sender@example.com", displayName: "Sender" },
     to: [{ emailAddress: "muzamiltest9@gmail.com", displayName: "You" }],
@@ -118,7 +118,7 @@ async function bootstrapHost(): Promise<{
     isMockHost: true,
     userEmail: "muzamiltest9@gmail.com",
     graphSubmissionAdapter: null,
-    graphDiagnostics: { clientIdConfigured: false, probedSuccessfully: null, error: "Mock host — Graph not applicable." },
+    graphDiagnostics: { clientIdConfigured: false, probedSuccessfully: null, error: "Mock host â€” Graph not applicable." },
   };
 }
 
@@ -153,7 +153,7 @@ export function App() {
       return;
     }
     const next = await mailHost.getCurrentMessage();
-    // TEMP diagnostic — remove after item-switch / compose-mode issues are confirmed fixed.
+    // TEMP diagnostic â€” remove after item-switch / compose-mode issues are confirmed fixed.
     console.info("[scomm-temp:refresh-message]", {
       reason,
       id: next.id ?? null,
@@ -297,7 +297,7 @@ export function App() {
   if (!ready) {
     return (
       <div className={styles.panel}>
-        <Spinner size="small" label="Loading Scomm.AI…" />
+        <Spinner size="small" label="Loading Scomm.AIâ€¦" />
       </div>
     );
   }
@@ -324,13 +324,13 @@ export function App() {
       <div className={styles.shell}>
         {isMockHost ? (
           <MessageBar intent="warning">
-            <MessageBarBody>Mock host — running outside Outlook with a testkit fixture.</MessageBarBody>
+            <MessageBarBody>Mock host â€” running outside Outlook with a testkit fixture.</MessageBarBody>
           </MessageBar>
         ) : null}
         <header className={styles.header}>
           <Title3 className={styles.headerTitle}>Scomm.AI</Title3>
           <Text size={200}>
-            Outlook add-in — OpenPGP, pubkey.scomm.ai, semantics, and compliance
+            Outlook add-in â€” OpenPGP, discovery.scomm.ai, semantics, and compliance
           </Text>
         </header>
         <Navigation active={activeModule} onChange={setActiveModule} />

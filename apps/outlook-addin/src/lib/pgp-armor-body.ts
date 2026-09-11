@@ -43,11 +43,11 @@ export function escapeHtml(text: string): string {
 export interface EncryptedPlaceholder {
   /** Plain-text intro prepended to the text/plain body. */
   text: string;
-  /** Trusted, pre-styled HTML prepended to the HTML body — not escaped. */
+  /** Trusted, pre-styled HTML prepended to the HTML body â€” not escaped. */
   html: string;
 }
 
-const PLACEHOLDER_INSTALL_URL = "https://pubkey.scomm.ai";
+const PLACEHOLDER_INSTALL_URL = "https://discovery.scomm.ai";
 
 export const ENCRYPTED_PLACEHOLDER: EncryptedPlaceholder = {
   text:
@@ -84,7 +84,7 @@ export const ENCRYPTED_PLACEHOLDER: EncryptedPlaceholder = {
 </table>`.trim(),
 };
 
-/** GpgOL-style HTML wrapper so Outlook’s HTML composer does not reflow armor lines. */
+/** GpgOL-style HTML wrapper so Outlookâ€™s HTML composer does not reflow armor lines. */
 export function pgpArmorAsComposeHtml(armored: string, placeholderHtml?: string): string {
   const escaped = escapeHtml(armored.replace(/\r\n/g, "\n").trim());
   const intro = placeholderHtml ?? "";

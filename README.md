@@ -1,13 +1,13 @@
 # SComm Office
 
-**SComm Office** is an Outlook-hosted capability layer for [SComm](https://github.com/scomm-ai) — semantic mail understanding, identity/public-key discovery, compliance policy, billing entitlements, and bring-your-own AI (local via [IDR](https://idr.to), cloud BYOAI), constrained by explicit trust boundaries and OpenSpec decisions. Standing goal: bring as much of SComm (secMail) into Office hosts as possible, starting with Outlook ([constitution](./openspec/constitution.md)).
+**SComm Office** is an Outlook-hosted capability layer for [SComm](https://github.com/scomm-ai) â€” semantic mail understanding, identity/public-key discovery, compliance policy, billing entitlements, and bring-your-own AI (local via [IDR](https://idr.to), cloud BYOAI), constrained by explicit trust boundaries and OpenSpec decisions. Standing goal: bring as much of SComm (secMail) into Office hosts as possible, starting with Outlook ([constitution](./openspec/constitution.md)).
 
 This monorepo ships:
 
-- **`apps/outlook-addin`** — React 19 + Vite task pane (HTTPS dev server, Office.js manifest) — **product**
-- **`apps/dev-console`** — browser fixture runner for semantics + policy debugging
-- **`apps/server`** — Fastify **fixture only** (not required for product paths)
-- **`packages/*`** — shared TypeScript libraries (`@scomm-office/*`), including `byoai`. Billing/license is `@2key/browser-sdk` (not a local package).
+- **`apps/outlook-addin`** â€” React 19 + Vite task pane (HTTPS dev server, Office.js manifest) â€” **product**
+- **`apps/dev-console`** â€” browser fixture runner for semantics + policy debugging
+- **`apps/server`** â€” Fastify **fixture only** (not required for product paths)
+- **`packages/*`** â€” shared TypeScript libraries (`@scomm-office/*`), including `byoai`. Billing/license is `@2key/browser-sdk` (not a local package).
 
 > **Client-first:** Auth/billing talk to the billing host; public keys to the production pubkey service; IDR is an embedded third-party SDK. See [005-no-office-server](./openspec/architecture/005-no-office-server.md).
 
@@ -34,7 +34,7 @@ flowchart TB
     OFF["office"]
     SEM["semantics"]
     POL["policy"]
-    PK["pubkeys → @scomm/pubkey + @ckvf"]
+    PK["pubkeys â†’ @scomm/pubkey + @ckvf"]
     IDR["idr"]
     PRO["protocol"]
     CRY["crypto (stubs)"]
@@ -88,16 +88,16 @@ flowchart TB
 | `packages/storage` | `@scomm-office/storage` | Settings + dev key store |
 | `packages/config` | `@scomm-office/config` | Effective configuration merge |
 | `packages/testkit` | `@scomm-office/testkit` | HTML fixtures |
-| `openspec/` | — | Architecture & security decisions |
+| `openspec/` | â€” | Architecture & security decisions |
 
 Workspace discovery: `pnpm-workspace.yaml` includes `apps/*`, `packages/*`, and a sibling checkout of `@2key/browser-sdk` at `../2key-billing-sdks/packages/javascript/packages/*`. Clone that repo next to this one before `pnpm install`.
 
 ## Prerequisites
 
-- **Node.js ≥ 24** (see `.nvmrc`)
+- **Node.js â‰¥ 24** (see `.nvmrc`)
 - **pnpm 9.x** (`corepack enable && corepack prepare pnpm@9.15.0 --activate`)
 - **Outlook** desktop or web for sideloading (see [docs/sideload.md](./docs/sideload.md))
-- **PostgreSQL** on `localhost:5433` for future persistence (`DATABASE_URL` in `.env`) — MVP server uses in-memory stores when present
+- **PostgreSQL** on `localhost:5433` for future persistence (`DATABASE_URL` in `.env`) â€” MVP server uses in-memory stores when present
 
 ## Quick start
 
@@ -124,11 +124,11 @@ Copy `.env.example` to `.env` at the repo root. Vite apps read `VITE_*` variable
 | `ADDIN_PORT` | `5173` | Outlook add-in Vite HTTPS port; also rewrites `manifest.local.xml` |
 | `VITE_SCOMM_SERVER_URL` | `http://localhost:8787` | SComm server base URL |
 | `VITE_PUBKEY_SERVER_URL` | same as above | Fixture pubkey URL (optional local Fastify) |
-| `VITE_PUBKEY_READ_BASE_URL` | `https://pubkey.scomm.ai` | Production pubkey read host |
-| `VITE_PUBKEY_WRITE_BASE_URL` | `https://pubkey.scomm.ai` | Production pubkey write host (same server as read; not `api.pubkey.scomm.ai`) |
+| `VITE_PUBKEY_READ_BASE_URL` | `https://discovery.scomm.ai` | Production pubkey read host |
+| `VITE_PUBKEY_WRITE_BASE_URL` | `https://discovery.scomm.ai` | Production pubkey write host (same server as read; not `api.discovery.scomm.ai`) |
 | `VITE_IDR_HOST` | *(empty)* | Your IDR tunnel host |
 | `VITE_IDR_SERVICE` | `ollama` | IDR service name for BYOM |
-| `VITE_BILLING_ORIGIN` | *(empty)* | Billing API origin (`https://…`) |
+| `VITE_BILLING_ORIGIN` | *(empty)* | Billing API origin (`https://â€¦`) |
 | `VITE_BILLING_PORTAL_URL` | same as origin | Billing portal / shop URL |
 | `DATABASE_URL` | `postgres://...@localhost:5433/scomm_office` | Future Postgres (port **5433**) |
 
@@ -136,7 +136,7 @@ Task pane **Settings** also persist to `localStorage` via `MemoryUserSettingsSto
 
 ## Sideloading Outlook add-in
 
-**Production:** Microsoft disabled **Add from URL**. Download **https://office.scomm.ai/manifest.xml**, then **Add from File** via **https://aka.ms/olksideload** (or classic Outlook **File → Manage Add-ins**). Details: **[docs/sideload.md](./docs/sideload.md)**.
+**Production:** Microsoft disabled **Add from URL**. Download **https://office.scomm.ai/manifest.xml**, then **Add from File** via **https://aka.ms/olksideload** (or classic Outlook **File â†’ Manage Add-ins**). Details: **[docs/sideload.md](./docs/sideload.md)**.
 
 **Local:** trust the Vite cert, then **Add from file** `apps/outlook-addin/manifest/manifest.local.xml` (generated on `pnpm dev` from `ADDIN_PORT`). Do not share the localhost manifest as an install link.
 
@@ -161,8 +161,8 @@ pnpm --filter @scomm-office/dev-console dev        # http://localhost:5174
 ## Semantics pipeline
 
 1. **Raw mail** (`bodyHtml` / `bodyText`) from `MailHost`
-2. **`HeuristicSemanticExtractor`** → typed segments (authored, quoted, signature, legalese, …)
-3. **`sha256SemanticDocument`** → semantic digest for headers
+2. **`HeuristicSemanticExtractor`** â†’ typed segments (authored, quoted, signature, legalese, â€¦)
+3. **`sha256SemanticDocument`** â†’ semantic digest for headers
 4. **`ScommMessageMetadataAdapter`** writes compact `X-SComm-*` headers in compose mode (Mailbox 1.8+)
 5. **`DeterministicPolicyEngine`** evaluates compliance findings; **`mapPolicyToSendDecision`** for send-time hints
 
@@ -172,7 +172,7 @@ Use **dev-console** to iterate on fixtures without Outlook.
 
 - Lookup via **`ProductionPubkeyDirectory`** / `PubkeyClient.getBestKey` (`GET /v1/keys`)
 - Compose-time OpenPGP encrypt in the Security pane (`PgpEngine`)
-- Device Vault in IndexedDB; passphrase export/import for backup — host IndexedDB can vanish
+- Device Vault in IndexedDB; passphrase export/import for backup â€” host IndexedDB can vanish
 
 See [openspec/features/pubkey-server-api.md](./openspec/features/pubkey-server-api.md).
 
@@ -190,11 +190,11 @@ See [openspec/architecture/003-idr-transport.md](./openspec/architecture/003-idr
 
 ## Security caveats
 
-- **OpenPGP overlay** — Security pane encrypts the body as armored PGP; decrypt shows in the pane only (never `setBody` plaintext)
-- **No JS S/MIME** — native Outlook S/MIME is CAPI; the add-in does not advertise `smime`
-- **AI trust boundary** — model output must not drive privileged actions without validation ([openspec/security/ai-trust-boundary.md](./openspec/security/ai-trust-boundary.md))
-- **Hostile HTML** — semantic extraction strips scripts but mail bodies are untrusted input
-- **CSP** — task pane uses a restrictive meta policy; adjust carefully for new endpoints
+- **OpenPGP overlay** â€” Security pane encrypts the body as armored PGP; decrypt shows in the pane only (never `setBody` plaintext)
+- **No JS S/MIME** â€” native Outlook S/MIME is CAPI; the add-in does not advertise `smime`
+- **AI trust boundary** â€” model output must not drive privileged actions without validation ([openspec/security/ai-trust-boundary.md](./openspec/security/ai-trust-boundary.md))
+- **Hostile HTML** â€” semantic extraction strips scripts but mail bodies are untrusted input
+- **CSP** â€” task pane uses a restrictive meta policy; adjust carefully for new endpoints
 
 Full threat model: [openspec/security/threat-model.md](./openspec/security/threat-model.md).
 
@@ -213,16 +213,16 @@ WebRTC inside Office hosts: **Under Investigation** ([openspec/microsoft/webrtc-
 
 ## Limitations (MVP)
 
-- OnMessageSend / Smart Alerts manifest stubs only — handlers registered in `commands.html`, LaunchEvents commented
+- OnMessageSend / Smart Alerts manifest stubs only â€” handlers registered in `commands.html`, LaunchEvents commented
 - No durable private-key storage ([openspec/security/private-key-storage.md](./openspec/security/private-key-storage.md))
 - No `application/scomm+json` MIME parts ([openspec/features/scomm-mime.md](./openspec/features/scomm-mime.md))
 - Microsoft Graph integration is interface-level only
-- Server app may be absent in early clones — pubkey calls fail until server runs on `:8787`
+- Server app may be absent in early clones â€” pubkey calls fail until server runs on `:8787`
 - Playwright E2E for add-in: optional / not wired yet
 
 ## OpenSpec
 
-All major decisions live under **[openspec/](./openspec/README.md)** — start with:
+All major decisions live under **[openspec/](./openspec/README.md)** â€” start with:
 
 - [001-monorepo](./openspec/architecture/001-monorepo.md)
 - [002-office-graph-boundary](./openspec/architecture/002-office-graph-boundary.md)
@@ -231,4 +231,4 @@ All major decisions live under **[openspec/](./openspec/README.md)** — start w
 
 ## License
 
-Private monorepo — see repository settings.
+Private monorepo â€” see repository settings.
