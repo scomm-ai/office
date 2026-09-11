@@ -3,9 +3,13 @@ import { normalizeEmail } from "@scomm-office/pubkeys";
 import { loadPgpEntitlement } from "../../../../lib/billing-pgp";
 import {
   awaitDevicePairing,
+  checkRecoveryEnvelope,
   publishPgpContentKey,
   persistMsk,
+  requestRecoveryCodeOtp as requestRecoveryCodeOtpApi,
+  restoreFromRecoveryCode,
   restoreOfficeVault,
+  saveRecoveryEnvelope,
   startDevicePairing,
   type OfficePubkeySession,
   type PgpKeyPurpose,
@@ -15,6 +19,7 @@ export type IdentityStatus =
   | "idle"
   | "otp-sent"
   | "unauthorized"
+  | "recovery-code"
   | "transfer"
   | "recover"
   | "recover-otp"
@@ -49,6 +54,14 @@ export function useVaultIdentity(
   const [pgpEntitled, setPgpEntitled] = useState(false);
   const [directoryArmed, setDirectoryArmed] = useState(false);
   const [pairingCode, setPairingCode] = useState("");
+  // null = not checked yet. Decides which of the two mutually-exclusive
+  // "no local vault, but this identity exists elsewhere" screens to show:
+  // recovery-code entry (true) vs. "recover from another device" (false).
+  const [hasRecoveryEnvelope, setHasRecoveryEnvelope] = useState<boolean | null>(null);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState("");
+  // Set once by setupRecoveryCode(); shown exactly once, then dismissed —
+  // never persisted here or anywhere else.
+  const [recoveryCodeResult, setRecoveryCodeResult] = useState<string | null>(null);
   // True only right after a publish attempt genuinely failed (not the
   // "master_key_not_armed" retry path) — drives whether Settings shows a
   // "repair" action or just a plain "Published" status.
@@ -122,8 +135,22 @@ export function useVaultIdentity(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("already") || message.includes("replace") || message.includes("transfer")) {
-        setStatus("unauthorized");
-        setStatusMessage("This mailbox already has a SComm identity. Transfer from another device or recover identity.");
+        // Case 1 vs Case 2: a recovery-code envelope on the server means this
+        // identity's *existing* vault can be restored directly; without one,
+        // the only vault-preserving path is pairing with another device.
+        let recoveryExists = false;
+        try {
+          recoveryExists = await checkRecoveryEnvelope(session, userEmail);
+        } catch {
+          recoveryExists = false;
+        }
+        setHasRecoveryEnvelope(recoveryExists);
+        setStatus(recoveryExists ? "recovery-code" : "unauthorized");
+        setStatusMessage(
+          recoveryExists
+            ? "This mailbox already has an identity, and a recovery code is set up for it."
+            : "This mailbox already has an identity. Approve this device from one you've already set up.",
+        );
       } else {
         setStatusMessage(`Could not start identity setup: ${message}`);
       }
@@ -300,17 +327,93 @@ export function useVaultIdentity(
     }
   }, [userEmail, session, otpInput]);
 
-  const goUnauthorized = useCallback(() => {
+  /** Entry point for "I already have an identity on another device" — same Case 1/2 check as requestOtp's catch. */
+  const goUnauthorized = useCallback(async () => {
     setOtpInputState("");
     setStatusMessage(null);
-    setStatus("unauthorized");
-  }, []);
+    if (!userEmail || !session) {
+      setStatus("unauthorized");
+      return;
+    }
+    setBusy(true);
+    try {
+      const recoveryExists = await checkRecoveryEnvelope(session, userEmail);
+      setHasRecoveryEnvelope(recoveryExists);
+      setStatus(recoveryExists ? "recovery-code" : "unauthorized");
+    } catch {
+      setHasRecoveryEnvelope(false);
+      setStatus("unauthorized");
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
 
   const goRecoverConfirm = useCallback(() => {
     setOtpInputState("");
+    setRecoveryCodeInput("");
     setStatusMessage(null);
     setStatus("recover");
   }, []);
+
+  const requestRecoveryCodeOtp = useCallback(async () => {
+    if (!userEmail || !session) return;
+    setBusy(true);
+    setStatusMessage(null);
+    try {
+      await requestRecoveryCodeOtpApi(session, userEmail);
+      setStatusMessage(`Verification code sent to ${userEmail}. Enter it below along with your recovery code.`);
+    } catch (err) {
+      setStatusMessage(`Could not send verification code: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
+
+  const setRecoveryCode = useCallback(
+    (value: string) => setRecoveryCodeInput(value),
+    [],
+  );
+
+  /** Case 1's primary action: restore the *existing* vault from the recovery-code envelope. */
+  const submitRecoveryCode = useCallback(async () => {
+    if (!userEmail || !session || !otpInput.trim() || !recoveryCodeInput.trim()) return;
+    setBusy(true);
+    setStatusMessage(null);
+    try {
+      const result = await restoreFromRecoveryCode(
+        session,
+        userEmail,
+        otpInput.trim(),
+        recoveryCodeInput.trim(),
+      );
+      setStatus("verified");
+      setDirectoryArmed(true);
+      setHasPgp(result.hasPgp);
+      setStatusMessage("Vault restored from your recovery code.");
+    } catch (err) {
+      setStatusMessage(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session, otpInput, recoveryCodeInput]);
+
+  /** The "create it" half of Case 1 — without this, hasRecoveryEnvelope can never be true. */
+  const setupRecoveryCode = useCallback(async () => {
+    if (!userEmail || !session) return;
+    setBusy(true);
+    setStatusMessage(null);
+    try {
+      const code = await saveRecoveryEnvelope(session, userEmail);
+      setRecoveryCodeResult(code);
+      setStatusMessage("Recovery code created. Save it now — it won't be shown again.");
+    } catch (err) {
+      setStatusMessage(`Could not set up a recovery code: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [userEmail, session]);
+
+  const dismissRecoveryCode = useCallback(() => setRecoveryCodeResult(null), []);
 
   return {
     status,
@@ -324,6 +427,12 @@ export function useVaultIdentity(
     directoryArmed,
     publishFailed,
     pairingCode,
+    hasRecoveryEnvelope,
+    recoveryCodeInput,
+    setRecoveryCode,
+    recoveryCodeResult,
+    setupRecoveryCode,
+    dismissRecoveryCode,
     requestOtp,
     registerOnDirectory,
     verifyOtp,
@@ -333,6 +442,8 @@ export function useVaultIdentity(
     verifyRecovery,
     goUnauthorized,
     goRecoverConfirm,
+    requestRecoveryCodeOtp,
+    submitRecoveryCode,
     refreshFromVault,
   };
 }

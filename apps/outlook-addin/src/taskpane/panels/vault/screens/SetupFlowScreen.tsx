@@ -8,6 +8,7 @@ import { KeyTypeScreen } from "./KeyTypeScreen";
 import { OtpScreen } from "./OtpScreen";
 import { PairScreen } from "./PairScreen";
 import { RecoverScreen } from "./RecoverScreen";
+import { RecoveryCodeScreen } from "./RecoveryCodeScreen";
 import { SetupIntroScreen } from "./SetupIntroScreen";
 import { UnauthorizedScreen } from "./UnauthorizedScreen";
 
@@ -94,6 +95,25 @@ export function SetupFlowScreen({
           busy={identity.busy}
           onTransfer={() => void identity.beginTransfer()}
           onRecover={identity.goRecoverConfirm}
+        />
+        {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
+      </div>
+    );
+  }
+
+  if (identity.status === "recovery-code") {
+    return (
+      <div className={styles.stack}>
+        <RecoveryCodeScreen
+          userEmail={userEmail}
+          otp={identity.otpInput}
+          onOtpChange={identity.setOtpInput}
+          onSendOtp={() => void identity.requestRecoveryCodeOtp()}
+          recoveryCode={identity.recoveryCodeInput}
+          onRecoveryCodeChange={identity.setRecoveryCode}
+          onSubmit={() => void identity.submitRecoveryCode()}
+          busy={identity.busy}
+          onLostCodeToo={identity.goRecoverConfirm}
         />
         {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
       </div>

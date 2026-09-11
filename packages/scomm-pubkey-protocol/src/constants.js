@@ -29,6 +29,7 @@ export const OPERATIONS = Object.freeze({
 	revoke_device: "revoke_device",
 	list_devices: "list_devices",
 	vault_upload: "vault_upload",
+	set_recovery_envelope: "set_recovery_envelope",
 });
 
 export const FAMILIES = Object.freeze({

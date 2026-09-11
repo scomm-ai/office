@@ -605,3 +605,72 @@ export async function approveDevicePairing(
     aek: session.vault.aek ?? undefined,
   });
 }
+
+// CKVF spec §9b recovery-code recovery. Distinct from both device pairing
+// above (needs an already-authorized peer device) and the email-OTP-only
+// "recover identity" flow (mints a brand-new MSK, cannot restore old vault
+// content) — this restores the *existing* vault from a server-held envelope
+// only a client holding the recovery code can unwrap.
+
+/** Unauthenticated existence check — call before deciding whether to offer recovery-code entry vs. device pairing. */
+export async function checkRecoveryEnvelope(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<boolean> {
+  return session.client.hasRecoveryEnvelope({ email: normalizeEmail(email) });
+}
+
+/** Requests the single-use OTP that gates fetching the recovery envelope. */
+export async function requestRecoveryCodeOtp(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<void> {
+  await session.client.requestRecoveryEnvelopeOtp({ email: normalizeEmail(email) });
+}
+
+/**
+ * Fetches and unwraps the recovery envelope with `otp` + `recoveryCode`,
+ * then applies the recovered VRK/AEK exactly like `completeDeviceTransfer`
+ * (creates a local vault if needed, pulls the real vault content, recovers
+ * MSK signing capability when an AEK was included).
+ */
+export async function restoreFromRecoveryCode(
+  session: OfficePubkeySession,
+  email: string,
+  otp: string,
+  recoveryCode: string,
+): Promise<{ hasPgp: boolean; hasMsk: boolean }> {
+  const { vrk, aek } = await session.client.recoverVaultWithCode({
+    email: normalizeEmail(email),
+    otp,
+    recoveryCode,
+  });
+  return completeDeviceTransfer(session, email, { vrk, aek });
+}
+
+/**
+ * Generates a fresh recovery code, wraps this vault's VRK (and AEK, if this
+ * device holds one) under it, and uploads the envelope — replacing any
+ * previously-set one for this identity. Returns the plaintext code: show it
+ * to the user exactly once, this app never persists or logs it.
+ */
+export async function saveRecoveryEnvelope(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<string> {
+  if (!session.msk) {
+    const restored = await restoreOfficeVault(session);
+    if (!restored.restored || !session.msk) {
+      throw new Error("MSK is not armed");
+    }
+  }
+  if (!session.vault.unlocked) {
+    throw new Error("Unlock the Vault before setting up a recovery code");
+  }
+  return session.client.setRecoveryEnvelope({
+    email: normalizeEmail(email),
+    mskKey: session.msk,
+    vrk: session.vault.ensureVrk(),
+    aek: session.vault.aek ?? undefined,
+  });
+}

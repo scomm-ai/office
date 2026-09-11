@@ -698,6 +698,9 @@ importers:
       '@scomm/pubkey-protocol':
         specifier: workspace:*
         version: link:../scomm-pubkey-protocol
+      hash-wasm:
+        specifier: ^4.12.0
+        version: 4.12.0
       openpgp:
         specifier: ^6.3.1
         version: 6.3.1
@@ -2493,6 +2496,9 @@ packages:
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
+
+  hash-wasm@4.12.0:
+    resolution: {integrity: sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -5484,6 +5490,8 @@ snapshots:
   globals@15.15.0: {}
 
   has-flag@4.0.0: {}
+
+  hash-wasm@4.12.0: {}
 
   ignore@5.3.2: {}
 

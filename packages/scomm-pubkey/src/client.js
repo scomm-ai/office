@@ -32,6 +32,14 @@ import {
 	wrapPairingTransfer,
 	unwrapPairingTransfer,
 } from "./crypto/enrollment.js";
+import {
+	RECOVERY_SALT_BYTES,
+	deriveRecoveryKey,
+	deriveRecoveryKeyFromEnvelope,
+	generateRecoveryCode,
+	unwrapWithRecoveryKey,
+	wrapWithRecoveryKey,
+} from "./crypto/recovery-code.js";
 
 function decodePeer(value) {
 	return value instanceof Uint8Array ? value : decodeBase64Url(value);
@@ -652,6 +660,78 @@ export class PubkeyClient {
 			}
 			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
 		}
+	}
+
+	// CKVF spec §9b recovery-code recovery. Distinct from both device pairing
+	// above (needs an already-authorized peer device) and MSK-only OTP
+	// recovery (mints a brand-new MSK, cannot restore old vault content) --
+	// this restores the *existing* VRK/AEK from a server-held envelope that
+	// only a client holding the recovery code can unwrap.
+
+	/** Unauthenticated existence check -- safe to call before showing recovery UI on a device with no local vault. */
+	async hasRecoveryEnvelope({ email }) {
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const hash = await emailSha256Hex(canonicalEmail);
+		const result = await pubkeyFetch(
+			joinUrl(this.readBaseUrl, `/v1/recovery/envelope-exists/${hash}`),
+			{ fetch: this.fetchImpl },
+		);
+		return Boolean(result?.exists);
+	}
+
+	/** Requests a single-use OTP gating the envelope fetch below. Requires an already-armed MSK for this email server-side. */
+	async requestRecoveryEnvelopeOtp({ email }) {
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		return pubkeyFetch(joinUrl(this.writeBaseUrl, "/v1/recovery/envelope/otp"), {
+			method: "POST",
+			body: { email: canonicalEmail },
+			fetch: this.fetchImpl,
+		});
+	}
+
+	/**
+	 * Fetches the wrapped envelope (OTP is single-use and consumed either
+	 * way) and unwraps it locally with `recoveryCode`. The server never sees
+	 * the code or the unwrapped VRK/AEK -- OTP alone never suffices to
+	 * decrypt anything (defense in depth).
+	 */
+	async recoverVaultWithCode({ email, otp, recoveryCode }) {
+		const canonicalEmail = requireCanonicalEmail(normalizeEmail(email));
+		const sha256 = await emailSha256Hex(canonicalEmail);
+		const bundle = await pubkeyFetch(
+			joinUrl(this.writeBaseUrl, "/v1/recovery/envelope/fetch"),
+			{ method: "POST", body: { sha256, otp }, fetch: this.fetchImpl },
+		);
+		const rek = await deriveRecoveryKeyFromEnvelope(this.crypto, recoveryCode, bundle.vek_envelope);
+		const vrk = await unwrapWithRecoveryKey(this.crypto, rek, bundle.vek_envelope);
+		const aek = bundle.aek_envelope
+			? await unwrapWithRecoveryKey(this.crypto, rek, bundle.aek_envelope)
+			: undefined;
+		return { vrk, aek };
+	}
+
+	/**
+	 * Generates a fresh recovery code, wraps `vrk` (and `aek`, for a
+	 * full-scope envelope) under it, and uploads via the MSK-signed
+	 * `set_recovery_envelope` mutation -- replacing any envelope already set
+	 * for this identity. Returns the plaintext code: show it to the user
+	 * exactly once, this SDK never persists or logs it.
+	 */
+	async setRecoveryEnvelope({ email, mskKey, vrk, aek }) {
+		const recoveryCode = generateRecoveryCode(this.crypto);
+		const salt = this.crypto.random(RECOVERY_SALT_BYTES);
+		const rek = await deriveRecoveryKey(this.crypto, recoveryCode, salt);
+		const vekEnvelope = await wrapWithRecoveryKey(this.crypto, rek, vrk, { salt });
+		const aekEnvelope = aek
+			? await wrapWithRecoveryKey(this.crypto, rek, aek, { salt })
+			: undefined;
+		await this.mutate({
+			email,
+			operation: OPERATIONS.set_recovery_envelope,
+			payload: { vek_envelope: vekEnvelope, aek_envelope: aekEnvelope },
+			mskKey,
+		});
+		return recoveryCode;
 	}
 
 	async listDevices({ email, mskKey }) {

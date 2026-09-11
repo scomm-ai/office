@@ -5,6 +5,7 @@ import {
 	MSK_ALGORITHM,
 	PURPOSES,
 } from "@scomm/pubkey-protocol";
+import { argon2id } from "hash-wasm";
 import { CryptoProvider } from "./provider.js";
 import { wipeBytes } from "./bytes.js";
 import { PubkeyError } from "../errors.js";
@@ -602,6 +603,27 @@ export class WebCryptoProvider extends CryptoProvider {
 		return new Uint8Array(
 			await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext),
 		);
+	}
+
+	// WebCrypto has no native Argon2 support (browser or Node), so this is the
+	// one primitive backed by a WASM library rather than crypto.subtle.
+	async deriveArgon2id(passphrase, salt, options = {}) {
+		const {
+			memory = 19456,
+			iterations = 3,
+			parallelism = 1,
+			length = 32,
+		} = options;
+		const hash = await argon2id({
+			password: passphrase,
+			salt,
+			memorySize: memory,
+			iterations,
+			parallelism,
+			hashLength: length,
+			outputType: "binary",
+		});
+		return hash instanceof Uint8Array ? hash : new Uint8Array(hash);
 	}
 
 	async _vaultKey(passphrase, salt, iterations) {

@@ -401,6 +401,178 @@ describe("PubkeyClient", () => {
 		});
 	});
 
+	describe("recovery envelope (CKVF §9b)", () => {
+		it("hasRecoveryEnvelope GETs /v1/recovery/envelope-exists/:emailSha256Hex", async () => {
+			const crypto = new WebCryptoProvider();
+			/** @type {object[]} */
+			const calls = [];
+			const client = new PubkeyClient({
+				crypto,
+				readBaseUrl: "https://pubkey.test",
+				fetchImpl: async (url, init) => {
+					calls.push({ url, init });
+					return new Response(JSON.stringify({ exists: true }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				},
+			});
+
+			const exists = await client.hasRecoveryEnvelope({ email: "alice@example.com" });
+
+			assert.equal(exists, true);
+			assert.equal(calls.length, 1);
+			assert.match(
+				calls[0].url,
+				/^https:\/\/pubkey\.test\/v1\/recovery\/envelope-exists\/[0-9a-f]{64}$/,
+			);
+		});
+
+		it("requestRecoveryEnvelopeOtp posts the canonical email", async () => {
+			const crypto = new WebCryptoProvider();
+			/** @type {object[]} */
+			const calls = [];
+			const client = new PubkeyClient({
+				crypto,
+				writeBaseUrl: "https://api.pubkey.test",
+				fetchImpl: async (url, init) => {
+					calls.push({ url, init });
+					return new Response(
+						JSON.stringify({ message: "OTP sent", expiresIn: 600, sha256: "a".repeat(64) }),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				},
+			});
+
+			const result = await client.requestRecoveryEnvelopeOtp({ email: "Alice@Example.com" });
+
+			assert.equal(calls.length, 1);
+			assert.equal(calls[0].url, "https://api.pubkey.test/v1/recovery/envelope/otp");
+			assert.equal(calls[0].init.method, "POST");
+			assert.equal(JSON.parse(calls[0].init.body).email, "alice@example.com");
+			assert.equal(result.sha256, "a".repeat(64));
+		});
+
+		it("round-trips a VRK/AEK recovery envelope: setRecoveryEnvelope -> recoverVaultWithCode", async () => {
+			// One in-memory row keyed by principal, mirroring recoveryEnvelopeRepository:
+			// a single set_recovery_envelope mutation stores it, envelope/fetch reads it
+			// back after a (here, unchecked) OTP.
+			let stored = null;
+
+			function fakeServer(url, init) {
+				const u = new URL(url);
+				if (init?.method === "POST" && u.pathname === "/v1/mutate") {
+					const body = JSON.parse(init.body);
+					if (body.operation === "set_recovery_envelope") {
+						stored = body.payload;
+						return new Response(
+							JSON.stringify({ principal_id: body.principal, updated_at: new Date().toISOString() }),
+							{ status: 200, headers: { "Content-Type": "application/json" } },
+						);
+					}
+				}
+				if (init?.method === "POST" && u.pathname === "/v1/recovery/envelope/otp") {
+					return new Response(
+						JSON.stringify({ message: "OTP sent", expiresIn: 600, sha256: "a".repeat(64) }),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				}
+				if (init?.method === "POST" && u.pathname === "/v1/recovery/envelope/fetch") {
+					if (!stored) {
+						return new Response(
+							JSON.stringify({ error: "recovery_envelope_not_found" }),
+							{ status: 404, headers: { "Content-Type": "application/json" } },
+						);
+					}
+					return new Response(JSON.stringify(stored), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`);
+			}
+
+			const cryptoA = new WebCryptoProvider();
+			const cryptoB = new WebCryptoProvider();
+			const clientA = new PubkeyClient({
+				crypto: cryptoA,
+				writeBaseUrl: "https://api.pubkey.test",
+				fetchImpl: fakeServer,
+			});
+			const clientB = new PubkeyClient({
+				crypto: cryptoB,
+				writeBaseUrl: "https://api.pubkey.test",
+				fetchImpl: fakeServer,
+			});
+
+			const msk = await cryptoA.generateSigningKey("ed25519");
+			const vrk = cryptoA.random(32);
+			const aek = cryptoA.random(32);
+
+			const recoveryCode = await clientA.setRecoveryEnvelope({
+				email: "alice@example.com",
+				mskKey: msk,
+				vrk,
+				aek,
+			});
+
+			assert.equal(typeof recoveryCode, "string");
+			assert.equal(recoveryCode.length, 32);
+			assert.ok(stored?.vek_envelope);
+			assert.ok(stored?.aek_envelope);
+
+			const recovered = await clientB.recoverVaultWithCode({
+				email: "alice@example.com",
+				otp: "irrelevant-in-this-fake",
+				recoveryCode,
+			});
+
+			assert.deepEqual(recovered.vrk, vrk);
+			assert.deepEqual(recovered.aek, aek);
+		});
+
+		it("recoverVaultWithCode fails closed on a wrong recovery code", async () => {
+			let stored = null;
+			function fakeServer(url, init) {
+				const u = new URL(url);
+				if (init?.method === "POST" && u.pathname === "/v1/mutate") {
+					stored = JSON.parse(init.body).payload;
+					return new Response(JSON.stringify({ ok: true }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				if (init?.method === "POST" && u.pathname === "/v1/recovery/envelope/fetch") {
+					return new Response(JSON.stringify(stored), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`);
+			}
+
+			const crypto = new WebCryptoProvider();
+			const client = new PubkeyClient({ crypto, writeBaseUrl: "https://api.pubkey.test", fetchImpl: fakeServer });
+			const msk = await crypto.generateSigningKey("ed25519");
+
+			await client.setRecoveryEnvelope({
+				email: "alice@example.com",
+				mskKey: msk,
+				vrk: crypto.random(32),
+			});
+
+			await assert.rejects(
+				() =>
+					client.recoverVaultWithCode({
+						email: "alice@example.com",
+						otp: "000",
+						recoveryCode: "WRONGWRONGWRONGWRONGWRONGWRONGWR",
+					}),
+				(err) => err.code === "envelope_authentication_failure",
+			);
+		});
+	});
+
 	it("posts signing keys to /v1/keys/signing with artifact_pop self_signature", async () => {
 		const crypto = new WebCryptoProvider();
 		const msk = await crypto.generateSigningKey("ed25519");

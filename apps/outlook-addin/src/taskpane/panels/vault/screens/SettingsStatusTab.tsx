@@ -1,6 +1,6 @@
 import type { PublicKeyDirectory } from "@scomm-office/pubkeys";
 import { EcdhEnvelopeControls } from "../../../components/EcdhEnvelopeControls";
-import { Button, Divider, Note, StatusBadge, usePaneStyles } from "../../../ui/layout";
+import { Button, Divider, Note, StatusBadge, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
 import { PGP_ADDON_REQUIRED_MESSAGE } from "../../../../lib/billing-pgp";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
 
@@ -86,6 +86,39 @@ export function SettingsStatusTab({
               </Button>
             </div>
           ) : null}
+
+          {identity.recoveryCodeResult ? (
+            <div className={styles.card}>
+              <div className={styles.cardHeading}>Your recovery code</div>
+              <Note>
+                Write this down and store it somewhere safe. It won't be shown again — anyone who
+                lost every device would need this code (plus a fresh email verification) to
+                restore this vault.
+              </Note>
+              <Textarea
+                readOnly
+                value={identity.recoveryCodeResult}
+                rows={2}
+                style={{ width: "100%", fontFamily: tokens.fontFamilyMonospace }}
+              />
+              <div className={styles.actions}>
+                <Button appearance="primary" size="small" onClick={identity.dismissRecoveryCode}>
+                  I've saved it
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.actions}>
+              <Button
+                appearance="secondary"
+                size="small"
+                disabled={identity.busy}
+                onClick={() => void identity.setupRecoveryCode()}
+              >
+                Set up a recovery code
+              </Button>
+            </div>
+          )}
         </div>
       ) : null}
 

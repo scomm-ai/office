@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPubkeyClient } from "@scomm-office/pubkeys";
-import { publishPgpContentKey, pullHostedVault, type OfficePubkeySession } from "./pubkey-session";
+import {
+  checkRecoveryEnvelope,
+  publishPgpContentKey,
+  pullHostedVault,
+  requestRecoveryCodeOtp,
+  restoreFromRecoveryCode,
+  saveRecoveryEnvelope,
+  type OfficePubkeySession,
+} from "./pubkey-session";
 
 // PGP add-on entitlement is billing-pgp.test.ts's concern; these tests exercise
 // key publishing itself and assume an entitled license.
@@ -221,5 +229,76 @@ describe("pullHostedVault", () => {
     expect(downloadCalls).toBe(1);
     expect(result.hasPgp).toBe(true);
     expect(session.vault.listKeys()).toHaveLength(1);
+  });
+});
+
+describe("recovery code", () => {
+  it("checkRecoveryEnvelope delegates to client.hasRecoveryEnvelope", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.client.hasRecoveryEnvelope = (async (input: { email: string }) => {
+      expect(input.email).toBe(email);
+      return true;
+    }) as typeof session.client.hasRecoveryEnvelope;
+
+    expect(await checkRecoveryEnvelope(session, email)).toBe(true);
+  });
+
+  it("requestRecoveryCodeOtp delegates to client.requestRecoveryEnvelopeOtp", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    let called = false;
+    session.client.requestRecoveryEnvelopeOtp = (async () => {
+      called = true;
+      return { message: "OTP sent", expiresIn: 600, sha256: "x" };
+    }) as typeof session.client.requestRecoveryEnvelopeOtp;
+
+    await requestRecoveryCodeOtp(session, email);
+    expect(called).toBe(true);
+  });
+
+  it("restoreFromRecoveryCode unwraps via the client then applies the vault like a device transfer", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    const vrk = new Uint8Array(32).fill(7);
+    session.client.recoverVaultWithCode = (async (input: { otp: string; recoveryCode: string }) => {
+      expect(input.otp).toBe("12345678901");
+      expect(input.recoveryCode).toBe("SOME-CODE");
+      return { vrk };
+    }) as typeof session.client.recoverVaultWithCode;
+    session.client.downloadCurrentVault = (async ({ vault }: { vault: OfficePubkeySession["vault"] }) => {
+      vault.addKey({
+        kind: "content",
+        key_id: 1,
+        family: "pgp",
+        purpose: "encryption",
+        algorithm: "openpgp-cv25519",
+        fingerprint: "fp",
+        locator: "fp",
+        status: "active",
+        private_material: new Uint8Array([1, 2, 3]),
+      });
+      return 1;
+    }) as typeof session.client.downloadCurrentVault;
+
+    const result = await restoreFromRecoveryCode(session, email, "12345678901", "SOME-CODE");
+
+    expect(result.hasPgp).toBe(true);
+    expect(session.vault.vrk).toEqual(vrk);
+  });
+
+  it("saveRecoveryEnvelope uploads the current VRK/AEK and returns the plaintext code", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    let captured: { vrk?: Uint8Array; aek?: Uint8Array } = {};
+    session.client.setRecoveryEnvelope = (async (input: { vrk: Uint8Array; aek?: Uint8Array }) => {
+      captured = { vrk: input.vrk, aek: input.aek };
+      return "GENERATEDCODE1234567890ABCDEFGH";
+    }) as typeof session.client.setRecoveryEnvelope;
+
+    const code = await saveRecoveryEnvelope(session, email);
+
+    expect(code).toBe("GENERATEDCODE1234567890ABCDEFGH");
+    expect(captured.vrk).toBeInstanceOf(Uint8Array);
   });
 });

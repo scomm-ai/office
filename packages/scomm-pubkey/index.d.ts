@@ -399,6 +399,23 @@ export class PubkeyClient {
 		pollIntervalMs?: number;
 		timeoutMs?: number;
 	}): Promise<{ vrk: Uint8Array; aek?: Uint8Array }>;
+	hasRecoveryEnvelope(input: { email: string }): Promise<boolean>;
+	requestRecoveryEnvelopeOtp(input: { email: string }): Promise<{
+		message: string;
+		expiresIn: number;
+		sha256: string;
+	}>;
+	recoverVaultWithCode(input: {
+		email: string;
+		otp: string;
+		recoveryCode: string;
+	}): Promise<{ vrk: Uint8Array; aek?: Uint8Array }>;
+	setRecoveryEnvelope(input: {
+		email: string;
+		mskKey: KeyHandle;
+		vrk: Uint8Array;
+		aek?: Uint8Array;
+	}): Promise<string>;
 	listDevices(input: { email: string; mskKey: KeyHandle }): Promise<unknown>;
 	beginIdentityRecovery(input: { email: string; mskPublicKey: Uint8Array }): Promise<unknown>;
 	replaceMasterSigningKey(input: {

@@ -266,6 +266,23 @@ export class CryptoProvider {
 			"decryptAead is not available on this provider",
 		);
 	}
+
+	/**
+	 * Password-class KDF (Argon2id) for deriving a key from a low-entropy
+	 * secret a human holds — e.g. a recovery code. Distinct from
+	 * `hkdfSha256`, which expects high-entropy input keying material.
+	 *
+	 * @param {Uint8Array} _passphrase
+	 * @param {Uint8Array} _salt
+	 * @param {{ memory?: number, iterations?: number, parallelism?: number, length?: number }} [_options]
+	 * @returns {Promise<Uint8Array>}
+	 */
+	async deriveArgon2id(_passphrase, _salt, _options = {}) {
+		throw new PubkeyError(
+			ERROR_CODES.unsupported_algorithm,
+			"deriveArgon2id is not available on this provider",
+		);
+	}
 }
 
 export { CRYPTO_OPERATIONS, KEY_PROTECTION };
