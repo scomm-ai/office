@@ -16,7 +16,7 @@ A local `@scomm-office/billing` port of Dart + Better Auth would drift from Flut
 
 ## Goals
 
-- Pin `@2key/browser-sdk` for DeviceID, license restore/paste, and `hasProduct` / `hasOffering` / `hasAddon`
+- Pin `@2key/browser-sdk` for DeviceID, license restore/paste, and `normalizedEntitlements()` (`products.*.count`)
 - Dual identity: mailbox (Office.js / MSAL) ≠ billing portal login
 - Fail-closed gates against a static Outlook catalog intersected with the verified JWT
 - No client `GET /api/v1/license` or in-add-in Better Auth for licensing
@@ -49,13 +49,21 @@ const billing = createBillingClient({
 await billing.ensureDeviceId();
 await billing.restore();
 await billing.pasteLicense(snapshotFromPortal);
-billing.hasAddon("ai_assistant");
-billing.hasAddon("pgp");
+const snap = billing.normalizedEntitlements();
+function featureCount(feature: string): number {
+  let total = 0;
+  for (const features of Object.values(snap.products)) {
+    total += features[feature]?.count ?? 0;
+  }
+  return total;
+}
+const aiOk = featureCount("ai_assistant") >= 1;
+const pgpOk = featureCount("pgp") >= 1;
 ```
 
-`@scomm-office/byoai` receives an `AddonGate` (`hasAddon` / `hasOffering`). It must not parse JWTs.
+Hosts should iterate `Object.values(snap.products)` rather than hard-code a tenant key. `@scomm-office/byoai` receives an `AddonGate` (`{ products }`). It must not parse JWTs.
 
-OpenPGP encrypt, sign, and key publish call `hasAddon("pgp")` (same SecMail SKU). Decrypt / verify stay ungated.
+OpenPGP encrypt, sign, and key publish require `pgp` `count >= 1` (Office-only SKU). Decrypt / verify stay ungated.
 
 ## Decision
 
@@ -67,7 +75,7 @@ OpenPGP encrypt, sign, and key publish call `hasAddon("pgp")` (same SecMail SKU)
 |------|--------|
 | Pin `@2key/browser-sdk` | Done |
 | Account/Billing UI on DeviceID + paste + restore | Done |
-| BYOAI `hasAddon("ai_assistant")` / `hasOffering` | Done |
-| OpenPGP encrypt/sign/key publish `hasAddon("pgp")` | Done |
+| BYOAI `normalizedEntitlements().products.*.ai_assistant.count` | Done |
+| OpenPGP encrypt/sign/key publish `pgp` count | Done |
 | Delete `@scomm-office/billing` | Done |
 | CI forbid `better-auth` and local JWT parsers | Done |

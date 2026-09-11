@@ -14,6 +14,7 @@ describe("SCOMM_OFFICE_CATALOG", () => {
     expect(SCOMM_OFFICE_CATALOG.addonCodes).not.toContain("linux");
     expect(SCOMM_OFFICE_CATALOG.offeringCodes).not.toContain("linux");
     expect(SCOMM_OFFICE_CATALOG.addonCodes).not.toContain("accent_color");
-    expect(SCOMM_OFFICE_CATALOG.offeringCodes).not.toContain("scomm_connector_5");
+    expect(SCOMM_OFFICE_CATALOG.addonCodes).not.toContain("scomm_connector");
+    expect(SCOMM_OFFICE_CATALOG.offeringCodes).not.toContain("scomm_connector");
   });
 });

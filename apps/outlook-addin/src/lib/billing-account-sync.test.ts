@@ -8,14 +8,16 @@ import {
   validateDeviceFriendlyName,
   resolveBillingPortalOpenUrl,
 } from "./billing-account-sync";
-import { SCOMM_OFFICE_CATALOG } from "./billing-catalog";
+import { SCOMM_OFFICE_CATALOG, licenseFeatureCount } from "./billing-catalog";
 
 describe("activeAddonCodes", () => {
   it("lists catalog add-ons that the license grants, without prices", () => {
     expect(
       activeAddonCodes({
-        hasAddon: (code) => code === "ai_assistant",
-        hasOffering: (code) => code === "pgp",
+        Scomm: {
+          ai_assistant: { count: 1 },
+          pgp: { count: 1 },
+        },
       }),
     ).toEqual(["pgp", "ai_assistant"]);
   });
@@ -27,8 +29,10 @@ describe("activeAddonCodes", () => {
   it("lists pqc when entitled and never linux", () => {
     expect(
       activeAddonCodes({
-        hasAddon: (code) => code === "pqc" || code === "linux",
-        hasOffering: () => false,
+        Scomm: {
+          pqc: { count: 1 },
+          linux: { count: 1 },
+        },
       }),
     ).toEqual(["pqc"]);
   });
@@ -76,8 +80,9 @@ describe("office SDK catalog seats", () => {
       1_700_000_000,
       SCOMM_OFFICE_CATALOG,
     );
-    expect(e.hasAddon("linux")).toBe(false);
-    expect(e.hasAddon("ai_assistant")).toBe(true);
+    const snap = e.normalizedJson();
+    expect(snap.products.Scomm?.linux).toBeUndefined();
+    expect(licenseFeatureCount(snap.products, "ai_assistant")).toBeGreaterThanOrEqual(1);
     expect(e.subscriptions.map((s) => s.addonCode)).toEqual(["ai_assistant"]);
   });
 });
