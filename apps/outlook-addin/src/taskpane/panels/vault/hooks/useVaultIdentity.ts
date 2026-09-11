@@ -25,13 +25,29 @@ export type IdentityStatus =
   | "recover-otp"
   | "verified";
 
+/** Lightweight, read-only "does any identity exist for this email" probe — same signal `requestOtp` uses for its silent-MSK guard. */
+async function probeIdentityExists(
+  session: OfficePubkeySession,
+  userEmail: string,
+): Promise<boolean> {
+  try {
+    const found = await session.client.getBestKey({
+      email: normalizeEmail(userEmail),
+      purpose: "encryption",
+    });
+    return Boolean(found);
+  } catch {
+    return false;
+  }
+}
+
 function enrollOtpStatus(email: string, result: unknown): string {
   const otp =
     result && typeof result === "object" && "otp" in result && typeof result.otp === "string"
       ? result.otp
       : "";
   if (otp) return `Verification code for ${email}: ${otp}`;
-  return `Verification code sent to ${email}. If SMTP is off, set DEV_RETURN_OTP=1 on the local pubkey server and retry.`;
+  return `Verification code sent to ${email}. If SMTP is off`;
 }
 
 /**
@@ -54,6 +70,12 @@ export function useVaultIdentity(
   const [pgpEntitled, setPgpEntitled] = useState(false);
   const [directoryArmed, setDirectoryArmed] = useState(false);
   const [pairingCode, setPairingCode] = useState("");
+  // null = not checked yet. Whether *any* identity already exists on the
+  // server for this email, checked as soon as we know there's no local
+  // vault — drives whether SetupIntroScreen offers "I already have an
+  // identity on another device" at all (a genuinely first-time user has
+  // nothing to pair with or recover, so that option shouldn't be shown).
+  const [identityExists, setIdentityExists] = useState<boolean | null>(null);
   // null = not checked yet. Decides which of the two mutually-exclusive
   // "no local vault, but this identity exists elsewhere" screens to show:
   // recovery-code entry (true) vs. "recover from another device" (false).
@@ -91,6 +113,13 @@ export function useVaultIdentity(
       if (state.restored) {
         setStatus("verified");
         setDirectoryArmed(true);
+      } else if (userEmail) {
+        // No local vault — find out up front whether this is a genuinely
+        // first-time user (nothing to offer "I already have an identity
+        // elsewhere" for) before the setup screens render.
+        void probeIdentityExists(session, userEmail).then((exists) => {
+          if (!cancelled) setIdentityExists(exists);
+        });
       }
       setHasPgp(state.hasPgp);
     });
@@ -100,23 +129,15 @@ export function useVaultIdentity(
     return () => {
       cancelled = true;
     };
-  }, [session, billingOrigin]);
+  }, [session, billingOrigin, userEmail]);
 
   const requestOtp = useCallback(async () => {
     if (!userEmail || !session) return;
     setBusy(true);
     setStatusMessage(null);
     try {
-      let principalExists = false;
-      try {
-        const found = await session.client.getBestKey({
-          email: normalizeEmail(userEmail),
-          purpose: "encryption",
-        });
-        principalExists = Boolean(found);
-      } catch {
-        principalExists = false;
-      }
+      const principalExists =
+        identityExists ?? (await probeIdentityExists(session, userEmail));
       session.client.assertNoSilentMsk({
         principalExists,
         localMsk: Boolean(session.msk),
@@ -157,7 +178,7 @@ export function useVaultIdentity(
     } finally {
       setBusy(false);
     }
-  }, [userEmail, session]);
+  }, [userEmail, session, identityExists]);
 
   const registerOnDirectory = useCallback(async () => {
     if (!userEmail || !session) return;
@@ -427,6 +448,7 @@ export function useVaultIdentity(
     directoryArmed,
     publishFailed,
     pairingCode,
+    identityExists,
     hasRecoveryEnvelope,
     recoveryCodeInput,
     setRecoveryCode,

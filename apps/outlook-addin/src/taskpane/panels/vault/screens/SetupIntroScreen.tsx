@@ -5,11 +5,14 @@ export function SetupIntroScreen({
   busy,
   onContinue,
   onHaveElsewhere,
+  identityExists,
 }: {
   userEmail: string | undefined;
   busy: boolean;
   onContinue: () => void;
   onHaveElsewhere: () => void;
+  /** null while still checking — hide the "I already have an identity" option until we positively know it applies. */
+  identityExists: boolean | null;
 }) {
   const styles = usePaneStyles();
   return (
@@ -27,9 +30,11 @@ export function SetupIntroScreen({
         <Button appearance="primary" size="small" disabled={busy} onClick={onContinue}>
           Set up your secure vault
         </Button>
-        <Button appearance="secondary" size="small" disabled={busy} onClick={onHaveElsewhere}>
-          I already have an identity on another device
-        </Button>
+        {identityExists ? (
+          <Button appearance="secondary" size="small" disabled={busy} onClick={onHaveElsewhere}>
+            I already have an identity on another device
+          </Button>
+        ) : null}
       </div>
     </div>
   );

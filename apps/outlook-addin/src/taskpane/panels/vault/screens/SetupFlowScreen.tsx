@@ -82,6 +82,7 @@ export function SetupFlowScreen({
           busy={identity.busy}
           onContinue={() => setStep("keytype")}
           onHaveElsewhere={identity.goUnauthorized}
+          identityExists={identity.identityExists}
         />
         {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
       </div>
