@@ -102,7 +102,7 @@ export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [profile?.id, cloudClient]);
+  }, [profile, cloudClient]);
 
   const scrollToEnd = () => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

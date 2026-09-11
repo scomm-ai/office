@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
+import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -55,6 +56,11 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  {
+    files: ["apps/outlook-addin/**/*.{ts,tsx}", "apps/dev-console/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: reactHooks.configs["recommended-latest"].rules,
   },
   eslintConfigPrettier,
 );

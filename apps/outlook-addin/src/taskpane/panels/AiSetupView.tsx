@@ -133,8 +133,7 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
     return () => {
       cancelled = true;
     };
-    // Probe once on mount only — cloudClient is stable across renders (useMemo).
-  }, []);
+  }, [cloudClient]);
 
   const persist = (next: CloudAiProfile[]) => {
     setProfiles(next);

@@ -26,7 +26,6 @@ export function useVaultRoute(initial: VaultRoute) {
   const nav = useCallback((next: VaultRoute, opts?: { root?: boolean }) => {
     setStack((prev) => (opts?.root ? [] : [...prev, route]));
     setRoute(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally captures `route` at call time
   }, [route]);
 
   const back = useCallback(() => {
