@@ -34,7 +34,7 @@ Mailbox/host identity (Office.js / future Graph Nested App Auth) is **separate**
 
 ### 4. Entitlements gate premium capability
 
-License JWTs are verified **client-side** by `@2key/browser-sdk` (ES256 public PEM). Checkout, invoices, and seat admin stay on the billing portal. Premium AI, connectors, and future crypto add-ons require active entitlement claims (`hasAddon` / `hasOffering` / `hasProduct`).
+License JWTs are verified **client-side** by `@2key/browser-sdk` (ES256 public PEM). Checkout, invoices, and seat admin stay on the billing portal. Premium AI and paid crypto require `normalizedEntitlements()` feature `count >= 1` (catalog ∩ JWT).
 
 ### 5. Trust boundaries
 

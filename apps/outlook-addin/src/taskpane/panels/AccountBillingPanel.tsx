@@ -5,7 +5,7 @@ import {
   type BillingSubscription,
   type LicensePayload,
 } from "@2key/browser-sdk/billing";
-import { BILLING_ADDON_AI_ASSISTANT, BILLING_ADDON_PGP } from "../../lib/billing-catalog";
+import { BILLING_ADDON_AI_ASSISTANT, BILLING_ADDON_PGP, licenseGrantsFeature } from "../../lib/billing-catalog";
 import {
   deviceBoundLabel,
   encodePublicJwkForPortal,
@@ -85,10 +85,10 @@ export function AccountBillingPanel() {
       setPayload(restored);
       setDeviceBound(Boolean(restored && licenseListsSki(restored, device.ski)));
       try {
-        const e = billing.entitlements();
-        setHostSeats(e.subscriptions);
-        setAiOk(e.hasAddon(BILLING_ADDON_AI_ASSISTANT) || e.hasOffering(BILLING_ADDON_AI_ASSISTANT));
-        setPgpOk(e.hasAddon(BILLING_ADDON_PGP) || e.hasOffering(BILLING_ADDON_PGP));
+        const snap = billing.normalizedEntitlements();
+        setHostSeats(billing.hostSubscriptions());
+        setAiOk(licenseGrantsFeature(snap.products, BILLING_ADDON_AI_ASSISTANT));
+        setPgpOk(licenseGrantsFeature(snap.products, BILLING_ADDON_PGP));
       } catch {
         setHostSeats([]);
         setAiOk(false);
