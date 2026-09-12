@@ -116,6 +116,11 @@ export function SettingsStatusTab({
                 </Button>
               </div>
             </div>
+          ) : identity.hasRecoveryEnvelope ? (
+            <div className={secStyles.statusRow} style={{ borderBottom: "none" }}>
+              <span className={secStyles.statusLabel}>Recovery code</span>
+              <VaultBadge tone="ok">Already set up</VaultBadge>
+            </div>
           ) : (
             <div className={styles.actions}>
               <Button

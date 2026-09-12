@@ -105,9 +105,16 @@ export function useVaultIdentity(
     if (state.restored) {
       setStatus("verified");
       setDirectoryArmed(true);
+      if (userEmail) {
+        try {
+          setHasRecoveryEnvelope(await checkRecoveryEnvelope(session, userEmail));
+        } catch {
+          // leave whatever was known before — a failed check shouldn't hide an existing backup
+        }
+      }
     }
     setHasPgp(state.hasPgp);
-  }, [session]);
+  }, [session, userEmail]);
 
   useEffect(() => {
     if (!session) return;
@@ -137,6 +144,14 @@ export function useVaultIdentity(
       if (state.restored) {
         setStatus("verified");
         setDirectoryArmed(true);
+        if (userEmail) {
+          try {
+            const recoveryExists = await checkRecoveryEnvelope(session, userEmail);
+            if (!cancelled) setHasRecoveryEnvelope(recoveryExists);
+          } catch {
+            // leave whatever was known before — a failed check shouldn't hide an existing backup
+          }
+        }
       } else if (!resumed && userEmail) {
         // No local vault — find out up front whether this is a genuinely
         // first-time user. If an identity already exists remotely, this is
@@ -477,6 +492,7 @@ export function useVaultIdentity(
     try {
       const code = await saveRecoveryEnvelope(session, userEmail);
       setRecoveryCodeResult(code);
+      setHasRecoveryEnvelope(true);
       setStatusMessage("Recovery code created. Save it now — it won't be shown again.");
     } catch (err) {
       setStatusMessage(`Could not set up a recovery code: ${err instanceof Error ? err.message : String(err)}`);
