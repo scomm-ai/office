@@ -4,12 +4,15 @@ import { loadPgpEntitlement } from "../../../../lib/billing-pgp";
 import {
   awaitDevicePairing,
   checkRecoveryEnvelope,
+  clearPendingOtpChallenge,
   ensureDeviceKey,
+  loadPendingOtpChallenge,
   publishPgpContentKey,
   persistMsk,
   requestRecoveryCodeOtp as requestRecoveryCodeOtpApi,
   restoreFromRecoveryCode,
   restoreOfficeVault,
+  savePendingOtpChallenge,
   saveRecoveryEnvelope,
   startDevicePairing,
   type OfficePubkeySession,
@@ -109,12 +112,31 @@ export function useVaultIdentity(
     if (!session) return;
     setEngineReady(session.pgpEngine.available === true);
     let cancelled = false;
-    void restoreOfficeVault(session).then((state) => {
+    void (async () => {
+      // Resume an OTP challenge that survived a taskpane teardown (e.g. new
+      // Outlook closing the add-in when the user switches messages to read
+      // the code) before anything else — a mid-flight enroll/recover has no
+      // local vault yet, so the identity probe below would otherwise
+      // misclassify it as a first-time or existing-elsewhere identity.
+      const pending = await loadPendingOtpChallenge(session);
+      if (cancelled) return;
+      let resumed = false;
+      if (pending) {
+        if (userEmail && normalizeEmail(userEmail) !== normalizeEmail(pending.email)) {
+          await clearPendingOtpChallenge();
+        } else {
+          setStatus(pending.flow === "recover" ? "recover-otp" : "otp-sent");
+          setStatusMessage(pending.statusMessage);
+          resumed = true;
+        }
+      }
+
+      const state = await restoreOfficeVault(session);
       if (cancelled) return;
       if (state.restored) {
         setStatus("verified");
         setDirectoryArmed(true);
-      } else if (userEmail) {
+      } else if (!resumed && userEmail) {
         // No local vault — find out up front whether this is a genuinely
         // first-time user. If an identity already exists remotely, this is
         // NOT a "create a new vault" situation — skip straight past
@@ -141,7 +163,7 @@ export function useVaultIdentity(
         });
       }
       setHasPgp(state.hasPgp);
-    });
+    })();
     void loadPgpEntitlement(billingOrigin).then((ok) => {
       if (!cancelled) setPgpEntitled(ok);
     });
@@ -170,8 +192,10 @@ export function useVaultIdentity(
         email: normalizeEmail(userEmail),
         mskPublicKey: msk.publicKey,
       });
+      const message = enrollOtpStatus(userEmail, result);
       setStatus("otp-sent");
-      setStatusMessage(enrollOtpStatus(userEmail, result));
+      setStatusMessage(message);
+      await savePendingOtpChallenge(session, "enroll", userEmail, message);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("already") || message.includes("replace") || message.includes("transfer")) {
@@ -217,8 +241,10 @@ export function useVaultIdentity(
         email: normalizeEmail(userEmail),
         mskPublicKey: publicKey,
       });
+      const message = enrollOtpStatus(userEmail, result);
       setStatus("otp-sent");
-      setStatusMessage(enrollOtpStatus(userEmail, result));
+      setStatusMessage(message);
+      await savePendingOtpChallenge(session, "enroll", userEmail, message);
     } catch (err) {
       const httpStatus = err && typeof err === "object" && "status" in err ? Number(err.status) : 0;
       const message = err instanceof Error ? err.message : String(err);
@@ -248,6 +274,7 @@ export function useVaultIdentity(
         device: { identityKey: deviceKey, publicKey: deviceKey.publicKey, name: "Outlook" },
       });
       await persistMsk(session, userEmail);
+      await clearPendingOtpChallenge();
       setStatus("verified");
       setDirectoryArmed(true);
       setStatusMessage("SComm identity created on this device. Synchronize the Vault before creating a new encryption key.");
@@ -333,8 +360,11 @@ export function useVaultIdentity(
         email: normalizeEmail(userEmail),
         mskPublicKey: msk.publicKey,
       });
+      const message =
+        "Recovery issues a new identity key and retires the old one. Enter the email verification code to continue.";
       setStatus("recover-otp");
-      setStatusMessage("Recovery issues a new identity key and retires the old one. Enter the email verification code to continue.");
+      setStatusMessage(message);
+      await savePendingOtpChallenge(session, "recover", userEmail, message);
     } catch (err) {
       setStatusMessage(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -356,6 +386,7 @@ export function useVaultIdentity(
         device: { identityKey: deviceKey, publicKey: deviceKey.publicKey, name: "Outlook" },
       });
       await persistMsk(session, userEmail);
+      await clearPendingOtpChallenge();
       setStatus("verified");
       setDirectoryArmed(true);
       setHasPgp(false);

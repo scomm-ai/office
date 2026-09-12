@@ -17,6 +17,7 @@ import {
   IndexedDbVaultStore,
 } from "@scomm-office/storage";
 import { assertPgpAddon } from "./billing-pgp";
+import { officeVaultOtpStore } from "./office-session-store";
 import { DEFAULT_SETTINGS, resolvePubkeyWriteBaseUrl } from "./settings";
 
 type PubkeyBundle = ReturnType<typeof createPubkeyClient>;
@@ -213,6 +214,101 @@ export async function persistMsk(session: OfficePubkeySession, email: string): P
   await session.vault.persist(secret);
   session.msk = msk;
   session.pendingMsk = null;
+}
+
+const PENDING_OTP_KEY = "vault-pending-otp";
+// New Outlook tears the taskpane down and recreates it when the user
+// switches messages (e.g. to go read the OTP email); classic Outlook keeps
+// it alive. A short TTL bounds how long a stale/abandoned challenge can be
+// resumed after such a teardown, without requiring the user to notice and
+// cancel it themselves.
+const PENDING_OTP_TTL_MS = 10 * 60 * 1000;
+
+export type PendingOtpFlow = "enroll" | "recover";
+
+interface PersistedPendingOtp {
+  flow: PendingOtpFlow;
+  email: string;
+  statusMessage: string | null;
+  createdAt: number;
+  msk: {
+    algorithm: string;
+    encoding: string;
+    bytesBase64Url: string;
+    publicKeyBase64Url?: string;
+  };
+}
+
+/** Called right after `requestOtp`/`beginRecovery`/`registerOnDirectory` move status to otp-sent/recover-otp. */
+export async function savePendingOtpChallenge(
+  session: OfficePubkeySession,
+  flow: PendingOtpFlow,
+  email: string,
+  statusMessage: string | null,
+): Promise<void> {
+  const msk = session.pendingMsk ?? session.msk;
+  if (!msk) return;
+  const portable = await session.crypto.exportPrivateKey(msk);
+  const record: PersistedPendingOtp = {
+    flow,
+    email,
+    statusMessage,
+    createdAt: Date.now(),
+    msk: {
+      algorithm: portable.algorithm,
+      encoding: portable.encoding,
+      bytesBase64Url: encodeBase64Url(portable.bytes),
+      publicKeyBase64Url: portable.publicKey ? encodeBase64Url(portable.publicKey) : undefined,
+    },
+  };
+  await officeVaultOtpStore().set(PENDING_OTP_KEY, JSON.stringify(record));
+}
+
+/**
+ * Restores a not-yet-expired OTP challenge on mount, including the pending
+ * MSK keypair, so `useVaultIdentity`'s init effect can resume directly on
+ * the OTP screen instead of re-probing identity existence from scratch.
+ */
+export async function loadPendingOtpChallenge(
+  session: OfficePubkeySession,
+): Promise<{ flow: PendingOtpFlow; email: string; statusMessage: string | null } | null> {
+  const raw = await officeVaultOtpStore().get(PENDING_OTP_KEY);
+  if (!raw) return null;
+  let record: PersistedPendingOtp;
+  try {
+    record = JSON.parse(raw) as PersistedPendingOtp;
+  } catch {
+    await clearPendingOtpChallenge();
+    return null;
+  }
+  if (Date.now() - record.createdAt > PENDING_OTP_TTL_MS) {
+    await clearPendingOtpChallenge();
+    return null;
+  }
+  try {
+    const msk = await session.crypto.importPrivateKey(
+      {
+        algorithm: record.msk.algorithm,
+        encoding: record.msk.encoding,
+        bytes: decodeBase64Url(record.msk.bytesBase64Url),
+        publicKey: record.msk.publicKeyBase64Url
+          ? decodeBase64Url(record.msk.publicKeyBase64Url)
+          : undefined,
+        purpose: PURPOSES.masterSigning,
+      },
+      { extractable: true },
+    );
+    session.pendingMsk = msk;
+    session.msk = msk;
+  } catch {
+    await clearPendingOtpChallenge();
+    return null;
+  }
+  return { flow: record.flow, email: record.email, statusMessage: record.statusMessage };
+}
+
+export async function clearPendingOtpChallenge(): Promise<void> {
+  await officeVaultOtpStore().delete(PENDING_OTP_KEY);
 }
 
 export type PgpKeyPurpose = "encryption" | "signing";

@@ -111,3 +111,21 @@ export function officeBillingSessionStore(): SessionStore {
 export function resetOfficeBillingSessionStore(): void {
   sharedOfficeSessionStore = null;
 }
+
+let sharedOfficeVaultOtpStore: SessionStore | null = null;
+
+/**
+ * Shared store for the in-progress OTP challenge (enroll/recover), so the
+ * setup screen can resume after the taskpane is torn down and recreated —
+ * e.g. new Outlook closes the add-in when the user switches messages to go
+ * read the OTP email, unlike classic Outlook which keeps it alive.
+ */
+export function officeVaultOtpStore(): SessionStore {
+  sharedOfficeVaultOtpStore ??= createOfficeSessionStore();
+  return sharedOfficeVaultOtpStore;
+}
+
+/** Test helper: drop the process-wide store. */
+export function resetOfficeVaultOtpStore(): void {
+  sharedOfficeVaultOtpStore = null;
+}
