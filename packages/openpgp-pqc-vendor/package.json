@@ -1,0 +1,32 @@
+{
+  "name": "@scomm-office/openpgp-pqc-vendor",
+  "description": "Vendored, prebuilt copy of openpgpjs commit d35228cc0253c0d093989ff10232a750fd0b6489 (PQC/RFC 9980 support, no released npm version supports this yet). Prebuilt because installing this commit as a live git dependency reruns its `prepare` build from source, which is not reproducible (its own devDependencies resolve fresh from the registry with no lockfile, and at this exact commit src/index.js imports a src/enums.ts that does not exist upstream). This package ships only the already-built dist/ output so no build step ever runs again. To refresh: check out the desired openpgpjs commit, run `npm install` there once until it succeeds, then copy dist/ and lightweight/ from its node_modules/openpgp here.",
+  "version": "6.3.1-pqc.d35228c",
+  "license": "LGPL-3.0+",
+  "homepage": "https://openpgpjs.org/",
+  "private": true,
+  "main": "dist/node/openpgp.min.cjs",
+  "module": "dist/node/openpgp.min.mjs",
+  "browser": {
+    "./dist/node/openpgp.min.cjs": "./dist/openpgp.min.js",
+    "./dist/node/openpgp.min.mjs": "./dist/openpgp.min.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "browser": "./dist/openpgp.min.mjs",
+      "import": "./dist/node/openpgp.mjs",
+      "require": "./dist/node/openpgp.min.cjs"
+    },
+    "./lightweight": {
+      "types": "./dist/types/index.d.ts",
+      "browser": "./dist/lightweight/openpgp.min.mjs"
+    }
+  },
+  "types": "dist/types/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist/",
+    "lightweight/"
+  ]
+}

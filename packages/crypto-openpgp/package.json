@@ -21,7 +21,7 @@
     "@scomm-office/crypto": "workspace:*",
     "@scomm-office/message-core": "workspace:*",
     "@scomm-office/mime": "workspace:*",
-    "openpgp": "github:openpgpjs/openpgpjs#d35228cc0253c0d093989ff10232a750fd0b6489"
+    "openpgp": "file:../openpgp-pqc-vendor"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

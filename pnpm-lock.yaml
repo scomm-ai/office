@@ -453,8 +453,8 @@ importers:
         specifier: workspace:*
         version: link:../mime
       openpgp:
-        specifier: github:openpgpjs/openpgpjs#d35228cc0253c0d093989ff10232a750fd0b6489
-        version: https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489
+        specifier: file:../openpgp-pqc-vendor
+        version: link:../openpgp-pqc-vendor
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -633,6 +633,8 @@ importers:
         specifier: ^3.0.2
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
 
+  packages/openpgp-pqc-vendor: {}
+
   packages/policy:
     dependencies:
       '@scomm-office/capability-negotiation':
@@ -708,8 +710,8 @@ importers:
         specifier: ^4.12.0
         version: 4.12.0
       openpgp:
-        specifier: github:openpgpjs/openpgpjs#d35228cc0253c0d093989ff10232a750fd0b6489
-        version: https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489
+        specifier: file:../openpgp-pqc-vendor
+        version: link:../openpgp-pqc-vendor
 
   packages/scomm-pubkey-protocol: {}
 
@@ -2668,16 +2670,6 @@ packages:
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
     engines: {node: '>=14.0.0'}
-
-  openpgp@https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489:
-    resolution: {tarball: https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489}
-    version: 6.3.1
-    engines: {node: '>= 22.0.0', typescript: '>= 5.0.0'}
-    peerDependencies:
-      '@openpgp/web-stream-tools': ~0.3.0
-    peerDependenciesMeta:
-      '@openpgp/web-stream-tools':
-        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -5649,8 +5641,6 @@ snapshots:
   obliterator@2.0.5: {}
 
   on-exit-leak-free@2.1.2: {}
-
-  openpgp@https://codeload.github.com/openpgpjs/openpgpjs/tar.gz/d35228cc0253c0d093989ff10232a750fd0b6489: {}
 
   optionator@0.9.4:
     dependencies:
