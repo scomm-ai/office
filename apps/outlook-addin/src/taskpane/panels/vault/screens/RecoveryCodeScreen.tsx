@@ -1,4 +1,5 @@
 import { Button, Field, Input, Note, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
+import { isOtpCodeComplete } from "../../../../lib/otp-code";
 import { VaultHeading } from "../VaultHeading";
 import { useVaultStyles } from "../styles";
 
@@ -33,7 +34,7 @@ export function RecoveryCodeScreen({
 }) {
   const styles = usePaneStyles();
   const secStyles = useVaultStyles();
-  const ready = otp.replace(/[-\s]/g, "").length >= 11 && recoveryCode.trim().length > 0;
+  const ready = isOtpCodeComplete(otp) && recoveryCode.trim().length > 0;
 
   return (
     <div className={secStyles.screen}>

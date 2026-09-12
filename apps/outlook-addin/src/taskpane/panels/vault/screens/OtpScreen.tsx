@@ -1,4 +1,5 @@
 import { Button, Field, Input, Note, usePaneStyles } from "../../../ui/layout";
+import { isOtpCodeComplete } from "../../../../lib/otp-code";
 import { VaultHeading } from "../VaultHeading";
 import { useVaultStyles } from "../styles";
 
@@ -19,7 +20,7 @@ export function OtpScreen({
 }) {
   const styles = usePaneStyles();
   const secStyles = useVaultStyles();
-  const ready = value.replace(/[-\s]/g, "").length >= 11;
+  const ready = isOtpCodeComplete(value);
   return (
     <div className={secStyles.screen}>
       <VaultHeading

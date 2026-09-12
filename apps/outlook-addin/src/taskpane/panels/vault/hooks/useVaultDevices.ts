@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { errorMessage } from "../../../../lib/error-message";
 import {
   approveDevicePairing,
   listVaultDevices,
@@ -22,7 +23,7 @@ export function useVaultDevices(session: OfficePubkeySession | null, userEmail: 
     try {
       setDevices(await listVaultDevices(session, userEmail));
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -37,7 +38,7 @@ export function useVaultDevices(session: OfficePubkeySession | null, userEmail: 
         await revokeVaultDevice(session, userEmail, deviceId);
         await refresh();
       } catch (err) {
-        setNote(err instanceof Error ? err.message : String(err));
+        setNote(errorMessage(err));
         setBusy(false);
       }
     },
@@ -54,7 +55,7 @@ export function useVaultDevices(session: OfficePubkeySession | null, userEmail: 
       setApproveCode("");
       await refresh();
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setApproving(false);
     }

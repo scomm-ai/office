@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { errorMessage } from "../../../../lib/error-message";
 import {
   exportKeyPackageBackup,
   fetchVaultInventory,
@@ -51,7 +52,7 @@ export function useVaultKeys(session: OfficePubkeySession | null, userEmail: str
               : "This device has every published key.",
       );
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -66,7 +67,7 @@ export function useVaultKeys(session: OfficePubkeySession | null, userEmail: str
       refreshTiles();
       setNote("Vault synchronized.");
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -84,7 +85,7 @@ export function useVaultKeys(session: OfficePubkeySession | null, userEmail: str
       await navigator.clipboard?.writeText(json).catch(() => undefined);
       setNote("Key package copied to clipboard.");
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -99,7 +100,7 @@ export function useVaultKeys(session: OfficePubkeySession | null, userEmail: str
       refreshTiles();
       setNote("Key package imported into this Vault.");
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }

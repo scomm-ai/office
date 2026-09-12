@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { attachmentEncryptionNotice } from "@scomm-office/office";
 import { extractPgpMessage, extractPgpSignedMessage } from "@scomm-office/pubkeys";
 import { X_SCOMM_ENCRYPTION } from "@scomm-office/protocol";
+import { errorMessage } from "../../../../lib/error-message";
 import { useHostContext } from "../../../../lib/host-context";
 import { decryptCurrentBody, verifyCurrentBody } from "../../../../lib/mail-crypto-actions";
 import { PGP_ADDON_REQUIRED_MESSAGE } from "../../../../lib/billing-pgp";
@@ -56,7 +57,7 @@ export function ReadScreen({
       setDecryptedBody(result.plaintext);
       setMailStatus(result.note);
     } catch (err) {
-      setMailStatus(`Decrypt failed: ${err instanceof Error ? err.message : String(err)}`);
+      setMailStatus(`Decrypt failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -69,7 +70,7 @@ export function ReadScreen({
     try {
       setMailStatus(await verifyCurrentBody({ session, mailHost }));
     } catch (err) {
-      setMailStatus(`Verify failed: ${err instanceof Error ? err.message : String(err)}`);
+      setMailStatus(`Verify failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { normalizeEmail } from "@scomm-office/pubkeys";
 import { loadPgpEntitlement } from "../../../../lib/billing-pgp";
+import { errorMessage } from "../../../../lib/error-message";
+import { normalizeOtpCode } from "../../../../lib/otp-code";
 import {
   awaitDevicePairing,
   checkRecoveryEnvelope,
@@ -95,7 +97,7 @@ export function useVaultIdentity(
   const [publishFailed, setPublishFailed] = useState(false);
 
   const setOtpInput = useCallback(
-    (value: string) => setOtpInputState(value.replace(/[-\s]/g, "")),
+    (value: string) => setOtpInputState(normalizeOtpCode(value)),
     [],
   );
 
@@ -213,7 +215,7 @@ export function useVaultIdentity(
       setStatusMessage(message);
       await savePendingOtpChallenge(session, "enroll", userEmail, message);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if (message.includes("already") || message.includes("replace") || message.includes("transfer")) {
         // Case 1 vs Case 2: a recovery-code envelope on the server means this
         // identity's *existing* vault can be restored directly; without one,
@@ -263,7 +265,7 @@ export function useVaultIdentity(
       await savePendingOtpChallenge(session, "enroll", userEmail, message);
     } catch (err) {
       const httpStatus = err && typeof err === "object" && "status" in err ? Number(err.status) : 0;
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       if (httpStatus === 409 && /already has an armed msk/i.test(message)) {
         setDirectoryArmed(true);
         setStatusMessage("This identity is already registered on the directory — no action needed.");
@@ -295,7 +297,7 @@ export function useVaultIdentity(
       setDirectoryArmed(true);
       setStatusMessage("SComm identity created on this device. Synchronize the Vault before creating a new encryption key.");
     } catch (err) {
-      setStatusMessage(`OTP verify failed: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`OTP verify failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -318,7 +320,7 @@ export function useVaultIdentity(
         setPublishFailed(false);
         return true;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         const code =
           err && typeof err === "object" && "code" in err ? String((err as { code: unknown }).code) : "";
         if (code === "master_key_not_armed" || message.includes("No armed MSK")) {
@@ -355,10 +357,10 @@ export function useVaultIdentity(
           );
         })
         .catch((err: unknown) => {
-          setStatusMessage(`Pairing failed: ${err instanceof Error ? err.message : String(err)}`);
+          setStatusMessage(`Pairing failed: ${errorMessage(err)}`);
         });
     } catch (err) {
-      setStatusMessage(`Transfer failed: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Transfer failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -382,7 +384,7 @@ export function useVaultIdentity(
       setStatusMessage(message);
       await savePendingOtpChallenge(session, "recover", userEmail, message);
     } catch (err) {
-      setStatusMessage(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Recovery failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -408,7 +410,7 @@ export function useVaultIdentity(
       setHasPgp(false);
       setStatusMessage("Identity recovered with a new key. Mail encrypted under your previous identity is no longer readable — publish a new OpenPGP key to resume sending and receiving encrypted mail.");
     } catch (err) {
-      setStatusMessage(`Recovery verify failed: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Recovery verify failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -450,7 +452,7 @@ export function useVaultIdentity(
       await requestRecoveryCodeOtpApi(session, userEmail);
       setStatusMessage(`Verification code sent to ${userEmail}. Enter it below along with your recovery code.`);
     } catch (err) {
-      setStatusMessage(`Could not send verification code: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Could not send verification code: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -478,7 +480,7 @@ export function useVaultIdentity(
       setHasPgp(result.hasPgp);
       setStatusMessage("Vault restored from your recovery code.");
     } catch (err) {
-      setStatusMessage(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Recovery failed: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -495,7 +497,7 @@ export function useVaultIdentity(
       setHasRecoveryEnvelope(true);
       setStatusMessage("Recovery code created. Save it now — it won't be shown again.");
     } catch (err) {
-      setStatusMessage(`Could not set up a recovery code: ${err instanceof Error ? err.message : String(err)}`);
+      setStatusMessage(`Could not set up a recovery code: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }

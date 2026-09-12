@@ -102,26 +102,6 @@ export async function ensureDeviceKey(session: OfficePubkeySession): Promise<Key
   return key;
 }
 
-/**
- * Raw Ed25519 public key for the restored MSK (handle and/or vault envelope).
- */
-export function mskPublicKeyBytes(session: OfficePubkeySession): Uint8Array | null {
-  if (session.msk?.publicKey && session.msk.publicKey.length > 0) {
-    return session.msk.publicKey;
-  }
-  const entry = session.vault.getMsk() as {
-    envelope?: { public_key?: string };
-  } | null;
-  const encoded = entry?.envelope?.public_key;
-  if (!encoded) return null;
-  try {
-    const bytes = decodeBase64Url(encoded);
-    return bytes.length > 0 ? bytes : null;
-  } catch {
-    return null;
-  }
-}
-
 async function importMskFromVault(session: OfficePubkeySession): Promise<void> {
   const entry = session.vault.getMsk() as {
     private_material?: Uint8Array;
@@ -168,6 +148,26 @@ export async function ensureDeviceSecret(session: OfficePubkeySession): Promise<
   return secret;
 }
 
+/** Whether the local Vault holds a published OpenPGP encryption key — what "hasPgp" means across this module. */
+function vaultHasPgpEncryptionKey(session: OfficePubkeySession): boolean {
+  return session.vault
+    .listKeys()
+    .some(
+      (entry) =>
+        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
+    );
+}
+
+/** Arms `session.msk` from the local Vault if it isn't already, throwing if no armed MSK is available. */
+async function ensureArmedMsk(session: OfficePubkeySession): Promise<KeyHandle> {
+  if (session.msk) return session.msk;
+  const restored = await restoreOfficeVault(session);
+  if (!restored.restored || !session.msk) {
+    throw new Error("MSK is not armed");
+  }
+  return session.msk;
+}
+
 export async function restoreOfficeVault(session: OfficePubkeySession): Promise<{
   restored: boolean;
   hasPgp: boolean;
@@ -182,15 +182,9 @@ export async function restoreOfficeVault(session: OfficePubkeySession): Promise<
     return { restored: false, hasPgp: false };
   }
   await importMskFromVault(session);
-  const pgp = session.vault
-    .listKeys()
-    .some(
-      (entry) =>
-        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
-    );
   return {
     restored: Boolean(session.msk),
-    hasPgp: pgp,
+    hasPgp: vaultHasPgpEncryptionKey(session),
   };
 }
 
@@ -536,13 +530,8 @@ export async function importKeyPackageBackup(
 }
 
 export async function fetchVaultInventory(session: OfficePubkeySession, email: string) {
-  if (!session.msk) {
-    const restored = await restoreOfficeVault(session);
-    if (!restored.restored || !session.msk) {
-      throw new Error("MSK is not armed");
-    }
-  }
-  return session.client.getMe({ email, mskKey: session.msk });
+  const msk = await ensureArmedMsk(session);
+  return session.client.getMe({ email, mskKey: msk });
 }
 
 /**
@@ -573,63 +562,20 @@ export async function completeDeviceTransfer(
   await session.client.downloadCurrentVault({ email, vault: session.vault, merge: false });
   await session.vault.persist(secret);
   await importMskFromVault(session);
-  const hasPgp = session.vault
-    .listKeys()
-    .some(
-      (entry) =>
-        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
-    );
-  return { hasPgp, hasMsk: Boolean(session.msk) };
+  return { hasPgp: vaultHasPgpEncryptionKey(session), hasMsk: Boolean(session.msk) };
 }
 
 export async function syncHostedVault(session: OfficePubkeySession, email: string) {
-  if (!session.msk) {
-    const restored = await restoreOfficeVault(session);
-    if (!restored.restored || !session.msk) {
-      throw new Error("MSK is not armed");
-    }
-  }
+  const msk = await ensureArmedMsk(session);
   const secret = await ensureDeviceSecret(session);
   if (!session.vault.unlocked) {
     await session.vault.unlockVault(secret);
   }
   return session.client.syncVault({
     email,
-    mskKey: session.msk,
+    mskKey: msk,
     persistSecret: secret,
   });
-}
-
-/**
- * Pull-only vault refresh: downloads the current hosted generation (if it's
- * newer than what's already applied) and merges it into the local Vault,
- * without also re-uploading local state. Use this to pick up keys another
- * device published, without racing an upload against it.
- */
-export async function pullHostedVault(
-  session: OfficePubkeySession,
-  email: string,
-): Promise<{ hasPgp: boolean }> {
-  if (!session.msk) {
-    const restored = await restoreOfficeVault(session);
-    if (!restored.restored || !session.msk) {
-      throw new Error("MSK is not armed");
-    }
-  }
-  const secret = await ensureDeviceSecret(session);
-  if (!session.vault.unlocked) {
-    await session.vault.unlockVault(secret);
-  }
-  await session.client.downloadCurrentVault({ email, vault: session.vault, merge: true });
-  await session.vault.persist(secret);
-  await importMskFromVault(session);
-  const hasPgp = session.vault
-    .listKeys()
-    .some(
-      (entry) =>
-        entry.kind === "content" && entry.family === "pgp" && entry.purpose === "encryption",
-    );
-  return { hasPgp };
 }
 
 export interface VaultDevice {
@@ -643,15 +589,10 @@ export async function listVaultDevices(
   session: OfficePubkeySession,
   email: string,
 ): Promise<VaultDevice[]> {
-  if (!session.msk) {
-    const restored = await restoreOfficeVault(session);
-    if (!restored.restored || !session.msk) {
-      throw new Error("MSK is not armed");
-    }
-  }
+  const msk = await ensureArmedMsk(session);
   const listed = (await session.client.listDevices({
     email: normalizeEmail(email),
-    mskKey: session.msk,
+    mskKey: msk,
   })) as { devices?: Array<{ device_id: string; active: boolean; device_name?: string }> };
   return (listed.devices ?? []).map((device) => ({
     deviceId: device.device_id,
@@ -674,16 +615,11 @@ export async function revokeVaultDevice(
   email: string,
   deviceId: string,
 ): Promise<void> {
-  if (!session.msk) {
-    const restored = await restoreOfficeVault(session);
-    if (!restored.restored || !session.msk) {
-      throw new Error("MSK is not armed");
-    }
-  }
+  const msk = await ensureArmedMsk(session);
   await (session.client as unknown as RevokeDeviceClient).revokeDevice({
     email: normalizeEmail(email),
     deviceId,
-    mskKey: session.msk,
+    mskKey: msk,
   });
 }
 
@@ -820,18 +756,13 @@ export async function saveRecoveryEnvelope(
   session: OfficePubkeySession,
   email: string,
 ): Promise<string> {
-  if (!session.msk) {
-    const restored = await restoreOfficeVault(session);
-    if (!restored.restored || !session.msk) {
-      throw new Error("MSK is not armed");
-    }
-  }
+  const msk = await ensureArmedMsk(session);
   if (!session.vault.unlocked) {
     throw new Error("Unlock the Vault before setting up a recovery code");
   }
   return session.client.setRecoveryEnvelope({
     email: normalizeEmail(email),
-    mskKey: session.msk,
+    mskKey: msk,
     vrk: session.vault.ensureVrk(),
     aek: session.vault.aek ?? undefined,
   });

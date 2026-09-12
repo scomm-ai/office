@@ -9,6 +9,7 @@ import {
 } from "@scomm-office/pubkeys";
 import { attachmentEncryptionNotice, type MailHost } from "@scomm-office/office";
 import { X_SCOMM_ENCRYPTION } from "@scomm-office/protocol";
+import { errorMessage } from "./error-message";
 import { collectRecipientEmails } from "./semantic-policy";
 import {
   classifyDirectoryKey,
@@ -125,7 +126,7 @@ export async function lookupRecipientStatuses(
         isPqc: false,
         addInCanEncrypt: false,
         hint: "Directory lookup failed.",
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       });
     }
   }
@@ -209,7 +210,7 @@ export async function encryptComposeBody(options: {
     // `.cause`, set by PubkeyError in packages/scomm-pubkey/src/engines/pgp.js.
     const cause = (err as { cause?: unknown } | undefined)?.cause;
     const causeMessage = cause instanceof Error ? cause.message : undefined;
-    const base = err instanceof Error ? err.message : String(err);
+    const base = errorMessage(err);
     throw new Error(causeMessage ? `${base}: ${causeMessage}` : base);
   }
   await writeArmoredComposeBody(mailHost, new TextDecoder().decode(ciphertext), ENCRYPTED_PLACEHOLDER);

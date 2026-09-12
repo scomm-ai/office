@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { errorMessage } from "../../../../lib/error-message";
 import {
   exportVaultBackup,
   importVaultBackup,
@@ -25,7 +26,7 @@ export function useVaultBackup(
       setBackupJson(json);
       setNote("Vault exported. Store this JSON and passphrase offline.");
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -41,7 +42,7 @@ export function useVaultBackup(
       onRestored?.(state.hasPgp);
       setNote("Vault imported from passphrase backup.");
     } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
+      setNote(errorMessage(err));
     } finally {
       setBusy(false);
     }
