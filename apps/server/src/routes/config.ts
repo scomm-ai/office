@@ -12,7 +12,6 @@ function defaultUserConfiguration(config: ServerConfig): UserConfiguration {
     idrDefaultService: "ollama",
     semanticAnalysisEnabled: true,
     complianceEnabled: true,
-    experimentalEncryptionEnabled: false,
     diagnosticsEnabled: config.nodeEnv !== "production",
   };
 }

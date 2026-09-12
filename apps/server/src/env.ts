@@ -22,7 +22,6 @@ const ORG_FIELD_ENV: Record<ConfigurationFieldKey, string> = {
   idrDefaultService: "SCOMM_ORG_IDR_DEFAULT_SERVICE",
   semanticAnalysisEnabled: "SCOMM_ORG_SEMANTIC_ANALYSIS_ENABLED",
   complianceEnabled: "SCOMM_ORG_COMPLIANCE_ENABLED",
-  experimentalEncryptionEnabled: "SCOMM_ORG_EXPERIMENTAL_ENCRYPTION_ENABLED",
   diagnosticsEnabled: "SCOMM_ORG_DIAGNOSTICS_ENABLED",
   requireAiAddonEntitlement: "SCOMM_ORG_REQUIRE_AI_ADDON_ENTITLEMENT",
   requireCryptoAddonEntitlement: "SCOMM_ORG_REQUIRE_CRYPTO_ADDON_ENTITLEMENT",
@@ -57,7 +56,6 @@ function loadOrganizationConfig(): OrganizationConfiguration | undefined {
     if (
       field === "semanticAnalysisEnabled" ||
       field === "complianceEnabled" ||
-      field === "experimentalEncryptionEnabled" ||
       field === "diagnosticsEnabled" ||
       field === "requireAiAddonEntitlement" ||
       field === "requireCryptoAddonEntitlement"

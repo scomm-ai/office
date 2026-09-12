@@ -5,16 +5,12 @@ import { useHostContext } from "../../lib/host-context";
 
 type BoolSetting = Extract<
   keyof ResolvedConfiguration,
-  | "semanticAnalysisEnabled"
-  | "complianceEnabled"
-  | "experimentalEncryptionEnabled"
-  | "diagnosticsEnabled"
+  "semanticAnalysisEnabled" | "complianceEnabled" | "diagnosticsEnabled"
 >;
 
 const BOOL_SETTINGS: Array<{ key: BoolSetting; label: string }> = [
   { key: "semanticAnalysisEnabled", label: "Semantic analysis" },
   { key: "complianceEnabled", label: "Compliance checks" },
-  { key: "experimentalEncryptionEnabled", label: "Experimental ECDH envelope (Security pane)" },
   { key: "diagnosticsEnabled", label: "Diagnostics panel" },
 ];
 

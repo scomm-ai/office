@@ -119,7 +119,7 @@ async function onMessageDecryptHandler(event: Office.AddinCommands.Event) {
 }
 ```
 
-Registered in manifest only when `capabilities.onMessageDecrypt && experimentalEncryptionEnabled`.
+Registered in manifest only when `capabilities.onMessageDecrypt` is set (no E2EE protocol is finalized yet — see openspec/security/e2ee-protocol.md).
 
 ### Manifest (add-in-only XML MVP)
 

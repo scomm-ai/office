@@ -1,6 +1,4 @@
-import type { PublicKeyDirectory } from "@scomm-office/pubkeys";
-import { EcdhEnvelopeControls } from "../../../components/EcdhEnvelopeControls";
-import { Button, Divider, Note, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
+import { Button, Note, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
 import { PGP_ADDON_REQUIRED_MESSAGE } from "../../../../lib/billing-pgp";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
 import { VaultBadge } from "../VaultBadge";
@@ -10,16 +8,10 @@ export function SettingsStatusTab({
   identity,
   directoryLabel,
   pubkeyBase,
-  experimentalEncryptionEnabled,
-  directory,
-  userEmail,
 }: {
   identity: UseVaultIdentityResult;
   directoryLabel: string;
   pubkeyBase: string;
-  experimentalEncryptionEnabled: boolean;
-  directory: PublicKeyDirectory | null;
-  userEmail: string | undefined;
 }) {
   const styles = usePaneStyles();
   const secStyles = useVaultStyles();
@@ -133,13 +125,6 @@ export function SettingsStatusTab({
       ) : null}
 
       {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
-
-      {experimentalEncryptionEnabled ? (
-        <>
-          <Divider />
-          <EcdhEnvelopeControls directory={directory} userEmail={userEmail} pgpEntitled={identity.pgpEntitled} />
-        </>
-      ) : null}
     </div>
   );
 }
