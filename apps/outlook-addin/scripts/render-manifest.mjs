@@ -9,14 +9,18 @@ const distDir = path.join(appDir, "dist");
 const outputManifestPath = path.join(distDir, "manifest.xml");
 const committedHostedPath = path.join(appDir, "manifest", "manifest_correct.xml");
 const baseUrl = process.env.SCOMM_OFFICE_BASE_URL ?? "https://office.scomm.ai";
+const baseHost = new URL(baseUrl).host;
 
 const sourceManifest = await readFile(sourceManifestPath, "utf8");
 const renderedManifest = sourceManifest
   .replace(/^\uFEFF/, "")
-  .replaceAll("https://localhost:5173", baseUrl);
+  // Replace the bare host:port everywhere it appears (https://, api://, etc.)
+  // so scheme-prefixed references like WebApplicationInfo's `api://localhost:5173/...`
+  // Resource get rewritten too, not just plain https:// URLs.
+  .replaceAll("localhost:5173", baseHost);
 
-if (renderedManifest.includes("https://localhost:5173")) {
-  throw new Error("Hosted manifest still contains https://localhost:5173");
+if (renderedManifest.includes("localhost:5173")) {
+  throw new Error("Hosted manifest still contains localhost:5173");
 }
 if (!renderedManifest.includes(baseUrl)) {
   throw new Error(`Hosted manifest does not contain ${baseUrl}`);
