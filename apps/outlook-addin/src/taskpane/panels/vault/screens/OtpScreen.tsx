@@ -1,4 +1,5 @@
-import { Button, Field, Input, Note, PageTitle, usePaneStyles } from "../../../ui/layout";
+import { Button, Field, Input, Note, usePaneStyles } from "../../../ui/layout";
+import { VaultHeading } from "../VaultHeading";
 import { useVaultStyles } from "../styles";
 
 export function OtpScreen({
@@ -20,8 +21,8 @@ export function OtpScreen({
   const secStyles = useVaultStyles();
   const ready = value.replace(/[-\s]/g, "").length >= 11;
   return (
-    <div className={styles.stack}>
-      <PageTitle
+    <div className={secStyles.screen}>
+      <VaultHeading
         title="Enter the verification code"
         description={
           mode === "recover"
@@ -40,8 +41,8 @@ export function OtpScreen({
           className={secStyles.otpInput}
         />
       </Field>
-      <div className={styles.actions}>
-        <Button appearance="primary" size="small" disabled={busy || !ready} onClick={onSubmit}>
+      <div className={styles.stack}>
+        <Button appearance="primary" size="large" className={secStyles.cta} disabled={busy || !ready} onClick={onSubmit}>
           Verify code
         </Button>
       </div>

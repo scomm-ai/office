@@ -7,8 +7,9 @@ import { decryptCurrentBody, verifyCurrentBody } from "../../../../lib/mail-cryp
 import { PGP_ADDON_REQUIRED_MESSAGE } from "../../../../lib/billing-pgp";
 import type { TaskPaneCryptoAction } from "../../../../lib/taskpane-launch";
 import type { OfficePubkeySession } from "../../../../lib/pubkey-session";
-import { Button, Note, PageTitle, StatusBadge, tokens, usePaneStyles } from "../../../ui/layout";
+import { Button, Note, tokens, usePaneStyles } from "../../../ui/layout";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
+import { VaultHeading } from "../VaultHeading";
 import { useVaultStyles } from "../styles";
 
 /** Internet header names aren't guaranteed to preserve casing across hosts. */
@@ -133,13 +134,13 @@ export function ReadScreen({
 
   if (!enrolled) {
     return (
-      <div className={styles.stack}>
-        <PageTitle
+      <div className={secStyles.screen}>
+        <VaultHeading
           title="Set up your secure vault"
           description="You haven't set up encryption yet, so encrypted mail can't be opened here until you do."
         />
-        <div className={styles.actions}>
-          <Button appearance="primary" size="small" onClick={onGoSetup}>
+        <div className={styles.stack}>
+          <Button appearance="primary" size="large" className={secStyles.cta} onClick={onGoSetup}>
             Set up your secure vault
           </Button>
         </div>
@@ -148,13 +149,13 @@ export function ReadScreen({
   }
 
   return (
-    <div className={styles.stack}>
+    <div className={secStyles.screen}>
       <div className={secStyles.row}>
         <span
           className={secStyles.statusDot}
           style={{ backgroundColor: decryptedBody ? tokens.colorPaletteGreenForeground1 : tokens.colorNeutralForeground3 }}
         />
-        <PageTitle
+        <VaultHeading
           title={decryptedBody ? "Decrypted" : "Encrypted message"}
           description={
             decryptedBody
@@ -166,10 +167,10 @@ export function ReadScreen({
       {!identity.pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
       {attachmentNotice ? <Note>{attachmentNotice}</Note> : null}
       <div className={styles.actions}>
-        <Button appearance="primary" size="small" disabled={busy || !identity.engineReady} onClick={() => void handleDecrypt()}>
+        <Button appearance="primary" size="large" className={secStyles.actionButton} disabled={busy || !identity.engineReady} onClick={() => void handleDecrypt()}>
           Decrypt message
         </Button>
-        <Button appearance="secondary" size="small" disabled={busy || !identity.engineReady} onClick={() => void handleVerify()}>
+        <Button appearance="secondary" size="large" className={secStyles.actionButton} disabled={busy || !identity.engineReady} onClick={() => void handleVerify()}>
           Verify signature
         </Button>
       </div>
@@ -179,7 +180,7 @@ export function ReadScreen({
       {mailStatus ? <Note>{mailStatus}</Note> : null}
       {decryptedBody ? (
         <div className={styles.stack}>
-          <StatusBadge tone="ok">Decrypted here only — the message stays encrypted in your mailbox.</StatusBadge>
+          <Note>Decrypted here only — the message stays encrypted in your mailbox.</Note>
           <pre className={styles.code}>{decryptedBody}</pre>
         </div>
       ) : null}

@@ -19,29 +19,32 @@ export function SettingsDevicesTab({
   }, []);
 
   return (
-    <div className={styles.stack}>
-      {devices.devices.length === 0 ? (
-        <Note>{devices.busy ? "Loading devices…" : "No authorized devices found."}</Note>
-      ) : (
-        devices.devices.map((device) => (
-          <div key={device.deviceId} className={secStyles.toggleRow}>
-            <div className={secStyles.rowLabel}>
-              <div>{device.name}</div>
-              <Note>{device.active ? "Active" : "Revoked"}</Note>
+    <div className={secStyles.screen}>
+      <div>
+        {devices.devices.length === 0 ? (
+          <Note>{devices.busy ? "Loading devices…" : "No authorized devices found."}</Note>
+        ) : (
+          devices.devices.map((device) => (
+            <div key={device.deviceId} className={secStyles.toggleRow}>
+              <div className={secStyles.rowLabel}>
+                <div style={{ fontWeight: 600 }}>{device.name}</div>
+                <Note>{device.active ? "Active" : "Revoked"}</Note>
+              </div>
+              <Button
+                appearance="secondary"
+                size="medium"
+                className={secStyles.actionButton}
+                disabled={devices.busy || !device.active}
+                onClick={() => void devices.remove(device.deviceId)}
+              >
+                Remove
+              </Button>
             </div>
-            <Button
-              appearance="secondary"
-              size="small"
-              disabled={devices.busy || !device.active}
-              onClick={() => void devices.remove(device.deviceId)}
-            >
-              Remove
-            </Button>
-          </div>
-        ))
-      )}
+          ))
+        )}
+      </div>
       <div className={styles.actions}>
-        <Button appearance="secondary" size="small" onClick={onApproveDevice}>
+        <Button appearance="secondary" size="medium" className={secStyles.actionButton} onClick={onApproveDevice}>
           Approve a new device
         </Button>
         <Button appearance="transparent" size="small" disabled={devices.busy} onClick={() => void devices.refresh()}>

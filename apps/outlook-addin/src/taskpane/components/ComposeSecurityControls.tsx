@@ -1,7 +1,10 @@
 import { CryptoFamily } from "@scomm-office/crypto";
 import { useCallback, useEffect, useState } from "react";
-import { Checkbox, Dropdown, Option } from "@fluentui/react-components";
-import { Note, PageTitle, StatusBadge, usePaneStyles } from "../ui/layout";
+import { Checkbox, Dropdown, Option, tokens } from "@fluentui/react-components";
+import { Note, usePaneStyles } from "../ui/layout";
+import { VaultBadge } from "../panels/vault/VaultBadge";
+import { VaultHeading } from "../panels/vault/VaultHeading";
+import { useVaultStyles } from "../panels/vault/styles";
 import { useHostContext } from "../../lib/host-context";
 import { loadComposeTogglesFromItem, saveComposeTogglesToItem } from "../../lib/compose-security-state";
 import { lookupRecipientStatuses } from "../../lib/mail-crypto-actions";
@@ -90,14 +93,15 @@ export function ComposeSecurityControls(props: {
   const security = useComposeSecurity(props.session, props.userEmail);
   const { settings, graphDiagnostics } = useHostContext();
   const styles = usePaneStyles();
+  const secStyles = useVaultStyles();
   const pubkeyBase = resolvePubkeyReadBaseUrl(settings);
   const paidReady = props.engineReady && props.pgpEntitled;
   const canUncheckSign = !props.pgpEntitled && security.sign;
   const canUncheckEncrypt = !props.pgpEntitled && security.encrypt;
 
   return (
-    <section className={styles.stack}>
-      <PageTitle
+    <section className={secStyles.screen}>
+      <VaultHeading
         title="Message protection"
         description="Enable Encrypt and/or Sign, then use Outlook's Send. Classical OpenPGP keys come from the pubkey directory (local by default); S/MIME stays in native Outlook. Paid pgp add-on required."
       />
@@ -126,20 +130,26 @@ export function ComposeSecurityControls(props: {
           disabled={!props.engineReady || !props.composeMode || (!paidReady && !canUncheckEncrypt)}
         />
         {security.recipients.length > 0 ? (
-          <ul className={styles.list}>
-            {security.recipients.map((row) => (
-              <li key={row.email}>
-                <strong>{row.email}</strong>{" "}
-                <StatusBadge
-                  tone={row.addInCanEncrypt ? "ok" : row.status === "missing" ? "warn" : "muted"}
-                >
-                  {row.status === "found" ? row.family : row.status}
-                </StatusBadge>
-                <div>
-                  <Note>{row.hint}</Note>
-                </div>
-              </li>
-            ))}
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column" }}>
+            {security.recipients.map((row) => {
+              const tone = row.addInCanEncrypt ? "ok" : row.status === "missing" ? "warn" : "muted";
+              const dotColor =
+                tone === "ok"
+                  ? tokens.colorPaletteGreenForeground1
+                  : tone === "warn"
+                    ? tokens.colorPaletteMarigoldForeground1
+                    : tokens.colorNeutralForeground3;
+              return (
+                <li key={row.email} className={secStyles.toggleRow} style={{ alignItems: "flex-start" }}>
+                  <span className={secStyles.statusDot} style={{ backgroundColor: dotColor, marginTop: "6px" }} />
+                  <div className={secStyles.rowLabel} style={{ whiteSpace: "normal" }}>
+                    <div style={{ fontWeight: tokens.fontWeightSemibold }}>{row.email}</div>
+                    <Note>{row.hint}</Note>
+                  </div>
+                  <VaultBadge tone={tone}>{row.status === "found" ? row.family : row.status}</VaultBadge>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <Note>Add To/Cc/Bcc to look up keys on the pubkey directory.</Note>

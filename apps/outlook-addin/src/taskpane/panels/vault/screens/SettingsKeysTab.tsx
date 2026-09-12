@@ -4,11 +4,12 @@ import {
   Field,
   Input,
   Note,
-  StatusBadge,
   Textarea,
   tokens,
   usePaneStyles,
 } from "../../../ui/layout";
+import { VaultBadge } from "../VaultBadge";
+import { useVaultStyles } from "../styles";
 import type { useVaultKeys } from "../hooks/useVaultKeys";
 import type { useVaultBackup } from "../hooks/useVaultBackup";
 
@@ -33,6 +34,7 @@ export function SettingsKeysTab({
   onCreateKey: () => void;
 }) {
   const styles = usePaneStyles();
+  const secStyles = useVaultStyles();
   const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
@@ -41,31 +43,30 @@ export function SettingsKeysTab({
   }, []);
 
   return (
-    <div className={styles.stack}>
+    <div className={secStyles.screen}>
       {keys.tiles.length === 0 ? (
         <Note>No content keys in this device's Vault yet.</Note>
       ) : (
         <div className={styles.stack}>
           {keys.tiles.map((tile) => (
-            <div key={String(tile.fingerprint ?? tile.locator)} className={styles.card}>
-              <div className={styles.cardHeading}>
+            <div key={String(tile.fingerprint ?? tile.locator)} className={secStyles.vaultCard}>
+              <div className={secStyles.vaultCardHeading}>
                 <span>
                   {typeLabel(tile.family)} · {purposeLabel(tile.purpose)}
                 </span>
-                {tile.status === "active" ? <StatusBadge tone="muted">In use</StatusBadge> : null}
+                {tile.status === "active" ? <VaultBadge tone="muted">In use</VaultBadge> : null}
               </div>
-              <div>Key ID {String(tile.locator ?? tile.fingerprint ?? "—")}</div>
-              <div>{String(tile.algorithm ?? "")}</div>
+              <div className={secStyles.statusRow} style={{ borderBottom: "none", paddingTop: 0, paddingBottom: 0 }}>
+                <span className={secStyles.statusLabel}>Key ID</span>
+                <span className={secStyles.statusValue} style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: tokens.fontWeightRegular }}>
+                  {String(tile.locator ?? tile.fingerprint ?? "—")}
+                </span>
+              </div>
+              <Note>{String(tile.algorithm ?? "")}</Note>
             </div>
           ))}
         </div>
       )}
-
-      <div className={styles.actions}>
-        <Button appearance="secondary" size="small" onClick={() => setShowImport((v) => !v)}>
-          Import a key
-        </Button>
-      </div>
 
       {showImport ? (
         <div className={styles.stack}>
@@ -87,7 +88,8 @@ export function SettingsKeysTab({
           <div className={styles.actions}>
             <Button
               appearance="primary"
-              size="small"
+              size="medium"
+              className={secStyles.actionButton}
               disabled={keys.busy || !keys.keyPackagePass.trim() || !keys.keyPackageJson.trim()}
               onClick={() => void keys.importPackage()}
             >
@@ -101,7 +103,7 @@ export function SettingsKeysTab({
         appearance="transparent"
         size="small"
         onClick={onCreateKey}
-        style={{ alignSelf: "flex-start", color: tokens.colorNeutralForeground3, paddingLeft: 0 }}
+        className={secStyles.linkButton}
       >
         + Create another key
       </Button>

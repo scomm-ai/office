@@ -4,7 +4,8 @@ import { useHostContext } from "../../../lib/host-context";
 import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../../lib/settings";
 import { getOfficePubkeySession } from "../../../lib/pubkey-session";
 import type { TaskPaneCryptoAction } from "../../../lib/taskpane-launch";
-import { Button, PageTitle, usePaneStyles } from "../../ui/layout";
+import { Button } from "../../ui/layout";
+import { useVaultStyles } from "./styles";
 import { useVaultRoute } from "./hooks/useVaultRoute";
 import { useVaultIdentity } from "./hooks/useVaultIdentity";
 import { useVaultDevices } from "./hooks/useVaultDevices";
@@ -24,7 +25,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
  * folder — this component only wires screens to that state.
  */
 export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCryptoAction }) {
-  const styles = usePaneStyles();
+  const secStyles = useVaultStyles();
   const { settings, currentUserEmail, isMockHost, message } = useHostContext();
   const userEmail = currentUserEmail ?? (isMockHost ? "muzamiltest9@gmail.com" : undefined);
   const pubkeyBase = resolvePubkeyReadBaseUrl(settings);
@@ -71,26 +72,27 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
 
   if (!userEmail) {
     return (
-      <div className={styles.stack}>
-        <PageTitle title="Vault" description="Current user email unknown — sign in via Microsoft first." />
+      <div className={secStyles.screen}>
+        <div className={secStyles.heading}>
+          <span className={secStyles.headingTitle}>Vault</span>
+          <span className={secStyles.headingDescription}>Current user email unknown — sign in via Microsoft first.</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={styles.stack}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div className={secStyles.screen}>
+      <div className={secStyles.header}>
         {canBack ? (
-          <Button appearance="transparent" size="small" onClick={back}>
-            ← Back
+          <Button appearance="transparent" className={secStyles.iconButton} onClick={back} aria-label="Back">
+            ←
           </Button>
         ) : null}
-        <div style={{ flex: 1 }}>
-          <PageTitle title={title} />
-        </div>
+        <span className={secStyles.headerTitle}>{title}</span>
         {route === "read" || route === "compose" ? (
-          <Button appearance="transparent" size="small" onClick={() => nav("settings")}>
-            Settings
+          <Button appearance="transparent" className={secStyles.iconButton} onClick={() => nav("settings")} aria-label="Settings">
+            ⚙
           </Button>
         ) : null}
       </div>

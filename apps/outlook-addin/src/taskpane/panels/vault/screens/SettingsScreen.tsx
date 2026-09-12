@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { PublicKeyDirectory } from "@scomm-office/pubkeys";
-import { usePaneStyles } from "../../../ui/layout";
 import { useVaultStyles } from "../styles";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
 import type { useVaultDevices } from "../hooks/useVaultDevices";
@@ -44,12 +43,11 @@ export function SettingsScreen({
   onApproveDevice: () => void;
   onCreateKey: () => void;
 }) {
-  const styles = usePaneStyles();
   const secStyles = useVaultStyles();
   const [tab, setTab] = useState<SettingsTab>("status");
 
   return (
-    <div className={styles.stack}>
+    <div className={secStyles.screen}>
       <div className={secStyles.settingsTabs}>
         {TABS.map((entry) => (
           <button
@@ -60,7 +58,8 @@ export function SettingsScreen({
               background: "none",
               border: "none",
               cursor: "pointer",
-              padding: `${tokens.spacingVerticalS} 0`,
+              padding: `${tokens.spacingVerticalM} 2px`,
+              marginBottom: "-1px",
               fontSize: tokens.fontSizeBase300,
               fontWeight: tokens.fontWeightSemibold,
               color: tab === entry.id ? tokens.colorNeutralForeground1 : tokens.colorNeutralForeground3,

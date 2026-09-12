@@ -1,8 +1,10 @@
 import type { PublicKeyDirectory } from "@scomm-office/pubkeys";
 import { EcdhEnvelopeControls } from "../../../components/EcdhEnvelopeControls";
-import { Button, Divider, Note, StatusBadge, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
+import { Button, Divider, Note, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
 import { PGP_ADDON_REQUIRED_MESSAGE } from "../../../../lib/billing-pgp";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
+import { VaultBadge } from "../VaultBadge";
+import { useVaultStyles } from "../styles";
 
 export function SettingsStatusTab({
   identity,
@@ -20,34 +22,39 @@ export function SettingsStatusTab({
   userEmail: string | undefined;
 }) {
   const styles = usePaneStyles();
+  const secStyles = useVaultStyles();
   const verified = identity.status === "verified";
 
   return (
-    <div className={styles.stack}>
-      <dl className={styles.metaGrid}>
-        <dt className={styles.metaLabel}>Identity</dt>
-        <dd>
+    <div className={secStyles.screen}>
+      <div>
+        <div className={secStyles.statusRow}>
+          <span className={secStyles.statusLabel}>Identity</span>
           {verified ? (
-            <StatusBadge tone="ok">
+            <VaultBadge tone="ok">
               Registered on this device{identity.hasPgp ? " · OpenPGP keys published" : ""}
-            </StatusBadge>
+            </VaultBadge>
           ) : (
-            <StatusBadge tone="muted">Not set up on this device</StatusBadge>
+            <VaultBadge tone="muted">Not set up on this device</VaultBadge>
           )}
-        </dd>
-        <dt className={styles.metaLabel}>Mail encryption</dt>
-        <dd>
+        </div>
+        <div className={secStyles.statusRow}>
+          <span className={secStyles.statusLabel}>Mail encryption</span>
           {identity.engineReady ? (
-            <StatusBadge tone="ok">OpenPGP</StatusBadge>
+            <VaultBadge tone="ok">OpenPGP</VaultBadge>
           ) : (
-            <StatusBadge tone="muted">OpenPGP engine unavailable</StatusBadge>
+            <VaultBadge tone="muted">OpenPGP engine unavailable</VaultBadge>
           )}
-        </dd>
-        <dt className={styles.metaLabel}>Directory</dt>
-        <dd>{directoryLabel}</dd>
-        <dt className={styles.metaLabel}>Pubkey server</dt>
-        <dd>{pubkeyBase || "— (set in Settings)"}</dd>
-      </dl>
+        </div>
+        <div className={secStyles.statusRow}>
+          <span className={secStyles.statusLabel}>Directory</span>
+          <span className={secStyles.statusValue}>{directoryLabel}</span>
+        </div>
+        <div className={secStyles.statusRow} style={{ borderBottom: "none" }}>
+          <span className={secStyles.statusLabel}>Pubkey server</span>
+          <span className={secStyles.statusValue}>{pubkeyBase || "— (set in Settings)"}</span>
+        </div>
+      </div>
 
       {!identity.pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
 
@@ -62,7 +69,8 @@ export function SettingsStatusTab({
               <div className={styles.actions}>
                 <Button
                   appearance="secondary"
-                  size="small"
+                  size="medium"
+                  className={secStyles.actionButton}
                   disabled={identity.busy}
                   onClick={() => void identity.registerOnDirectory()}
                 >
@@ -78,7 +86,8 @@ export function SettingsStatusTab({
             <div className={styles.actions}>
               <Button
                 appearance={identity.hasPgp ? "secondary" : "primary"}
-                size="small"
+                size="medium"
+                className={secStyles.actionButton}
                 disabled={identity.busy || !identity.engineReady || !identity.pgpEntitled}
                 onClick={() => void identity.publishPgp()}
               >
@@ -88,8 +97,8 @@ export function SettingsStatusTab({
           ) : null}
 
           {identity.recoveryCodeResult ? (
-            <div className={styles.card}>
-              <div className={styles.cardHeading}>Your recovery code</div>
+            <div className={secStyles.vaultCard}>
+              <div className={secStyles.vaultCardHeading}>Your recovery code</div>
               <Note>
                 Write this down and store it somewhere safe. It won't be shown again — anyone who
                 lost every device would need this code (plus a fresh email verification) to
@@ -101,8 +110,8 @@ export function SettingsStatusTab({
                 rows={2}
                 style={{ width: "100%", fontFamily: tokens.fontFamilyMonospace }}
               />
-              <div className={styles.actions}>
-                <Button appearance="primary" size="small" onClick={identity.dismissRecoveryCode}>
+              <div className={styles.stack}>
+                <Button appearance="primary" size="large" className={secStyles.cta} onClick={identity.dismissRecoveryCode}>
                   I've saved it
                 </Button>
               </div>
@@ -111,7 +120,8 @@ export function SettingsStatusTab({
             <div className={styles.actions}>
               <Button
                 appearance="secondary"
-                size="small"
+                size="medium"
+                className={secStyles.actionButton}
                 disabled={identity.busy}
                 onClick={() => void identity.setupRecoveryCode()}
               >

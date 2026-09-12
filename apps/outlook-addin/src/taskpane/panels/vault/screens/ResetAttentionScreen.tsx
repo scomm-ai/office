@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, PageTitle, usePaneStyles } from "../../../ui/layout";
+import { Button, usePaneStyles } from "../../../ui/layout";
+import { VaultHeading } from "../VaultHeading";
 import { useVaultStyles } from "../styles";
 
 /**
@@ -22,8 +23,8 @@ export function ResetAttentionScreen({
   const [understood, setUnderstood] = useState(false);
 
   return (
-    <div className={styles.stack}>
-      <PageTitle
+    <div className={secStyles.screen}>
+      <VaultHeading
         title="You'll lose access to your old mail"
         description="Creating a new vault replaces your identity. Mail encrypted under your current keys becomes permanently unreadable — on this device and everywhere else. This cannot be undone."
       />
@@ -41,11 +42,11 @@ export function ResetAttentionScreen({
         />
         <span>I understand I'm giving up access to previously encrypted mail</span>
       </label>
-      <div className={styles.actions}>
-        <Button appearance="primary" size="small" disabled={busy || !understood} onClick={onCreateNew}>
+      <div className={styles.stack}>
+        <Button appearance="primary" size="large" className={secStyles.cta} disabled={busy || !understood} onClick={onCreateNew}>
           Create new vault
         </Button>
-        <Button appearance="secondary" size="small" disabled={busy} onClick={onGoBack}>
+        <Button appearance="secondary" size="large" className={secStyles.cta} disabled={busy} onClick={onGoBack}>
           Go back
         </Button>
       </div>

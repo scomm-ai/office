@@ -1,4 +1,6 @@
-import { Button, Note, PageTitle, usePaneStyles } from "../../../ui/layout";
+import { Button, Note, usePaneStyles } from "../../../ui/layout";
+import { VaultHeading } from "../VaultHeading";
+import { useVaultStyles } from "../styles";
 
 export function SetupIntroScreen({
   userEmail,
@@ -15,9 +17,10 @@ export function SetupIntroScreen({
   identityExists: boolean | null;
 }) {
   const styles = usePaneStyles();
+  const secStyles = useVaultStyles();
   return (
-    <div className={styles.stack}>
-      <PageTitle
+    <div className={secStyles.screen}>
+      <VaultHeading
         title="Turn on encryption"
         description={
           userEmail
@@ -26,12 +29,12 @@ export function SetupIntroScreen({
         }
       />
       <Note>Takes about a minute. Your existing mail is unaffected.</Note>
-      <div className={styles.actions}>
-        <Button appearance="primary" size="small" disabled={busy} onClick={onContinue}>
+      <div className={styles.stack}>
+        <Button appearance="primary" size="large" className={secStyles.cta} disabled={busy} onClick={onContinue}>
           Set up your secure vault
         </Button>
         {identityExists ? (
-          <Button appearance="secondary" size="small" disabled={busy} onClick={onHaveElsewhere}>
+          <Button appearance="secondary" size="large" className={secStyles.cta} disabled={busy} onClick={onHaveElsewhere}>
             I already have an identity on another device
           </Button>
         ) : null}

@@ -1,4 +1,6 @@
-import { Button, Note, PageTitle, tokens, usePaneStyles } from "../../../ui/layout";
+import { Button, Note, usePaneStyles } from "../../../ui/layout";
+import { VaultHeading } from "../VaultHeading";
+import { useVaultStyles } from "../styles";
 
 /**
  * Case 2 of the two recovery paths: no recovery-code envelope exists on the
@@ -18,12 +20,13 @@ export function UnauthorizedScreen({
   onRecover: () => void;
 }) {
   const styles = usePaneStyles();
+  const secStyles = useVaultStyles();
   return (
-    <div className={styles.stack}>
-      <PageTitle title="This mailbox already has an identity" />
+    <div className={secStyles.screen}>
+      <VaultHeading title="This mailbox already has an identity" />
       <Note>No recovery code is set up for it — approve this device from one you already have.</Note>
-      <div className={styles.actions}>
-        <Button appearance="primary" size="small" disabled={busy} onClick={onTransfer}>
+      <div className={styles.stack}>
+        <Button appearance="primary" size="large" className={secStyles.cta} disabled={busy} onClick={onTransfer}>
           Recover from other devices
         </Button>
       </div>
@@ -32,7 +35,7 @@ export function UnauthorizedScreen({
         size="small"
         disabled={busy}
         onClick={onRecover}
-        style={{ alignSelf: "flex-start", color: tokens.colorNeutralForeground3, paddingLeft: 0 }}
+        className={secStyles.linkButton}
       >
         I've lost my recovery code too
       </Button>
