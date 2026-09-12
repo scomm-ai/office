@@ -7,7 +7,7 @@ import { KeyPurposeScreen } from "./KeyPurposeScreen";
 import { KeyTypeScreen } from "./KeyTypeScreen";
 import { OtpScreen } from "./OtpScreen";
 import { PairScreen } from "./PairScreen";
-import { RecoverScreen } from "./RecoverScreen";
+import { ResetAttentionScreen } from "./ResetAttentionScreen";
 import { RecoveryCodeScreen } from "./RecoveryCodeScreen";
 import { SetupIntroScreen } from "./SetupIntroScreen";
 import { UnauthorizedScreen } from "./UnauthorizedScreen";
@@ -29,6 +29,11 @@ export function SetupFlowScreen({
 }) {
   const styles = usePaneStyles();
   const [step, setStep] = useState<"intro" | "keytype" | "keypurpose">("intro");
+  // The "I've lost my recovery code too" reset path reuses the same
+  // KeyType/KeyPurpose screens as first-time setup — one warning screen,
+  // then the same picker, then OTP (still required before anything on the
+  // server actually changes) — instead of its own separate flow.
+  const [resetStep, setResetStep] = useState<"attention" | "keytype" | "keypurpose">("attention");
   const [keyPurpose, setKeyPurpose] = useState<PgpKeyPurpose | null>(null);
   // null = not attempted / still publishing, true = succeeded, false = failed
   // (only false shows the "Publish again" retry link).
@@ -40,7 +45,11 @@ export function SetupFlowScreen({
   }, [identity.status]);
 
   useEffect(() => {
-    if (identity.status === "idle") {
+    if (identity.status !== "recover") setResetStep("attention");
+  }, [identity.status]);
+
+  useEffect(() => {
+    if (identity.status === "idle" || identity.status === "recover") {
       setKeyPurpose(null);
       setPublishOk(null);
       publishAttempted.current = false;
@@ -61,18 +70,24 @@ export function SetupFlowScreen({
   if (identity.status === "idle") {
     if (step === "keytype") {
       return (
-        <KeyTypeScreen busy={identity.busy} onSelectOpenPgp={() => setStep("keypurpose")} />
+        <div className={styles.stack}>
+          <KeyTypeScreen busy={identity.busy} onSelectOpenPgp={() => setStep("keypurpose")} />
+          {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
+        </div>
       );
     }
     if (step === "keypurpose") {
       return (
-        <KeyPurposeScreen
-          busy={identity.busy}
-          onSelect={(purpose) => {
-            setKeyPurpose(purpose);
-            void identity.requestOtp();
-          }}
-        />
+        <div className={styles.stack}>
+          <KeyPurposeScreen
+            busy={identity.busy}
+            onSelect={(purpose) => {
+              setKeyPurpose(purpose);
+              void identity.requestOtp();
+            }}
+          />
+          {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
+        </div>
       );
     }
     return (
@@ -147,11 +162,33 @@ export function SetupFlowScreen({
   }
 
   if (identity.status === "recover") {
+    if (resetStep === "keytype") {
+      return (
+        <div className={styles.stack}>
+          <KeyTypeScreen busy={identity.busy} onSelectOpenPgp={() => setResetStep("keypurpose")} />
+          {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
+        </div>
+      );
+    }
+    if (resetStep === "keypurpose") {
+      return (
+        <div className={styles.stack}>
+          <KeyPurposeScreen
+            busy={identity.busy}
+            onSelect={(purpose) => {
+              setKeyPurpose(purpose);
+              void identity.beginRecovery();
+            }}
+          />
+          {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
+        </div>
+      );
+    }
     return (
-      <RecoverScreen
+      <ResetAttentionScreen
         busy={identity.busy}
-        onConfirm={() => void identity.beginRecovery()}
-        onCancel={identity.goUnauthorized}
+        onCreateNew={() => setResetStep("keytype")}
+        onGoBack={identity.goUnauthorized}
       />
     );
   }

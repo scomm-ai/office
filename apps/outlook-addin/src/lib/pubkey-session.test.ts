@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createPubkeyClient } from "@scomm-office/pubkeys";
 import {
   checkRecoveryEnvelope,
+  ensureDeviceKey,
   publishPgpContentKey,
   pullHostedVault,
   requestRecoveryCodeOtp,
@@ -21,6 +22,10 @@ async function buildSession(email: string): Promise<OfficePubkeySession> {
     ...bundle,
     secrets: {
       load: async () => undefined,
+      save: async () => undefined,
+    } as never,
+    deviceIdentity: {
+      load: async () => null,
       save: async () => undefined,
     } as never,
     pendingMsk: null,
@@ -300,5 +305,45 @@ describe("recovery code", () => {
 
     expect(code).toBe("GENERATEDCODE1234567890ABCDEFGH");
     expect(captured.vrk).toBeInstanceOf(Uint8Array);
+  });
+});
+
+// Regression for a real production bug: verifyEnroll/verifyReplace generated
+// a brand-new device keypair on every call. Retrying OTP verification (or
+// recovering the same email a second time) then tried to authorize a new
+// device_id under the same fixed device name ("Outlook") server-side,
+// colliding with the (principal_id, device_name) unique constraint and
+// surfacing as a 500 on /v1/msk/replace/verify. ensureDeviceKey must persist
+// and reuse one device identity per browser profile.
+describe("ensureDeviceKey", () => {
+  it("persists a device key on first use and reuses the same one afterward", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    let stored: unknown = null;
+    session.deviceIdentity = {
+      load: async () => stored,
+      save: async (identity: unknown) => {
+        stored = identity;
+      },
+    } as never;
+
+    const first = await ensureDeviceKey(session);
+    expect(stored).not.toBeNull();
+
+    const second = await ensureDeviceKey(session);
+
+    expect(second.publicKey).toEqual(first.publicKey);
+  });
+
+  it("generates a fresh key only when nothing was ever persisted", async () => {
+    const email = "bob@example.com";
+    const sessionA = await buildSession(email);
+    const sessionB = await buildSession(email);
+    // Each has its own always-empty store (mirrors buildSession's default).
+
+    const keyA = await ensureDeviceKey(sessionA);
+    const keyB = await ensureDeviceKey(sessionB);
+
+    expect(keyA.publicKey).not.toEqual(keyB.publicKey);
   });
 });

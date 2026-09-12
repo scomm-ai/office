@@ -11,7 +11,11 @@ import {
   unwrapMskWithAek,
   type KeyHandle,
 } from "@scomm-office/pubkeys";
-import { IndexedDbDeviceSecretStore, IndexedDbVaultStore } from "@scomm-office/storage";
+import {
+  IndexedDbDeviceIdentityStore,
+  IndexedDbDeviceSecretStore,
+  IndexedDbVaultStore,
+} from "@scomm-office/storage";
 import { assertPgpAddon } from "./billing-pgp";
 import { DEFAULT_SETTINGS, resolvePubkeyWriteBaseUrl } from "./settings";
 
@@ -19,6 +23,7 @@ type PubkeyBundle = ReturnType<typeof createPubkeyClient>;
 
 export type OfficePubkeySession = PubkeyBundle & {
   secrets: IndexedDbDeviceSecretStore;
+  deviceIdentity: IndexedDbDeviceIdentityStore;
   pendingMsk: KeyHandle | null;
   msk: KeyHandle | null;
 };
@@ -44,12 +49,48 @@ export function getOfficePubkeySession(options: {
     cached = {
       ...created,
       secrets: new IndexedDbDeviceSecretStore(),
+      deviceIdentity: new IndexedDbDeviceIdentityStore(),
       pendingMsk: null,
       msk: null,
     };
     cacheKey = key;
   }
   return cached;
+}
+
+/**
+ * This browser profile's own device-authorization keypair — generated once
+ * and persisted, then reused for every subsequent `verifyEnroll`/
+ * `verifyReplace` call from this device. Without this, each OTP
+ * verification (including a retry, or a later recovery for the same email)
+ * would authorize a brand-new `device_id` under the same fixed device name
+ * ("Outlook"), and the second one collides with the server's
+ * `(principal_id, device_name)` uniqueness constraint — a 500 on
+ * `/v1/msk/replace/verify` (or `/v1/msk/enroll/verify`), not a client error.
+ */
+export async function ensureDeviceKey(session: OfficePubkeySession): Promise<KeyHandle> {
+  const stored = await session.deviceIdentity.load();
+  if (stored) {
+    return session.crypto.importPrivateKey(
+      {
+        algorithm: stored.algorithm,
+        encoding: stored.encoding,
+        bytes: decodeBase64Url(stored.bytesBase64Url),
+        publicKey: stored.publicKeyBase64Url ? decodeBase64Url(stored.publicKeyBase64Url) : undefined,
+        purpose: "authentication",
+      },
+      { extractable: true },
+    );
+  }
+  const key = await session.crypto.generateDeviceKey({ extractable: true });
+  const portable = await session.crypto.exportPrivateKey(key);
+  await session.deviceIdentity.save({
+    algorithm: portable.algorithm,
+    encoding: portable.encoding,
+    bytesBase64Url: encodeBase64Url(portable.bytes),
+    publicKeyBase64Url: portable.publicKey ? encodeBase64Url(portable.publicKey) : undefined,
+  });
+  return key;
 }
 
 /**

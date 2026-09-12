@@ -24,6 +24,7 @@ async function buildSession(email: string): Promise<OfficePubkeySession> {
   return {
     ...bundle,
     secrets: undefined as never,
+    deviceIdentity: undefined as never,
     pendingMsk: null,
     msk: null,
   };

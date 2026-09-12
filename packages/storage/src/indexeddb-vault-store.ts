@@ -4,6 +4,7 @@ const DB_NAME = "scomm-vault";
 const STORE = "vault";
 const KEY = "current";
 const UNLOCK_KEY = "device-unlock";
+const DEVICE_IDENTITY_KEY = "device-identity";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -154,6 +155,54 @@ export class IndexedDbDeviceSecretStore {
     return new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       tx.objectStore(STORE).delete(UNLOCK_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+}
+
+/** Portable shape of a device authorization keypair, base64url-encoded for JSON storage. */
+export interface StoredDeviceIdentity {
+  algorithm: string;
+  encoding: string;
+  bytesBase64Url: string;
+  publicKeyBase64Url?: string;
+}
+
+/**
+ * This device's own authorization keypair (`device.identityKey` passed to
+ * `verifyEnroll`/`verifyReplace`) — persisted so every enroll/recovery
+ * attempt from this browser profile authorizes the *same* `device_id`
+ * server-side, instead of a fresh one each time. Without this, a retried
+ * OTP verification (or a second recovery later for the same email) tries
+ * to INSERT a new `authorized_devices` row with the same device name but a
+ * different id, and collides with `uq_authorized_devices_principal_name`.
+ * Wrapped with a non-extractable DKEK before persisting, same as
+ * `IndexedDbDeviceSecretStore` above — this key can sign device
+ * authorizations, so it doesn't belong in IndexedDB in the clear either.
+ */
+export class IndexedDbDeviceIdentityStore {
+  async load(): Promise<StoredDeviceIdentity | null> {
+    const db = await openDb();
+    const record = await new Promise<unknown>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).get(DEVICE_IDENTITY_KEY);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+    if (record == null || !isWrappedRecord(record)) return null;
+    const json = await unwrapSecretWithDkek(record.dkek, record.iv, record.ciphertext);
+    return JSON.parse(json) as StoredDeviceIdentity;
+  }
+
+  async save(identity: StoredDeviceIdentity): Promise<void> {
+    const dkek = await generateDkek();
+    const { iv, ciphertext } = await wrapSecretWithDkek(dkek, JSON.stringify(identity));
+    const record: WrappedDeviceSecretRecord = { dkek, iv, ciphertext };
+    const db = await openDb();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(record, DEVICE_IDENTITY_KEY);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });

@@ -4,6 +4,7 @@ import { loadPgpEntitlement } from "../../../../lib/billing-pgp";
 import {
   awaitDevicePairing,
   checkRecoveryEnvelope,
+  ensureDeviceKey,
   publishPgpContentKey,
   persistMsk,
   requestRecoveryCodeOtp as requestRecoveryCodeOtpApi,
@@ -239,7 +240,7 @@ export function useVaultIdentity(
     try {
       const msk = session.msk ?? session.pendingMsk;
       if (!msk) throw new Error("Enroll an MSK before verifying OTP");
-      const deviceKey = await session.crypto.generateDeviceKey({ extractable: true });
+      const deviceKey = await ensureDeviceKey(session);
       await session.client.verifyEnroll({
         email: normalizeEmail(userEmail),
         otp: otpInput.trim(),
@@ -347,7 +348,7 @@ export function useVaultIdentity(
     try {
       const msk = session.msk ?? session.pendingMsk;
       if (!msk) throw new Error("Start recovery first");
-      const deviceKey = await session.crypto.generateDeviceKey({ extractable: true });
+      const deviceKey = await ensureDeviceKey(session);
       await session.client.replaceMasterSigningKey({
         email: normalizeEmail(userEmail),
         otp: otpInput.trim(),
