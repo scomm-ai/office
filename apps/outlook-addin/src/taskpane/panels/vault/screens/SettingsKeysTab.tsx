@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   Button,
   Field,
@@ -35,7 +35,6 @@ export function SettingsKeysTab({
 }) {
   const styles = usePaneStyles();
   const secStyles = useVaultStyles();
-  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     keys.refreshTiles();
@@ -67,37 +66,6 @@ export function SettingsKeysTab({
           ))}
         </div>
       )}
-
-      {showImport ? (
-        <div className={styles.stack}>
-          <Field label="Key-package password">
-            <Input
-              type="password"
-              value={keys.keyPackagePass}
-              onChange={(_, data) => keys.setKeyPackagePass(data.value)}
-            />
-          </Field>
-          <Field label="Key-package JSON">
-            <Textarea
-              value={keys.keyPackageJson}
-              onChange={(_, data) => keys.setKeyPackageJson(data.value)}
-              rows={3}
-              style={{ width: "100%", fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 }}
-            />
-          </Field>
-          <div className={styles.actions}>
-            <Button
-              appearance="primary"
-              size="medium"
-              className={secStyles.actionButton}
-              disabled={keys.busy || !keys.keyPackagePass.trim() || !keys.keyPackageJson.trim()}
-              onClick={() => void keys.importPackage()}
-            >
-              Import key package
-            </Button>
-          </div>
-        </div>
-      ) : null}
 
       <Button
         appearance="transparent"
