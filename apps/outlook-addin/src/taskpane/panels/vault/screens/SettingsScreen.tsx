@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { PublicKeyDirectory } from "@scomm-office/pubkeys";
 import { useVaultStyles } from "../styles";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
 import type { useVaultDevices } from "../hooks/useVaultDevices";
@@ -25,9 +24,6 @@ export function SettingsScreen({
   backup,
   directoryLabel,
   pubkeyBase,
-  experimentalEncryptionEnabled,
-  directory,
-  userEmail,
   onApproveDevice,
   onCreateKey,
 }: {
@@ -37,9 +33,6 @@ export function SettingsScreen({
   backup: ReturnType<typeof useVaultBackup>;
   directoryLabel: string;
   pubkeyBase: string;
-  experimentalEncryptionEnabled: boolean;
-  directory: PublicKeyDirectory | null;
-  userEmail: string | undefined;
   onApproveDevice: () => void;
   onCreateKey: () => void;
 }) {
@@ -76,9 +69,6 @@ export function SettingsScreen({
           identity={identity}
           directoryLabel={directoryLabel}
           pubkeyBase={pubkeyBase}
-          experimentalEncryptionEnabled={experimentalEncryptionEnabled}
-          directory={directory}
-          userEmail={userEmail}
         />
       ) : null}
       {tab === "devices" ? <SettingsDevicesTab devices={devices} onApproveDevice={onApproveDevice} /> : null}

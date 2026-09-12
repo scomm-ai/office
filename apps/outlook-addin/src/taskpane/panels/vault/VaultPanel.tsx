@@ -118,9 +118,6 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
           backup={backup}
           directoryLabel={directory ? "GET /v1/keys via @scomm/pubkey" : "—"}
           pubkeyBase={pubkeyBase ?? ""}
-          experimentalEncryptionEnabled={Boolean(settings.experimentalEncryptionEnabled)}
-          directory={directory}
-          userEmail={userEmail}
           onApproveDevice={() => nav("approve")}
           onCreateKey={() => nav("create-key")}
         />

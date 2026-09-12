@@ -9,7 +9,6 @@ describe("resolveEffectiveConfiguration", () => {
     idrDefaultService: "ollama",
     semanticAnalysisEnabled: true,
     complianceEnabled: false,
-    experimentalEncryptionEnabled: false,
     diagnosticsEnabled: true,
   };
 
@@ -36,12 +35,10 @@ describe("resolveEffectiveConfiguration", () => {
     const result = resolveEffectiveConfiguration(userDefaults, {
       scommServerUrl: "https://org-scomm.example.com",
       complianceEnabled: true,
-      experimentalEncryptionEnabled: false,
-      enforcedFields: ["scommServerUrl", "complianceEnabled", "experimentalEncryptionEnabled"],
+      enforcedFields: ["scommServerUrl", "complianceEnabled"],
     });
     expect(result.effective.scommServerUrl).toBe("https://org-scomm.example.com");
     expect(result.effective.complianceEnabled).toBe(true);
-    expect(result.effective.experimentalEncryptionEnabled).toBe(false);
     expect(result.effective.pubkeyServerUrl).toBe(userDefaults.pubkeyServerUrl);
   });
 

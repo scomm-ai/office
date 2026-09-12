@@ -41,7 +41,6 @@ export const DEFAULT_SETTINGS: ResolvedConfiguration = {
   idrDefaultService: import.meta.env.VITE_IDR_SERVICE ?? "ollama",
   semanticAnalysisEnabled: true,
   complianceEnabled: true,
-  experimentalEncryptionEnabled: false,
   diagnosticsEnabled: true,
   requireAiAddonEntitlement: defaultRequireAiAddonEntitlement,
 };

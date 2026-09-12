@@ -13,7 +13,6 @@ const CONFIGURATION_FIELDS: ConfigurationFieldKey[] = [
   "idrDefaultService",
   "semanticAnalysisEnabled",
   "complianceEnabled",
-  "experimentalEncryptionEnabled",
   "diagnosticsEnabled",
 ];
 
@@ -33,7 +32,6 @@ function setConfigurationField(
       break;
     case "semanticAnalysisEnabled":
     case "complianceEnabled":
-    case "experimentalEncryptionEnabled":
     case "diagnosticsEnabled":
       target[field] = value as boolean;
       break;
