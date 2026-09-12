@@ -31,6 +31,10 @@ export const ALGORITHM_REGISTRY = Object.freeze([
 	row(113, "openpgp-cv25519", FAMILIES.pgp, KEY_FN_ENCRYPT, PURPOSES.encryption),
 	row(114, "openpgp-cv448", FAMILIES.pgp, KEY_FN_ENCRYPT, PURPOSES.encryption),
 	row(115, "openpgp-elgamal", FAMILIES.pgp, KEY_FN_ENCRYPT, PURPOSES.encryption),
+	// RFC 9980 composite PQC (matches secMail10's shared registry.dart,
+	// algorithm_id 116/117 exactly — same server, same catalog).
+	row(116, "openpgp-mldsa65-ed25519", FAMILIES.pgp, KEY_FN_VERIFY, PURPOSES.signing),
+	row(117, "openpgp-mlkem768-x25519", FAMILIES.pgp, KEY_FN_ENCRYPT, PURPOSES.encryption),
 	row(204, "smime-rsa-sha256", FAMILIES.smime, KEY_FN_VERIFY, PURPOSES.signing),
 	row(205, "smime-rsa-sha384", FAMILIES.smime, KEY_FN_VERIFY, PURPOSES.signing),
 	row(206, "smime-rsa-sha512", FAMILIES.smime, KEY_FN_VERIFY, PURPOSES.signing),

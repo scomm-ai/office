@@ -57,6 +57,64 @@ describe("publishPgpContentKey", () => {
     expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
   });
 
+  it("publishes a PQC composite key when requested", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    type KeyArtifact = { purpose?: string; algorithm?: string };
+    const captured: { signing?: KeyArtifact; encryption?: KeyArtifact } = {};
+    session.client.setSigningKeyWithProof = (async (input: { artifact: KeyArtifact }) => {
+      captured.signing = input.artifact;
+      return { key_id: 12, keys: [{ purpose: "signing", key_id: 12 }] };
+    }) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async (input: { artifact: KeyArtifact }) => {
+      captured.encryption = input.artifact;
+      return { key_id: 11, keys: [{ purpose: "encryption", key_id: 11 }] };
+    }) as typeof session.client.publishEncryptionKey;
+
+    const result = await publishPgpContentKey(session, email, undefined, "openpgp-pqc");
+    expect(result.generated).toBe(true);
+    expect(captured.signing?.algorithm).toBe("openpgp-mldsa65-ed25519");
+    expect(captured.encryption?.algorithm).toBe("openpgp-mlkem768-x25519");
+    expect(session.vault.getCurrentKey("encryption")?.algorithm).toBe("openpgp-mlkem768-x25519");
+  });
+
+  it("adding a PQC key alongside an existing classical key creates a second entry instead of overwriting the first", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 1,
+      keys: [{ purpose: "signing", key_id: 1 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 1,
+      keys: [{ purpose: "encryption", key_id: 1 }],
+    })) as typeof session.client.publishEncryptionKey;
+    await publishPgpContentKey(session, email);
+    const classicalEntry = session.vault.getCurrentKey("encryption");
+    expect(classicalEntry?.algorithm).toBe("openpgp-cv25519");
+    const classicalFingerprint = classicalEntry?.fingerprint;
+
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 2,
+      keys: [{ purpose: "signing", key_id: 2 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 2,
+      keys: [{ purpose: "encryption", key_id: 2 }],
+    })) as typeof session.client.publishEncryptionKey;
+    await publishPgpContentKey(session, email, undefined, "openpgp-pqc");
+
+    // The original classical entry must be untouched (not overwritten with
+    // PQC metadata or the new key's private material), and both entries
+    // coexist so decrypt still finds whichever key a sender actually used.
+    const untouchedClassical = session.vault.getKeyByFingerprint(classicalFingerprint!);
+    expect(untouchedClassical?.algorithm).toBe("openpgp-cv25519");
+    expect(untouchedClassical?.fingerprint).toBe(classicalFingerprint);
+    const pgpEntries = session.vault.listKeys().filter((entry) => entry.family === "pgp");
+    expect(pgpEntries.length).toBe(2);
+    expect(pgpEntries.some((entry) => entry.algorithm === "openpgp-mlkem768-x25519")).toBe(true);
+  });
+
   it("republishes existing vault keys instead of no-op", async () => {
     const email = "alice@example.com";
     const session = await buildSession(email);

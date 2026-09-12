@@ -16,6 +16,7 @@ import {
   saveRecoveryEnvelope,
   startDevicePairing,
   type OfficePubkeySession,
+  type PgpKeyAlgorithm,
   type PgpKeyPurpose,
 } from "../../../../lib/pubkey-session";
 
@@ -287,12 +288,12 @@ export function useVaultIdentity(
 
   /** Resolves true once the requested purpose(s) actually reached the directory. */
   const publishPgp = useCallback(
-    async (purposes?: PgpKeyPurpose[]): Promise<boolean> => {
+    async (purposes?: PgpKeyPurpose[], algorithm?: PgpKeyAlgorithm): Promise<boolean> => {
       if (!userEmail || !session) return false;
       setBusy(true);
       setStatusMessage(null);
       try {
-        await publishPgpContentKey(session, userEmail, purposes);
+        await publishPgpContentKey(session, userEmail, purposes, algorithm);
         if (!purposes || purposes.includes("encryption")) setHasPgp(true);
         setStatusMessage(
           !purposes

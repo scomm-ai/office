@@ -2,13 +2,33 @@ import * as openpgp from "openpgp";
 import { ERROR_CODES } from "@scomm/pubkey-protocol";
 import { PubkeyError } from "../errors.js";
 
-const ADVERTISED = Object.freeze(["openpgp-cv25519", "openpgp-ed25519"]);
+// Wire capability names the directory's algorithm registry actually
+// recognizes (see secMail10's shared registry.dart, algorithm_id 116/117) —
+// NOT the "openpgp-pqc" request-time selector generateKey() accepts below.
+// Advertising an unregistered name here breaks discoveryCapabilities(),
+// which is sent to the server on every getBestKey() directory lookup.
+const ADVERTISED = Object.freeze([
+	"openpgp-cv25519",
+	"openpgp-ed25519",
+	"openpgp-mldsa65-ed25519",
+	"openpgp-mlkem768-x25519",
+]);
 const BEGIN_PGP = "-----BEGIN PGP";
 
 const V4_CV25519 = Object.freeze({
 	type: "ecc",
 	curve: "curve25519Legacy",
 	config: { v6Keys: false },
+});
+
+// RFC 9580 v6 key carrying the composite PQC algorithms from
+// draft-ietf-openpgp-pqc: ML-DSA-65 + Ed25519 (signing, primary key) and
+// ML-KEM-768 + X25519 (encryption subkey). Requires openpgp.js built from a
+// commit after the `pqc` feature landed (see package.json) — no released
+// version ships this yet.
+const V6_PQC = Object.freeze({
+	type: "pqc",
+	config: { v6Keys: true },
 });
 
 function reverseBytes(bytes) {
@@ -149,15 +169,16 @@ export class PgpEngine {
 			);
 		}
 		const algorithm = request.algorithm ?? "openpgp-cv25519";
-		if (algorithm !== "openpgp-cv25519" && algorithm !== "openpgp-ed25519") {
+		if (algorithm !== "openpgp-cv25519" && algorithm !== "openpgp-ed25519" && algorithm !== "openpgp-pqc") {
 			throw new PubkeyError(
 				ERROR_CODES.unsupported_algorithm,
 				`PgpEngine cannot generate ${algorithm}`,
 			);
 		}
+		const keyOptions = algorithm === "openpgp-pqc" ? V6_PQC : V4_CV25519;
 		try {
 			const { privateKey, publicKey } = await openpgp.generateKey({
-				...V4_CV25519,
+				...keyOptions,
 				userIDs: [{ name: request.name || email, email }],
 				format: "binary",
 			});
@@ -166,7 +187,7 @@ export class PgpEngine {
 				publicKey,
 				privateKey,
 				fingerprint: parsed.getFingerprint().toLowerCase(),
-				algorithm: "openpgp-cv25519",
+				algorithm: algorithm === "openpgp-pqc" ? "openpgp-pqc" : "openpgp-cv25519",
 			};
 		} catch (cause) {
 			if (cause instanceof PubkeyError) throw cause;
@@ -386,6 +407,13 @@ export class PgpEngine {
 	/**
 	 * Extracts the raw Ed25519 signing seed from the OpenPGP primary key.
 	 *
+	 * Works for both the legacy v4 eddsaLegacy packet (`privateParams.seed` /
+	 * `publicParams.A`) and the native v6 fields used by PQC composite keys
+	 * (`privateParams.eccSecretKey` / `publicParams.eccPublicKey` — the
+	 * Ed25519 half of ML-DSA-65+Ed25519). The classical component extracted
+	 * here is what proves possession to the directory; it's the same either
+	 * way, PQC composite keys just carry an additional ML-DSA signature.
+	 *
 	 * @param {Uint8Array | string} privateMaterial
 	 * @returns {Promise<{ seed: Uint8Array, publicKey: Uint8Array | undefined }>}
 	 */
@@ -400,14 +428,14 @@ export class PgpEngine {
 				);
 			}
 			const packet = key.keyPacket;
-			const seed = packet?.privateParams?.seed;
+			const seed = packet?.privateParams?.eccSecretKey ?? packet?.privateParams?.seed;
 			if (!seed || seed.length < 32) {
 				throw new PubkeyError(
 					ERROR_CODES.key_import_failure,
 					"OpenPGP primary key has no Ed25519 seed",
 				);
 			}
-			const A = packet.publicParams?.A;
+			const A = packet.publicParams?.eccPublicKey ?? packet.publicParams?.A;
 			const publicKey =
 				A instanceof Uint8Array && A.length >= 32
 					? new Uint8Array(A.subarray(0, 32))
@@ -435,18 +463,29 @@ export class PgpEngine {
 			}
 			const enc = await key.getEncryptionKey();
 			const packet = enc?.keyPacket;
-			const d = packet?.privateParams?.d;
+			// PQC composite subkeys (ML-KEM-768+X25519) store the X25519 half
+			// natively as `eccSecretKey`/`eccPublicKey` — already raw 32-byte
+			// little-endian, unlike the legacy `d`/`Q` MPI fields below which are
+			// big-endian and need byte-reversal plus stripping the 0x40 EC point tag.
+			const native = packet?.privateParams?.eccSecretKey;
+			const d = native ?? packet?.privateParams?.d;
 			if (!d || d.length < 32) {
 				throw new PubkeyError(
 					ERROR_CODES.key_import_failure,
 					"OpenPGP encryption subkey has no X25519 scalar",
 				);
 			}
-			const scalar = reverseBytes(d.subarray(0, 32));
-			const Q = packet.publicParams?.Q;
+			const scalar = native
+				? new Uint8Array(d.subarray(0, 32))
+				: reverseBytes(d.subarray(0, 32));
+			const Q = native ? packet.publicParams?.eccPublicKey : packet.publicParams?.Q;
 			let publicKey;
 			if (Q instanceof Uint8Array && Q.length >= 32) {
-				publicKey = Q[0] === 0x40 ? new Uint8Array(Q.subarray(1, 33)) : new Uint8Array(Q.subarray(0, 32));
+				publicKey = native
+					? new Uint8Array(Q.subarray(0, 32))
+					: Q[0] === 0x40
+						? new Uint8Array(Q.subarray(1, 33))
+						: new Uint8Array(Q.subarray(0, 32));
 			}
 			return { scalar, publicKey };
 		} catch (cause) {
@@ -454,6 +493,36 @@ export class PgpEngine {
 			throw new PubkeyError(
 				ERROR_CODES.key_import_failure,
 				"Could not extract OpenPGP X25519 encryption subkey",
+				{ cause },
+			);
+		}
+	}
+
+	/**
+	 * Extracts the 64-byte ML-KEM-768 seed (d||z) from a PQC composite
+	 * encryption subkey (ML-KEM-768+X25519), for PqEngine.decapsulate.
+	 *
+	 * @param {Uint8Array | string} privateMaterial
+	 * @returns {Promise<Uint8Array | undefined>} undefined for non-PQC keys
+	 */
+	async extractMlkemSeed(privateMaterial) {
+		this._requireAvailable();
+		try {
+			const key = await readPrivateKey(privateMaterial);
+			if (!key.isDecrypted()) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"OpenPGP private key is passphrase-protected; Vault keys must be stored unencrypted",
+				);
+			}
+			const enc = await key.getEncryptionKey();
+			const seed = enc?.keyPacket?.privateParams?.mlkemSeed;
+			return seed instanceof Uint8Array ? new Uint8Array(seed) : undefined;
+		} catch (cause) {
+			if (cause instanceof PubkeyError) throw cause;
+			throw new PubkeyError(
+				ERROR_CODES.key_import_failure,
+				"Could not extract OpenPGP ML-KEM-768 seed",
 				{ cause },
 			);
 		}

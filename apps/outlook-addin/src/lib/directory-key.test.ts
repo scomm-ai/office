@@ -11,10 +11,19 @@ describe("classifyDirectoryKey", () => {
     expect(classified.isPqc).toBe(false);
   });
 
-  it("does not encrypt PQC OpenPGP from Outlook", () => {
+  it("encrypts RFC 9980 OpenPGP PQC from Outlook — PgpEngine implements it", () => {
     const classified = classifyDirectoryKey({
       family: "pgp",
       algorithm: "openpgp-mlkem768-x25519",
+    });
+    expect(classified.addInCanEncrypt).toBe(true);
+    expect(classified.isPqc).toBe(true);
+  });
+
+  it("does not encrypt a PQC OpenPGP algorithm PgpEngine doesn't implement", () => {
+    const classified = classifyDirectoryKey({
+      family: "pgp",
+      algorithm: "openpgp-mldsa87-ed448",
     });
     expect(classified.addInCanEncrypt).toBe(false);
     expect(classified.isPqc).toBe(true);

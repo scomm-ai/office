@@ -233,11 +233,4 @@ export const useVaultStyles = makeStyles({
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground1,
   },
-  optionCardDisabled: {
-    cursor: "not-allowed",
-    opacity: 0.6,
-    ":hover": {
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-    },
-  },
 });

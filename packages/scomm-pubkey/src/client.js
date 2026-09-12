@@ -24,7 +24,12 @@ import {
 import { pubkeyFetch, joinUrl } from "./http.js";
 import { PubkeyError } from "./errors.js";
 import { protocolCapabilitiesFromProvider } from "./crypto/registry.js";
-import { solveDecryptChallenge, unwrapDecryptChallenge } from "./crypto/encryption-pop.js";
+import {
+	solveDecryptChallenge,
+	solveHybridDecryptChallenge,
+	unwrapDecryptChallenge,
+} from "./crypto/encryption-pop.js";
+import { PqEngine } from "./engines/pq.js";
 import {
 	generatePairingEphemeral,
 	generatePairingSessionCode,
@@ -69,6 +74,7 @@ export class PubkeyClient {
 		vault,
 		pgpEngine,
 		smimeEngine,
+		pqEngine,
 		sdkName = "scomm-pubkey-js",
 		sdkVersion = "1.0.0",
 		fetchImpl,
@@ -82,6 +88,10 @@ export class PubkeyClient {
 		this.vault = vault;
 		this.pgpEngine = pgpEngine;
 		this.smimeEngine = smimeEngine;
+		// ML-KEM-768 decapsulate() is pure JS math (@noble/post-quantum), not
+		// provider-dependent, so a real engine can be the default instead of
+		// requiring every caller to wire one up.
+		this.pqEngine = pqEngine ?? new PqEngine(crypto);
 		this.sdkName = sdkName;
 		this.sdkVersion = sdkVersion;
 		this.fetchImpl = fetchImpl;
@@ -382,13 +392,31 @@ export class PubkeyClient {
 				mskKey,
 			}),
 		);
+		let plaintext;
 		if (challenge.kem_ciphertext) {
-			throw new PubkeyError(
-				ERROR_CODES.unsupported_algorithm,
-				"Hybrid PQC decrypt challenges are not supported in this SDK yet",
+			if (artifact.family !== "pgp" || !this.pgpEngine?.available) {
+				throw new PubkeyError(
+					ERROR_CODES.unsupported_algorithm,
+					"Hybrid PQC decrypt challenges require the OpenPGP engine",
+				);
+			}
+			const mlkemSeed = await this.pgpEngine.extractMlkemSeed(privateKey);
+			if (!mlkemSeed) {
+				throw new PubkeyError(
+					ERROR_CODES.key_import_failure,
+					"Server issued a hybrid PQC challenge for a non-PQC key",
+				);
+			}
+			plaintext = await solveHybridDecryptChallenge(
+				this.crypto,
+				this.pqEngine,
+				agreementKey,
+				mlkemSeed,
+				challenge,
 			);
+		} else {
+			plaintext = await solveDecryptChallenge(this.crypto, agreementKey, challenge);
 		}
-		const plaintext = await solveDecryptChallenge(this.crypto, agreementKey, challenge);
 		return this.setEncryptionKeyWithProof({
 			email,
 			artifact,

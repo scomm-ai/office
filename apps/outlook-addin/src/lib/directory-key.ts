@@ -4,12 +4,21 @@ export interface ClassifiedDirectoryKey {
   family: DirectoryKeyFamily;
   algorithm: string;
   isPqc: boolean;
-  /** This Outlook add-in can encrypt to the key (classical OpenPGP only). */
+  /** This Outlook add-in can encrypt to the key (classical OpenPGP, or the RFC 9980 composite algorithms PgpEngine supports). */
   addInCanEncrypt: boolean;
   hint: string;
 }
 
 const PQC_RE = /mlkem|mldsa|kyber|dilithium|pqc|rfc.?9980|sphincs|falcon/i;
+
+// The only PQC algorithms PgpEngine actually implements (RFC 9980 composite,
+// via the pinned openpgp.js PQC build) — other PQC-looking OpenPGP algorithm
+// names (future ML-DSA-87, SLH-DSA, etc.) still aren't encryptable from here.
+const SUPPORTED_PGP_PQC_ALGORITHMS = new Set([
+  "openpgp-mldsa65-ed25519",
+  "openpgp-mlkem768-x25519",
+  "openpgp-pqc",
+]);
 
 export function wireFamily(family: string | undefined | null): DirectoryKeyFamily {
   const value = String(family || "").toLowerCase();
@@ -48,12 +57,15 @@ export function classifyDirectoryKey(input: {
   }
 
   if (family === "pgp" && isPqc) {
+    const supported = SUPPORTED_PGP_PQC_ALGORITHMS.has(algorithm.toLowerCase());
     return {
       family,
       algorithm,
       isPqc,
-      addInCanEncrypt: false,
-      hint: "RFC 9980 OpenPGP PQC — encrypt from the Scomm.AI mail client. This add-in and GpgOL are classical only.",
+      addInCanEncrypt: supported,
+      hint: supported
+        ? "RFC 9980 OpenPGP PQC (ML-DSA-65+Ed25519 / ML-KEM-768+X25519) — this add-in and the Scomm.AI mail client can both use this key. GpgOL and other classical-only clients cannot."
+        : "PQC OpenPGP algorithm not yet supported by this add-in — encrypt from the Scomm.AI mail client.",
     };
   }
 
