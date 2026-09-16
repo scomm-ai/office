@@ -7,6 +7,7 @@ import type { useVaultBackup } from "../hooks/useVaultBackup";
 import { SettingsDevicesTab } from "./SettingsDevicesTab";
 import { SettingsKeysTab } from "./SettingsKeysTab";
 import { SettingsStatusTab } from "./SettingsStatusTab";
+import { ScommAppPromo } from "../../../components/ScommAppPromo";
 import { tokens } from "@fluentui/react-components";
 
 type SettingsTab = "status" | "devices" | "keys";
@@ -73,6 +74,8 @@ export function SettingsScreen({
       ) : null}
       {tab === "devices" ? <SettingsDevicesTab devices={devices} onApproveDevice={onApproveDevice} /> : null}
       {tab === "keys" ? <SettingsKeysTab keys={keys} backup={backup} onCreateKey={onCreateKey} /> : null}
+
+      <ScommAppPromo />
     </div>
   );
 }

@@ -79,7 +79,7 @@ export function IdrPanel() {
   return (
     <>
       <PageTitle
-        title="AI / IDR"
+        title="IDR relay"
         description="IDR is a third-party subscription at idr.to. SComm Office embeds @idrto/idr_browser_sdk only — there is no Office IDR proxy. WebRTC may be unavailable on some Outlook hosts; use HTTPS relay when offered by the SDK."
       />
       <Field label="IDR host">

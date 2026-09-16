@@ -16,6 +16,7 @@ import { Dropdown, Option, OptionGroup } from "@fluentui/react-components";
 import { Button, Field, Input, Note, PageTitle, Text, usePaneStyles } from "../ui/layout";
 import { findDuplicateProfile, isProfileReady, loadProfiles, saveProfiles } from "../../lib/byoai-profiles";
 import { useAppToast } from "../ui/toast";
+import { IdrPanel } from "./IdrPanel";
 
 const LOCAL_CONNECT_HINT =
   "Could not connect. Make sure the local server is running, the base URL is correct, and (for LM Studio) CORS is enabled in its Local Server settings.";
@@ -632,6 +633,17 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
           </Button>
         </div>
       ) : null}
+
+      <details className={styles.card}>
+        <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+          Advanced: connect a private AI relay (IDR)
+        </summary>
+        <Note>
+          For organizations that route AI traffic through their own IDR-hosted relay instead of a
+          provider above. Most people don&apos;t need this.
+        </Note>
+        <IdrPanel />
+      </details>
     </>
   );
 }

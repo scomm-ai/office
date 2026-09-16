@@ -25,7 +25,7 @@ const defaultPubkeyRead =
 
 const defaultBillingOrigin = import.meta.env.VITE_BILLING_ORIGIN ?? "";
 
-// Opt out with VITE_REQUIRE_AI_ADDON_ENTITLEMENT=false in .env â€” there is no
+// Opt out with VITE_REQUIRE_AI_ADDON_ENTITLEMENT=false in .env  there is no
 // in-app toggle for this (see AiSetupView / SettingsPanel).
 const defaultRequireAiAddonEntitlement = import.meta.env.VITE_REQUIRE_AI_ADDON_ENTITLEMENT !== "false";
 
@@ -97,7 +97,7 @@ export function loadSettingsFromStorage(): ResolvedConfiguration {
       previousSnapshot = JSON.parse(previousRaw) as Record<string, string>;
     }
     const { settings, snapshot } = applyEnvHostUpdates(stored, DEFAULT_SETTINGS, previousSnapshot);
-    // No UI toggles this â€” .env is the only source of truth, so it always wins
+    // No UI toggles this  .env is the only source of truth, so it always wins
     // over whatever a previous (or pre-.env-support) session persisted.
     settings.requireAiAddonEntitlement = defaultRequireAiAddonEntitlement;
     localStorage.setItem(ENV_HOST_SNAPSHOT_KEY, JSON.stringify(snapshot));
@@ -118,7 +118,7 @@ export function formatAddresses(
   addresses: Array<{ emailAddress: string; displayName?: string }> | undefined,
 ): string {
   if (!addresses?.length) {
-    return "â€”";
+    return "";
   }
   return addresses
     .map((address) =>
@@ -129,6 +129,9 @@ export function formatAddresses(
 
 /** Production pubkey origin used for both read and write. */
 export const PRODUCTION_PUBKEY_ORIGIN = "https://discovery.scomm.ai";
+
+/** Native Scomm.AI app - the full mail client with vault/key/identity management. */
+export const SCOMM_APP_URL = "https://app.scomm.ai";
 
 /**
  * True for localhost / loopback hosts, including IPv6 (`::1`) used by some WebViews.
@@ -170,7 +173,7 @@ function configuredPubkeyReadBaseUrl(settings: ResolvedConfiguration): string {
 
 /**
  * Resolve the read API base. On localhost the Vite proxy avoids mixed content
- * (HTTPS task pane â†’ HTTP pubkey) â€” traffic goes to `/pubkey-read`.
+ * (HTTPS task pane â†’ HTTP pubkey)  traffic goes to `/pubkey-read`.
  */
 export function resolvePubkeyReadBaseUrl(
   settings: ResolvedConfiguration,

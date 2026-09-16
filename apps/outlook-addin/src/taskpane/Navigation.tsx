@@ -1,4 +1,12 @@
-import { Button } from "@fluentui/react-components";
+import type { JSX } from "react";
+import { Button, tokens } from "@fluentui/react-components";
+import {
+  Mail24Regular,
+  Person24Regular,
+  Settings24Regular,
+  ShieldKeyhole24Regular,
+  Sparkle24Regular,
+} from "@fluentui/react-icons";
 import { usePaneStyles } from "./ui/layout";
 
 export type NavModule =
@@ -12,16 +20,18 @@ export type NavModule =
   | "diagnostics"
   | "settings";
 
-const MODULES: Array<{ id: NavModule; label: string }> = [
-  { id: "message", label: "Message" },
-  { id: "account", label: "Billing" },
-  { id: "identity", label: "Identity" },
-  { id: "security", label: "Vault" },
-  { id: "compliance", label: "Compliance" },
-  { id: "idr", label: "AI / IDR" },
-  { id: "ai", label: "BYOAI" },
-  { id: "diagnostics", label: "Diagnostics" },
-  { id: "settings", label: "Settings" },
+// Modules reachable only from inside another screen (the Settings hub, or a
+// deep link from the ribbon) - they don't get their own top-level button, so
+// the primary nav stays short and recognizable instead of listing every
+// screen the add-in has.
+const SETTINGS_GROUP: ReadonlySet<NavModule> = new Set(["settings", "account", "compliance", "diagnostics"]);
+
+const PRIMARY_MODULES: Array<{ id: NavModule; label: string; icon: JSX.Element }> = [
+  { id: "message", label: "Message", icon: <Mail24Regular /> },
+  { id: "identity", label: "Identity", icon: <Person24Regular /> },
+  { id: "security", label: "Security", icon: <ShieldKeyhole24Regular /> },
+  { id: "ai", label: "AI", icon: <Sparkle24Regular /> },
+  { id: "settings", label: "Settings", icon: <Settings24Regular /> },
 ];
 
 interface NavigationProps {
@@ -31,14 +41,20 @@ interface NavigationProps {
 
 export function Navigation({ active, onChange }: NavigationProps) {
   const styles = usePaneStyles();
+  // "idr" folds into the AI tab's advanced section; anything in the Settings
+  // group (including its sub-pages) reads as the Settings tab being active.
+  const effectiveActive = active === "idr" ? "ai" : SETTINGS_GROUP.has(active) ? "settings" : active;
+
   return (
     <nav className={styles.nav} aria-label="SComm modules">
-      {MODULES.map((module) => (
+      {PRIMARY_MODULES.map((module) => (
         <Button
           key={module.id}
-          appearance={active === module.id ? "primary" : "subtle"}
+          appearance={effectiveActive === module.id ? "primary" : "subtle"}
           size="small"
+          icon={module.icon}
           onClick={() => onChange(module.id)}
+          style={{ gap: tokens.spacingHorizontalXXS }}
         >
           {module.label}
         </Button>
