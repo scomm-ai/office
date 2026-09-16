@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown, makeStyles, mergeClasses, Option, OptionGroup } from "@fluentui/react-components";
+import { Settings20Regular } from "@fluentui/react-icons";
 import { CloudAiClient, displayNameForProvider, LocalStorageCloudAiKeyStore } from "@scomm-office/byoai";
 import { Button, PageTitle, StatusBadge, Text, Textarea, tokens, usePaneStyles } from "../ui/layout";
 import { useHostContext } from "../../lib/host-context";
@@ -328,14 +329,13 @@ export function AiChatView({ onOpenSetup }: { onOpenSetup: () => void }) {
           <Button
             appearance="subtle"
             size="small"
+            icon={<Settings20Regular />}
             className={bubbleStyles.iconButton}
             style={{ flexShrink: 0 }}
             onClick={onOpenSetup}
             title="Provider settings"
             aria-label="Provider settings"
-          >
-            ⚙
-          </Button>
+          />
           <Button
             appearance="primary"
             size="small"

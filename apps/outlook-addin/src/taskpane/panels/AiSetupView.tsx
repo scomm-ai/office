@@ -14,6 +14,7 @@ import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
 import { Dropdown, Option, OptionGroup } from "@fluentui/react-components";
 import { Button, Field, Input, Note, PageTitle, Text, usePaneStyles } from "../ui/layout";
+import { ArrowRight16Regular } from "@fluentui/react-icons";
 import { findDuplicateProfile, isProfileReady, loadProfiles, saveProfiles } from "../../lib/byoai-profiles";
 import { useAppToast } from "../ui/toast";
 import { IdrPanel } from "./IdrPanel";
@@ -628,8 +629,13 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
 
       {anyReady ? (
         <div className={styles.actions}>
-          <Button appearance="primary" onClick={() => onReady(profiles)}>
-            Go to chat →
+          <Button
+            appearance="primary"
+            icon={<ArrowRight16Regular />}
+            iconPosition="after"
+            onClick={() => onReady(profiles)}
+          >
+            Go to chat
           </Button>
         </div>
       ) : null}
