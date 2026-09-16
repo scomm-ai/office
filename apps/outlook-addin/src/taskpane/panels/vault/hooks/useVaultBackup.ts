@@ -10,6 +10,7 @@ import {
 /** Whole-vault passphrase-wrapped JSON backup/restore. */
 export function useVaultBackup(
   session: OfficePubkeySession | null,
+  userEmail: string | undefined,
   onRestored?: (hasPgp: boolean) => void,
 ) {
   const [passphrase, setPassphrase] = useState("");
@@ -33,11 +34,11 @@ export function useVaultBackup(
   }, [session, passphrase]);
 
   const importBackup = useCallback(async () => {
-    if (!session || !passphrase.trim() || !backupJson.trim()) return;
+    if (!session || !userEmail || !passphrase.trim() || !backupJson.trim()) return;
     setBusy(true);
     setNote(null);
     try {
-      await importVaultBackup(session, backupJson.trim(), passphrase.trim());
+      await importVaultBackup(session, userEmail, backupJson.trim(), passphrase.trim());
       const state = await restoreOfficeVault(session);
       onRestored?.(state.hasPgp);
       setNote("Vault imported from passphrase backup.");
@@ -46,7 +47,7 @@ export function useVaultBackup(
     } finally {
       setBusy(false);
     }
-  }, [session, passphrase, backupJson, onRestored]);
+  }, [session, userEmail, passphrase, backupJson, onRestored]);
 
   return { passphrase, setPassphrase, backupJson, setBackupJson, busy, note, exportBackup, importBackup };
 }

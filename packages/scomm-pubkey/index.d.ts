@@ -70,9 +70,15 @@ export interface MskEnvelope {
 	algorithm: string;
 	public_key: string;
 	created_at: number;
+	/**
+	 * AEK-wrapping IV. Present on the CKVF-spec shape, where `encrypted_msk`
+	 * is ciphertext; absent on office's legacy local shape, where
+	 * `encrypted_msk` holds the raw MSK bytes. See `unwrapMskWithAek`.
+	 */
+	iv?: string;
 	encrypted_msk: string;
-	wraps: unknown[];
-	revoked_device_ids: string[];
+	wraps?: unknown[];
+	revoked_device_ids?: string[];
 }
 
 export interface PortablePrivateKey {
@@ -259,6 +265,16 @@ export class Vault {
 	aek: Uint8Array | null;
 	generation: number;
 	lastCiphertextHash: Uint8Array | null;
+	/**
+	 * The identity's canonical "advertised to new senders" / "signs with"
+	 * pointers, and its device roster. Office writes none of these itself —
+	 * it has no promote-a-key or pair-a-device flow — but it shares one vault
+	 * document with secMail10, which does, so they are carried through
+	 * read -> merge -> write unchanged. Pointers are key ids as strings.
+	 */
+	currentSigningKeyId: string | null;
+	currentEncryptionKeyId: string | null;
+	devices: object[];
 	createVault(principal: string): Promise<this>;
 	unlockVault(passphrase: string): Promise<this>;
 	ensureVrk(): Uint8Array;
@@ -288,11 +304,17 @@ export class Vault {
 		createdAt: number;
 		updatedAt: number;
 		mskEnvelope: MskEnvelope | null;
+		currentSigningKeyId: string | null;
+		currentEncryptionKeyId: string | null;
+		devices: object[];
 		entries: VaultEntry[];
 	}>;
 	applyRemoteSnapshot(
 		snapshot: {
 			mskEnvelope?: MskEnvelope | null;
+			currentSigningKeyId?: string | null;
+			currentEncryptionKeyId?: string | null;
+			devices?: object[];
 			entries?: VaultEntry[];
 		},
 		options?: { merge?: boolean },

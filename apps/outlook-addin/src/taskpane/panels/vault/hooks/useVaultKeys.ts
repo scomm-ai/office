@@ -92,11 +92,11 @@ export function useVaultKeys(session: OfficePubkeySession | null, userEmail: str
   }, [session, keyPackagePass, tiles]);
 
   const importPackage = useCallback(async () => {
-    if (!session || !keyPackagePass.trim() || !keyPackageJson.trim()) return;
+    if (!session || !userEmail || !keyPackagePass.trim() || !keyPackageJson.trim()) return;
     setBusy(true);
     setNote(null);
     try {
-      await importKeyPackageBackup(session, keyPackageJson.trim(), keyPackagePass.trim());
+      await importKeyPackageBackup(session, userEmail, keyPackageJson.trim(), keyPackagePass.trim());
       refreshTiles();
       setNote("Key package imported into this Vault.");
     } catch (err) {
@@ -104,7 +104,7 @@ export function useVaultKeys(session: OfficePubkeySession | null, userEmail: str
     } finally {
       setBusy(false);
     }
-  }, [session, keyPackagePass, keyPackageJson, refreshTiles]);
+  }, [session, userEmail, keyPackagePass, keyPackageJson, refreshTiles]);
 
   const filteredTiles =
     purposeFilter === "all" ? tiles : tiles.filter((tile) => tile.purpose === purposeFilter);

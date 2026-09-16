@@ -225,6 +225,122 @@ describe("publishPgpContentKey", () => {
   });
 });
 
+describe("publishPgpContentKey vault sync", () => {
+  it("uploads the new key as a vault generation, not just to local storage", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.vault.ensureVrk();
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 21,
+      keys: [{ purpose: "signing", key_id: 21 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 33,
+      keys: [{ purpose: "encryption", key_id: 33 }],
+    })) as typeof session.client.publishEncryptionKey;
+
+    let synced = 0;
+    session.client.syncVault = (async () => {
+      synced += 1;
+      return { downloadedGeneration: null, uploaded: {}, generation: 1 };
+    }) as typeof session.client.syncVault;
+
+    const result = await publishPgpContentKey(session, email);
+
+    // Publishing the public artifact puts nothing in `vault_generations` —
+    // the private material only leaves this browser's IndexedDB when a vault
+    // generation is uploaded. Leaving that to a later manual "Sync" click
+    // means a profile reset loses the only copy of the key, and no other
+    // device can read mail sent to it in the meantime.
+    expect(synced).toBe(1);
+    expect(result.vaultSynced).toBe(true);
+  });
+
+  it("reports, rather than throws, when the vault upload fails", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.vault.ensureVrk();
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 21,
+      keys: [{ purpose: "signing", key_id: 21 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 33,
+      keys: [{ purpose: "encryption", key_id: 33 }],
+    })) as typeof session.client.publishEncryptionKey;
+    session.client.syncVault = (async () => {
+      throw new Error("device_not_authorized");
+    }) as typeof session.client.syncVault;
+
+    // The artifact is already published and the key is already in local
+    // storage — throwing here would report a key that genuinely exists as
+    // not created. The caller is told it is local-only instead.
+    const result = await publishPgpContentKey(session, email);
+
+    expect(result.generated).toBe(true);
+    expect(result.vaultSynced).toBe(false);
+    expect(result.vaultSyncError).toContain("device_not_authorized");
+    expect(session.vault.getCurrentKey("encryption")?.private_material).toBeTruthy();
+  });
+
+  it("does not mint a Vault Root Key for a device waiting to be paired", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 21,
+      keys: [{ purpose: "signing", key_id: 21 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 33,
+      keys: [{ purpose: "encryption", key_id: 33 }],
+    })) as typeof session.client.publishEncryptionKey;
+    let synced = 0;
+    session.client.syncVault = (async () => {
+      synced += 1;
+      return { downloadedGeneration: null, uploaded: {}, generation: 1 };
+    }) as typeof session.client.syncVault;
+
+    // The server already has generations this device cannot decrypt, so it is
+    // waiting to be paired, not establishing the identity.
+    session.vault.generation = 4;
+
+    const result = await publishPgpContentKey(session, email);
+
+    // Minting a VRK here would fork the vault: this device would try to
+    // upload a generation nobody else can decrypt, and could not read the
+    // existing ones.
+    expect(synced).toBe(0);
+    expect(session.vault.vrk).toBeNull();
+    expect(result.vaultSynced).toBe(false);
+  });
+
+  it("establishes the first generation when this is the identity's only device", async () => {
+    const email = "alice@example.com";
+    const session = await buildSession(email);
+    session.client.setSigningKeyWithProof = (async () => ({
+      key_id: 21,
+      keys: [{ purpose: "signing", key_id: 21 }],
+    })) as typeof session.client.setSigningKeyWithProof;
+    session.client.publishEncryptionKey = (async () => ({
+      key_id: 33,
+      keys: [{ purpose: "encryption", key_id: 33 }],
+    })) as typeof session.client.publishEncryptionKey;
+    let synced = 0;
+    session.client.syncVault = (async () => {
+      synced += 1;
+      return { downloadedGeneration: null, uploaded: {}, generation: 1 };
+    }) as typeof session.client.syncVault;
+
+    // Genesis: no VRK yet and nothing on the server. Refusing to sync here is
+    // what left a device that later pairs with this one downloading an empty
+    // vault — no keys.
+    const result = await publishPgpContentKey(session, email);
+
+    expect(synced).toBe(1);
+    expect(result.vaultSynced).toBe(true);
+  });
+});
+
 describe("recovery code", () => {
   it("checkRecoveryEnvelope delegates to client.hasRecoveryEnvelope", async () => {
     const email = "alice@example.com";

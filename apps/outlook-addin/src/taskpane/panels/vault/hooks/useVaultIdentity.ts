@@ -310,12 +310,20 @@ export function useVaultIdentity(
       setBusy(true);
       setStatusMessage(null);
       try {
-        await publishPgpContentKey(session, userEmail, purposes, algorithm);
+        const published = await publishPgpContentKey(session, userEmail, purposes, algorithm);
         if (!purposes || purposes.includes("encryption")) setHasPgp(true);
+        const what = !purposes
+          ? "OpenPGP encryption and signing keys"
+          : `OpenPGP ${purposes.join(" and ")} key`;
         setStatusMessage(
-          !purposes
-            ? "OpenPGP encryption and signing keys published to the directory."
-            : `OpenPGP ${purposes.join(" and ")} key published to the directory.`,
+          published.vaultSynced
+            ? `${what} published to the directory and synchronized to your Vault.`
+            : // The key exists and is published, but its private half has not
+              // left this device — say so rather than implying it is safe on
+              // the identity's other devices.
+              `${what} published to the directory, but not yet synchronized to your Vault` +
+              `${published.vaultSyncError ? `: ${published.vaultSyncError}` : ""}. ` +
+              `This device holds the only copy — use Sync with Scomm.AI.`,
         );
         setPublishFailed(false);
         return true;

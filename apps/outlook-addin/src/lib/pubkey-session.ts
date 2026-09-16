@@ -9,7 +9,9 @@ import {
   normalizeEmail,
   principalFromEmail,
   unwrapMskWithAek,
+  wrapMskWithAek,
   type KeyHandle,
+  type MskEnvelope,
 } from "@scomm-office/pubkeys";
 import {
   IndexedDbDeviceIdentityStore,
@@ -18,6 +20,7 @@ import {
 } from "@scomm-office/storage";
 import { assertPgpAddon } from "./billing-pgp";
 import { classifyDirectoryKey } from "./directory-key";
+import { errorMessage } from "./error-message";
 import { officeVaultOtpStore } from "./office-session-store";
 import { DEFAULT_SETTINGS, resolvePubkeyWriteBaseUrl } from "./settings";
 
@@ -168,6 +171,52 @@ async function ensureArmedMsk(session: OfficePubkeySession): Promise<KeyHandle> 
   return session.msk;
 }
 
+/** True once this device has seen a generation it could actually decrypt. */
+function hasRemoteGeneration(session: OfficePubkeySession): boolean {
+  return session.vault.generation > 0 || session.vault.lastCiphertextHash != null;
+}
+
+/**
+ * Saves a vault change and publishes it as a generation.
+ *
+ * `vault.persist` writes to this browser's IndexedDB and nothing else — a
+ * change that stops there never reaches the identity, so the user's other
+ * devices never see it and clearing the Office profile destroys it. Every
+ * local vault write goes through here so that cannot be forgotten one call
+ * site at a time.
+ *
+ * Local first, so a failed upload can never lose the change. Never throws:
+ * by the time this runs the change is already made and saved, so whether an
+ * unpublished change is fatal is the caller's call, not this helper's.
+ */
+async function persistAndPublishVault(
+  session: OfficePubkeySession,
+  email: string,
+): Promise<{ synced: boolean; error?: string }> {
+  const secret = await ensureDeviceSecret(session);
+  await session.vault.persist(secret);
+  // No Vault Root Key means one of two opposite things. This may be the
+  // identity's *first* device, which has to mint one and establish
+  // generation 1 — refusing there is what left a later-paired device
+  // downloading an empty vault. Or the server already holds generations this
+  // device cannot decrypt, in which case it is waiting to be paired and
+  // minting a VRK would fork the vault. Only the second must not upload.
+  if (!session.vault.vrk && hasRemoteGeneration(session)) {
+    return { synced: false, error: "This device is not yet added to the Vault." };
+  }
+  try {
+    const msk = await ensureArmedMsk(session);
+    await session.client.syncVault({
+      email: normalizeEmail(email),
+      mskKey: msk,
+      persistSecret: secret,
+    });
+    return { synced: true };
+  } catch (err) {
+    return { synced: false, error: errorMessage(err) };
+  }
+}
+
 export async function restoreOfficeVault(session: OfficePubkeySession): Promise<{
   restored: boolean;
   hasPgp: boolean;
@@ -186,6 +235,42 @@ export async function restoreOfficeVault(session: OfficePubkeySession): Promise<
     restored: Boolean(session.msk),
     hasPgp: vaultHasPgpEncryptionKey(session),
   };
+}
+
+/**
+ * Makes sure this device holds an Authority Encryption Key, wrapping the MSK
+ * under it. Returns false when it cannot.
+ *
+ * The MSK must live in the vault wrapped, never raw. VRK alone is the
+ * "limited" tier: a device granted only VRK reads content without gaining
+ * signing authority. An unwrapped MSK in the vault plaintext collapses that —
+ * any paired device can lift full authority out of it — and leaves this
+ * device with no AEK to hand over, so a peer that asks for the "full" tier
+ * pairs as limited and then dies on its first vault mutation with
+ * device_not_authorized.
+ *
+ * Runs on every approval, not just at registration: an install that
+ * registered before the vault carried an AEK still holds the legacy
+ * unwrapped envelope, and would otherwise never be able to grant full
+ * authority to anything, ever. The raw bytes are read from that envelope
+ * rather than re-exported from the live handle, which is imported
+ * non-extractable.
+ */
+async function ensureAuthorityKey(session: OfficePubkeySession): Promise<boolean> {
+  if (session.vault.aek) return true;
+  const envelope = (session.vault.getMsk() as { envelope?: MskEnvelope } | null)?.envelope;
+  // A wrapped envelope with no AEK on hand means this device is itself
+  // limited tier — it has nothing to grant and nothing to upgrade.
+  if (!envelope?.encrypted_msk || envelope.iv) return false;
+  const aek = session.crypto.random(32);
+  const wrapped = await wrapMskWithAek(
+    session.crypto,
+    aek,
+    decodeBase64Url(String(envelope.encrypted_msk)),
+  );
+  session.vault.aek = aek;
+  session.vault.setMskEnvelope({ ...envelope, ...wrapped });
+  return true;
 }
 
 export async function persistMsk(session: OfficePubkeySession, email: string): Promise<void> {
@@ -213,9 +298,13 @@ export async function persistMsk(session: OfficePubkeySession, email: string): P
     wraps: [],
     revoked_device_ids: [],
   });
-  await session.vault.persist(secret);
+  await ensureAuthorityKey(session);
   session.msk = msk;
   session.pendingMsk = null;
+  // Genesis. Until this lands, the identity has no vault generation at all —
+  // a device that pairs with this one downloads nothing and ends up with no
+  // keys and no MSK envelope to recover signing authority from.
+  await persistAndPublishVault(session, email);
 }
 
 const PENDING_OTP_KEY = "vault-pending-otp";
@@ -325,13 +414,27 @@ const DEFAULT_PGP_ALGORITHM: PgpKeyAlgorithm = "openpgp-cv25519";
  * `encryption` (challenge-response PoP). Defaults to both for callers that
  * don't care (e.g. "repair directory keys"); the guided setup flow passes a
  * single purpose so only the key the user actually chose gets uploaded.
+ *
+ * Publishing an artifact registers only the *public* half, in
+ * `public_key_artifacts`. The private material reaches the identity — and
+ * therefore the user's other devices — only as a vault generation, so this
+ * uploads one as part of the same action (secMail10 does the same: one user
+ * action, one generation). Left to a later manual "Sync with Scomm.AI"
+ * click, the only copy of a freshly created key lives in this browser's
+ * IndexedDB, where clearing the Office profile destroys it and no other
+ * device can read mail sent to it meanwhile.
+ *
+ * `vaultSynced` reports whether that upload happened. It is not fatal when
+ * it doesn't: by then the artifact is published and the key is in local
+ * storage, so throwing would report a key that genuinely exists as not
+ * created. The caller shows the key as local-only instead.
  */
 export async function publishPgpContentKey(
   session: OfficePubkeySession,
   email: string,
   purposes: PgpKeyPurpose[] = BOTH_PGP_PURPOSES,
   algorithm: PgpKeyAlgorithm = DEFAULT_PGP_ALGORITHM,
-): Promise<{ generated: boolean }> {
+): Promise<{ generated: boolean; vaultSynced: boolean; vaultSyncError?: string }> {
   await assertPgpAddon();
   const msk = session.msk;
   if (!msk) {
@@ -435,6 +538,19 @@ export async function publishPgpContentKey(
   // different algorithm (e.g. adding a PQC key alongside an existing
   // classical one) must land in its own entry, not overwrite the mismatched
   // one that getCurrentKey() would return.
+  // Publishing an encryption artifact *is* promotion here: the server's
+  // set_encryption_key zeroes any older active encryption artifact, so from
+  // this moment new senders get this key. Recording that in the vault's own
+  // pointer is what stops secMail10 offering "Make active" for a key that is
+  // already the advertised one. Office has no separate publish-without-
+  // advertising step, so there is nothing else this could mean.
+  if (publishEncryption && encryptionKeyId) {
+    session.vault.currentEncryptionKeyId = String(encryptionKeyId);
+  }
+  if (publishSigning && signingKeyId) {
+    session.vault.currentSigningKeyId = String(signingKeyId);
+  }
+
   const currentEntry = session.vault.getKeyByFingerprint(fingerprint);
   if (!currentEntry) {
     session.vault.addKey({
@@ -454,9 +570,8 @@ export async function publishPgpContentKey(
     currentEntry.key_id = encryptionKeyId;
   }
 
-  const secret = await ensureDeviceSecret(session);
-  await session.vault.persist(secret);
-  return { generated };
+  const published = await persistAndPublishVault(session, email);
+  return { generated, vaultSynced: published.synced, vaultSyncError: published.error };
 }
 
 export function vaultPgpPrivateKeys(session: OfficePubkeySession): Uint8Array[] {
@@ -486,14 +601,14 @@ export async function exportVaultBackup(
 
 export async function importVaultBackup(
   session: OfficePubkeySession,
+  email: string,
   serialized: string,
   passphrase: string,
 ): Promise<void> {
   const record = JSON.parse(serialized) as unknown;
   await session.vault.importVault(record, passphrase);
-  const secret = await ensureDeviceSecret(session);
-  await session.vault.persist(secret);
   await importMskFromVault(session);
+  await persistAndPublishVault(session, email);
 }
 
 export function listVaultTiles(session: OfficePubkeySession) {
@@ -516,6 +631,7 @@ export async function exportKeyPackageBackup(
 
 export async function importKeyPackageBackup(
   session: OfficePubkeySession,
+  email: string,
   serialized: string,
   passphrase: string,
 ): Promise<void> {
@@ -525,8 +641,9 @@ export async function importKeyPackageBackup(
   }
   const record = JSON.parse(serialized) as Record<string, unknown>;
   await session.vault.importKeyPackage(record, passphrase);
-  const secret = await ensureDeviceSecret(session);
-  await session.vault.persist(secret);
+  // Same as creating a key: an imported key that never leaves IndexedDB is
+  // invisible to every other device and dies with the Office profile.
+  await persistAndPublishVault(session, email);
 }
 
 export async function fetchVaultInventory(session: OfficePubkeySession, email: string) {
@@ -584,7 +701,17 @@ export interface VaultDevice {
   active: boolean;
 }
 
-/** Devices authorized to hold this identity's keys. See Settings → Devices. */
+/**
+ * Devices authorized to hold this identity's keys. See Settings → Devices.
+ *
+ * Two registries, deliberately: `listDevices` reads the server's
+ * `authorized_devices` table, which only the MSK-proof-of-possession
+ * enrollment flow writes — pairing never touches it (a documented gap in the
+ * pubkey repo's mutateService.ts). A device that joined by pairing exists
+ * only in the vault's own encrypted `metadata.devices`, which the server
+ * structurally cannot read. Listing just the server table therefore hid every
+ * paired device, including one this very add-in had approved.
+ */
 export async function listVaultDevices(
   session: OfficePubkeySession,
   email: string,
@@ -594,11 +721,22 @@ export async function listVaultDevices(
     email: normalizeEmail(email),
     mskKey: msk,
   })) as { devices?: Array<{ device_id: string; active: boolean; device_name?: string }> };
-  return (listed.devices ?? []).map((device) => ({
+  const devices = (listed.devices ?? []).map((device) => ({
     deviceId: device.device_id,
     name: device.device_name || device.device_id,
     active: device.active,
   }));
+  const seen = new Set(devices.map((device) => device.deviceId));
+  for (const raw of session.vault.unlocked ? session.vault.devices : []) {
+    const entry = raw as { device_id?: string; name?: string };
+    if (!entry.device_id || seen.has(entry.device_id)) continue;
+    devices.push({
+      deviceId: entry.device_id,
+      name: entry.name || entry.device_id,
+      active: true,
+    });
+  }
+  return devices;
 }
 
 /**
@@ -691,17 +829,62 @@ export async function approveDevicePairing(
   const status = (await session.client.getPairingSession({
     sessionId,
     emailSha256: sha256,
-  })) as { b_ephemeral_public_key?: Uint8Array | string };
+  })) as {
+    b_ephemeral_public_key?: Uint8Array | string;
+    b_device_id?: string;
+    device_name?: string;
+    requested_tier?: string;
+  };
   if (!status.b_ephemeral_public_key) {
     throw new Error("No pairing request found for that code. Ask for a fresh code.");
   }
+  // Honour the tier the peer asked for. Authority is the AEK: without it a
+  // "full" request pairs as read-only and the peer fails on its first vault
+  // mutation; with it handed out unasked, a "limited" request silently gets
+  // signing authority it never requested.
+  const wantsFullAuthority = (status.requested_tier ?? "limited") === "full";
+  if (wantsFullAuthority) await ensureAuthorityKey(session);
   await session.client.respondToPairingSession({
     email: canonical,
     sessionId,
     peerEphemeralPublicKey: status.b_ephemeral_public_key,
     vrk: session.vault.ensureVrk(),
-    aek: session.vault.aek ?? undefined,
+    aek: wantsFullAuthority ? (session.vault.aek ?? undefined) : undefined,
   });
+
+  // Handing over the VRK is only half of pairing. The new device pairs in
+  // order to *download* the vault, so a generation has to exist — and the
+  // roster it joins has to say it does.
+  //
+  // Pairing never populates the server's `authorized_devices` table (a
+  // documented gap in the pubkey repo's mutateService.ts): the vault's own
+  // `metadata.devices` is the only place a paired device is ever recorded.
+  // Registering it here and uploading in the same step is also what makes
+  // the just-minted VRK durable — left in memory, the next reload mints a
+  // different one and this device can no longer read the vault it gave away.
+  if (status.b_device_id) {
+    session.vault.devices = [
+      ...session.vault.devices.filter(
+        (device) => (device as { device_id?: string }).device_id !== status.b_device_id,
+      ),
+      {
+        device_id: status.b_device_id,
+        name: status.device_name || "Paired device",
+        tier: status.requested_tier || "limited",
+        added_at: Date.now(),
+      },
+    ];
+  }
+  // Upload now rather than after waiting for the peer to confirm retrieval:
+  // the peer downloads the vault the moment it unwraps the envelope, so a
+  // generation published later than that is a generation it never sees.
+  const published = await persistAndPublishVault(session, canonical);
+  if (!published.synced) {
+    // Unlike the other callers, an unpublished change here makes the whole
+    // action pointless: the peer now holds a key to a vault that was never
+    // put anywhere it can read.
+    throw new Error(`Device approved, but the Vault could not be published: ${published.error}`);
+  }
 }
 
 // CKVF spec §9b recovery-code recovery. Distinct from both device pairing

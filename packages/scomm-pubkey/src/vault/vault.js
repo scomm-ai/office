@@ -7,6 +7,7 @@ import {
 	encodeBase64Url,
 	decodeBase64Url,
 	formatLocator,
+	normalizeHex,
 	KEY_PACKAGE_KIND,
 	KEY_PACKAGE_VERSION,
 	VAULT_WRAP_VERSION_V1,
@@ -30,6 +31,36 @@ function cloneEntry(entry) {
 
 function fingerprintOf(entry) {
 	return entry.fingerprint || "";
+}
+
+/** Low 64 bits of an OpenPGP fingerprint — the key id. */
+const OPENPGP_KEY_ID_HEX_LEN = 16;
+
+/**
+ * Whether two fingerprints name the same key.
+ *
+ * Clients disagree on how much of it to keep: office stores the full v4
+ * fingerprint, secMail10 stores only the key id (the low 64 bits) — the same
+ * key, written two ways. An exact-string comparison let both spellings into
+ * the vault as separate entries, so one key showed up twice on every client
+ * that read it back.
+ *
+ * So: equal after stripping separators and case, or one is a suffix of the
+ * other and the shorter is a full key id. Anything shorter than that is too
+ * weak to identify a key and only matches exactly. Non-hex fingerprints
+ * (S/MIME digests, test fixtures) normalize to empty and fall back to the
+ * exact match, unchanged.
+ */
+function sameFingerprint(a, b) {
+	if (a === b) return true;
+	const left = normalizeHex(a);
+	const right = normalizeHex(b);
+	const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
+	// Below a full key id there is not enough here to identify a key, and
+	// stripping non-hex characters out of two unrelated labels can easily
+	// leave the same few digits behind. Exact string equality only.
+	if (shorter.length < OPENPGP_KEY_ID_HEX_LEN) return false;
+	return longer.endsWith(shorter);
 }
 
 function samePrivate(a, b) {
@@ -74,6 +105,33 @@ function statusFromSpec(status) {
 
 function idOf(entry) {
 	return String(entry.key_id ?? entry.fingerprint ?? entry.locator ?? "");
+}
+
+/**
+ * Key ids travel through the vault plaintext as strings — every `key_id` /
+ * `cert_id` in the arrays above goes through `idOf`, and secMail10 reads
+ * `current_signing_key_id`/`current_encryption_key_id` with a `String?` cast
+ * (`vault.dart`'s `_applyPlaintextBytes`). A JSON number there makes that
+ * cast throw, and since generations are immutable and never deleted, the bad
+ * generation stays current — secMail10 can then neither read the vault nor
+ * upload a replacement.
+ */
+function keyIdPointer(value) {
+	if (value == null || value === "") return null;
+	return String(value);
+}
+
+/**
+ * `retired`/`revoked` are terminal: a key only ever leaves `active`, never
+ * returns to it. So a remote snapshot may move a local entry *into* a
+ * terminal state (the user deleted the key on another device), and `revoked`
+ * may supersede `retired` (an ordinary retirement later turns out to be a
+ * compromise), but nothing may take an entry back to `active`.
+ */
+function resolveStatus(existing, incoming) {
+	if (incoming === "revoked") return "revoked";
+	if (incoming === "retired" && existing === "active") return "retired";
+	return existing;
 }
 
 function openPgpKeyToJson(entry) {
@@ -295,11 +353,27 @@ export class Vault {
 		this.generation = 0;
 		/** @type {Uint8Array | null} */
 		this.lastCiphertextHash = null;
+		// The identity's canonical "which key do new senders see / which key
+		// signs" pointers, and its device roster. Office writes none of these
+		// itself — there is no promote-a-key or pair-a-device flow here — but
+		// it shares one vault document with secMail10, which does. They are
+		// carried through read -> merge -> write unchanged so an office upload
+		// cannot silently erase or rewrite them. Pointers are strings (see
+		// `keyIdPointer`); `null` means "nothing promoted".
+		/** @type {string | null} */
+		this.currentSigningKeyId = null;
+		/** @type {string | null} */
+		this.currentEncryptionKeyId = null;
+		/** @type {object[]} */
+		this.devices = [];
 	}
 
 	async createVault(principal) {
 		this.principal = principal;
 		this.entries = [];
+		this.currentSigningKeyId = null;
+		this.currentEncryptionKeyId = null;
+		this.devices = [];
 		this.mskEnvelope = null;
 		this.vrk = null;
 		this.aek = null;
@@ -356,6 +430,9 @@ export class Vault {
 					: undefined,
 			}));
 		this.mskEnvelope = parsed.msk_envelope ?? null;
+		this.currentSigningKeyId = keyIdPointer(parsed.current_signing_key_id);
+		this.currentEncryptionKeyId = keyIdPointer(parsed.current_encryption_key_id);
+		this.devices = Array.isArray(parsed.metadata?.devices) ? parsed.metadata.devices : [];
 		this.vrk = parsed.vrk ? decodeBase64Url(parsed.vrk) : null;
 		this.aek = parsed.aek ? decodeBase64Url(parsed.aek) : null;
 		this.generation = Number.isInteger(parsed.generation) ? parsed.generation : 0;
@@ -404,6 +481,16 @@ export class Vault {
 		return (
 			this.entries.find((entry) => fingerprintOf(entry) === fingerprint) ?? null
 		);
+	}
+
+	/**
+	 * [getKeyByFingerprint] by key identity rather than by string: finds the
+	 * entry whichever client wrote it and whichever spelling it used. See
+	 * `sameFingerprint`.
+	 */
+	findKeyByFingerprint(fingerprint) {
+		this._requireUnlocked();
+		return this.entries.find((entry) => sameFingerprint(fingerprintOf(entry), fingerprint)) ?? null;
 	}
 
 	getKeysByLocator(locator) {
@@ -460,13 +547,24 @@ export class Vault {
 		}
 		const fp = fingerprintOf(incoming);
 		if (fp) {
-			const existing = this.entries.find((item) => fingerprintOf(item) === fp);
+			const existing = this.entries.find((item) => sameFingerprint(fingerprintOf(item), fp));
 			if (existing) {
 				if (!samePrivate(existing, incoming)) {
 					throw new PubkeyError(
 						ERROR_CODES.vault_integrity,
 						"Vault already has different secret material for this fingerprint",
 					);
+				}
+				// Same material, re-added now carrying facts the stored copy
+				// lacked. `key_id` matters most: an encryption key sits in the
+				// vault unpublished (no server id) until it is published, and
+				// publishing re-adds it with the id the server just minted.
+				// Dropping that left the entry unreachable by `getKey`, so
+				// every later lookup by key id — `retireKey` included — missed
+				// it. Never overwrite an id already present: a *different* id
+				// for the same material is a conflict, not new information.
+				if (existing.key_id == null && incoming.key_id != null) {
+					existing.key_id = incoming.key_id;
 				}
 				if (!existing.locator && incoming.locator) existing.locator = incoming.locator;
 				if (!existing.locators && incoming.locators) {
@@ -485,8 +583,24 @@ export class Vault {
 		const entry = this.getKey(keyId);
 		if (!entry) return null;
 		entry.status = "retired";
+		this._clearPointersTo(entry);
 		this.updatedAt = nowMs();
 		return entry;
+	}
+
+	/**
+	 * Drops a canonical pointer that names `entry`. The pointers mean "the key
+	 * this identity advertises *now*", so they are only meaningful while their
+	 * target is active — a retired artifact is not discoverable, so claiming it
+	 * is advertised is simply false. Cleared, never re-pointed: choosing a
+	 * replacement is an explicit, user-confirmed promotion, so electing one
+	 * here would advertise a key nobody picked.
+	 */
+	_clearPointersTo(entry) {
+		const id = keyIdPointer(entry?.key_id);
+		if (id == null) return;
+		if (this.currentSigningKeyId === id) this.currentSigningKeyId = null;
+		if (this.currentEncryptionKeyId === id) this.currentEncryptionKeyId = null;
 	}
 
 	merge(other) {
@@ -511,6 +625,11 @@ export class Vault {
 			last_ciphertext_hash: this.lastCiphertextHash
 				? encodeBase64Url(this.lastCiphertextHash)
 				: undefined,
+			// Persisted locally too: a restart that forgot these would upload
+			// nulls on the next sync and wipe them for every other device.
+			current_signing_key_id: keyIdPointer(this.currentSigningKeyId),
+			current_encryption_key_id: keyIdPointer(this.currentEncryptionKeyId),
+			metadata: { devices: this.devices ?? [] },
 			entries: this.entries.map((entry) => ({
 				...entry,
 				private_material: entry.private_material
@@ -557,11 +676,19 @@ export class Vault {
 			principal: this.principal,
 			created_at: this.createdAt,
 			updated_at: this.updatedAt,
-			current_signing_key_id: this.getCurrentKey?.("signing")?.key_id ?? null,
-			current_encryption_key_id: this.getCurrentKey?.("encryption")?.key_id ?? null,
+			// Carried through from whatever the last download said, never
+			// derived. Deriving them (e.g. "the highest active key id") would
+			// silently advertise a key the user never promoted and overwrite
+			// the one they did — promotion is an explicit, user-confirmed act.
+			current_signing_key_id: keyIdPointer(this.currentSigningKeyId),
+			current_encryption_key_id: keyIdPointer(this.currentEncryptionKeyId),
 			msk_envelope: this.mskEnvelope,
 			...entriesToPlaintextArrays(this.entries),
-			metadata: { devices: [] },
+			// Office registers no devices of its own, but secMail10 branches
+			// its device-compromise response on this roster — uploading an
+			// empty list makes it believe this is the identity's only
+			// full-authority device and route the user into OTP-only recovery.
+			metadata: { devices: this.devices ?? [] },
 		};
 		const { iv, ciphertext } = await this.crypto.encryptAead(
 			vrk,
@@ -604,11 +731,15 @@ export class Vault {
 							? decodeBase64Url(entry.private_material)
 							: undefined,
 					}));
+		const metadataDevices = parsed.metadata?.devices;
 		return {
 			principal: parsed.principal,
 			createdAt: parsed.created_at,
 			updatedAt: parsed.updated_at,
 			mskEnvelope: parsed.msk_envelope ?? null,
+			currentSigningKeyId: keyIdPointer(parsed.current_signing_key_id),
+			currentEncryptionKeyId: keyIdPointer(parsed.current_encryption_key_id),
+			devices: Array.isArray(metadataDevices) ? metadataDevices : [],
 			entries,
 		};
 	}
@@ -630,8 +761,23 @@ export class Vault {
 			this.mskEnvelope = snapshot.mskEnvelope;
 		}
 		for (const entry of snapshot.entries ?? []) {
-			this.addKey(entry);
+			const stored = this.addKey(entry);
+			// `addKey` dedupes by fingerprint and returns the copy already
+			// held, unchanged — so without this, a key retired on another
+			// device stayed `active` here *and* got re-uploaded as active,
+			// resurrecting a key the user had deleted.
+			if (stored) stored.status = resolveStatus(stored.status, entry.status);
 		}
+		// The identity's own cross-device record, not this device's opinion:
+		// adopt what the snapshot says rather than merging or keeping a stale
+		// local copy. A `null` pointer is a real value ("nothing promoted").
+		if ("currentSigningKeyId" in snapshot) {
+			this.currentSigningKeyId = keyIdPointer(snapshot.currentSigningKeyId);
+		}
+		if ("currentEncryptionKeyId" in snapshot) {
+			this.currentEncryptionKeyId = keyIdPointer(snapshot.currentEncryptionKeyId);
+		}
+		if (Array.isArray(snapshot.devices)) this.devices = snapshot.devices;
 		this.updatedAt = nowMs();
 	}
 

@@ -45,7 +45,7 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
   const identity = useVaultIdentity(session, userEmail, settings.billingOrigin);
   const devices = useVaultDevices(session, userEmail);
   const keys = useVaultKeys(session, userEmail);
-  const backup = useVaultBackup(session, () => identity.refreshFromVault());
+  const backup = useVaultBackup(session, userEmail, () => identity.refreshFromVault());
 
   const composeMode = message?.mode === "compose" || isMockHost;
   const { route, canBack, nav, back } = useVaultRoute(composeMode ? "compose" : "read");
