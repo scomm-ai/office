@@ -66,10 +66,10 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     flexShrink: 0,
   },
-  backRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: tokens.spacingHorizontalXS,
+  backButton: {
+    alignSelf: "flex-start",
+    paddingLeft: tokens.spacingHorizontalXS,
+    color: tokens.colorNeutralForeground2,
   },
 });
 
@@ -84,18 +84,18 @@ export function SettingsPanel() {
   const [subpage, setSubpage] = useState<SettingsEntryId | null>(null);
 
   if (subpage) {
-    const entry = ENTRIES.find((e) => e.id === subpage);
+    // No title here - each panel below already renders its own PageTitle,
+    // so this stays a plain back control instead of a duplicate heading.
     return (
       <>
-        <div className={localStyles.backRow}>
-          <Button
-            appearance="transparent"
-            icon={<ArrowLeft24Regular />}
-            onClick={() => setSubpage(null)}
-            aria-label="Back to Settings"
-          />
-          <PageTitle title={entry?.label ?? "Settings"} />
-        </div>
+        <Button
+          appearance="transparent"
+          icon={<ArrowLeft24Regular />}
+          onClick={() => setSubpage(null)}
+          className={localStyles.backButton}
+        >
+          Settings
+        </Button>
         {subpage === "account" ? <AccountBillingPanel /> : null}
         {subpage === "compliance" ? <CompliancePanel /> : null}
         {subpage === "diagnostics" ? <DiagnosticsPanel /> : null}
