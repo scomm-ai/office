@@ -20,7 +20,6 @@ import { isOutlookMailboxSession } from "../lib/office-ready";
 import { readTaskPaneLaunch } from "../lib/taskpane-launch";
 import { Navigation, type NavModule } from "./Navigation";
 import { AccountBillingPanel } from "./panels/AccountBillingPanel";
-import { IdentityPanel } from "./panels/IdentityPanel";
 import { VaultPanel } from "./panels/vault/VaultPanel";
 import { CompliancePanel } from "./panels/CompliancePanel";
 import { IdrPanel } from "./panels/IdrPanel";
@@ -329,8 +328,7 @@ export function App() {
         <Navigation active={activeModule} onChange={setActiveModule} />
         <main className={styles.panel}>
           {activeModule === "account" ? <AccountBillingPanel /> : null}
-          {activeModule === "identity" ? <IdentityPanel /> : null}
-          {activeModule === "security" || activeModule === "message" ? (
+          {activeModule === "security" || activeModule === "message" || activeModule === "identity" ? (
             <VaultPanel launchAction={launch.action} />
           ) : null}
           {activeModule === "compliance" ? <CompliancePanel /> : null}

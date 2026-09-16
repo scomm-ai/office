@@ -1,15 +1,10 @@
 import type { JSX } from "react";
 import { Button, tokens } from "@fluentui/react-components";
-import {
-  Person24Regular,
-  Settings24Regular,
-  ShieldKeyhole24Regular,
-  Sparkle24Regular,
-} from "@fluentui/react-icons";
+import { Settings24Regular, ShieldKeyhole24Regular, Sparkle24Regular } from "@fluentui/react-icons";
 import { usePaneStyles } from "./ui/layout";
 
-// "message" is kept only so an old ?module=message deep link still resolves
-// (readTaskPaneLaunch) - it no longer has a screen or a nav button.
+// "message" and "identity" are kept only so old ?module=... deep links still
+// resolve (readTaskPaneLaunch) - neither has a screen or a nav button anymore.
 export type NavModule =
   | "message"
   | "account"
@@ -28,7 +23,6 @@ export type NavModule =
 const SETTINGS_GROUP: ReadonlySet<NavModule> = new Set(["settings", "account", "compliance", "diagnostics"]);
 
 const PRIMARY_MODULES: Array<{ id: NavModule; label: string; icon: JSX.Element }> = [
-  { id: "identity", label: "Identity", icon: <Person24Regular /> },
   { id: "security", label: "Security", icon: <ShieldKeyhole24Regular /> },
   { id: "ai", label: "AI", icon: <Sparkle24Regular /> },
   { id: "settings", label: "Settings", icon: <Settings24Regular /> },
@@ -43,9 +37,16 @@ export function Navigation({ active, onChange }: NavigationProps) {
   const styles = usePaneStyles();
   // "idr" folds into the AI tab's advanced section; anything in the Settings
   // group (including its sub-pages) reads as the Settings tab being active;
-  // "message" no longer has a screen of its own, so it reads as Security.
+  // "message"/"identity" no longer have a screen of their own, so both read
+  // as Security.
   const effectiveActive =
-    active === "idr" ? "ai" : active === "message" ? "security" : SETTINGS_GROUP.has(active) ? "settings" : active;
+    active === "idr"
+      ? "ai"
+      : active === "message" || active === "identity"
+        ? "security"
+        : SETTINGS_GROUP.has(active)
+          ? "settings"
+          : active;
 
   return (
     <nav className={styles.nav} aria-label="SComm modules">
