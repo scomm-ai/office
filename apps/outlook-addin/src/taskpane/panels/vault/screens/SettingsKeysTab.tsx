@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Add16Regular } from "@fluentui/react-icons";
 import {
   Button,
   Field,
@@ -70,10 +71,11 @@ export function SettingsKeysTab({
       <Button
         appearance="transparent"
         size="small"
+        icon={<Add16Regular />}
         onClick={onCreateKey}
         className={secStyles.linkButton}
       >
-        + Create another key
+        Create another key
       </Button>
       <Note>Keys are stored in your encrypted vault and shared with your approved devices only.</Note>
 

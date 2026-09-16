@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { ArrowLeft20Regular, Settings20Regular } from "@fluentui/react-icons";
 import { ProductionPubkeyDirectory } from "@scomm-office/pubkeys";
 import { useHostContext } from "../../../lib/host-context";
 import { resolvePubkeyReadBaseUrl, resolvePubkeyWriteBaseUrl } from "../../../lib/settings";
@@ -85,15 +86,23 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
     <div className={secStyles.screen}>
       <div className={secStyles.header}>
         {canBack ? (
-          <Button appearance="transparent" className={secStyles.iconButton} onClick={back} aria-label="Back">
-            ←
-          </Button>
+          <Button
+            appearance="transparent"
+            className={secStyles.iconButton}
+            icon={<ArrowLeft20Regular />}
+            onClick={back}
+            aria-label="Back"
+          />
         ) : null}
         <span className={secStyles.headerTitle}>{title}</span>
         {route === "read" || route === "compose" ? (
-          <Button appearance="transparent" className={secStyles.iconButton} onClick={() => nav("settings")} aria-label="Settings">
-            ⚙
-          </Button>
+          <Button
+            appearance="transparent"
+            className={secStyles.iconButton}
+            icon={<Settings20Regular />}
+            onClick={() => nav("settings")}
+            aria-label="Settings"
+          />
         ) : null}
       </div>
 
