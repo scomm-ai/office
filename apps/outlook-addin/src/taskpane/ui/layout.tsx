@@ -14,6 +14,7 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
+import { SCOMM_DOWNLOAD_URL } from "../../lib/settings";
 
 /** Task-pane layout tokens (shell, nav, form rows). */
 export const usePaneStyles = makeStyles({
@@ -111,6 +112,29 @@ export const usePaneStyles = makeStyles({
     flexDirection: "column",
     gap: tokens.spacingVerticalXS,
   },
+  footer: {
+    flexShrink: 0,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalM}`,
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: tokens.colorNeutralStroke2,
+    backgroundColor: tokens.colorNeutralBackground1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacingHorizontalXXS,
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground3,
+  },
+  footerLink: {
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorBrandForeground1,
+    textDecorationLine: "none",
+    ":hover": {
+      textDecorationLine: "underline",
+    },
+  },
 });
 
 /** Pane title plus optional muted description. */
@@ -185,6 +209,24 @@ export function StatusBadge({
     <Badge appearance="filled" color={color} size="small">
       {children}
     </Badge>
+  );
+}
+
+/** Always-visible strip pointing at the native app; the same on every screen. */
+export function PaneFooter() {
+  const styles = usePaneStyles();
+  return (
+    <div className={styles.footer}>
+      <span>Want the full experience?</span>
+      <a
+        className={styles.footerLink}
+        href={SCOMM_DOWNLOAD_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Download Scomm.AI
+      </a>
+    </div>
   );
 }
 

@@ -133,6 +133,9 @@ export const PRODUCTION_PUBKEY_ORIGIN = "https://discovery.scomm.ai";
 /** Native Scomm.AI app - the full mail client with vault/key/identity management. */
 export const SCOMM_APP_URL = "https://app.scomm.ai";
 
+/** Marketing/download page, linked from the task pane's persistent footer. */
+export const SCOMM_DOWNLOAD_URL = "https://www.scomm.ai/";
+
 /**
  * True for localhost / loopback hosts, including IPv6 (`::1`) used by some WebViews.
  */

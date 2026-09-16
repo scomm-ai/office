@@ -19,7 +19,6 @@ import { DEFAULT_SETTINGS, loadSettingsFromStorage, saveSettingsToStorage } from
 import { isOutlookMailboxSession } from "../lib/office-ready";
 import { readTaskPaneLaunch } from "../lib/taskpane-launch";
 import { Navigation, type NavModule } from "./Navigation";
-import { MessagePanel } from "./panels/MessagePanel";
 import { AccountBillingPanel } from "./panels/AccountBillingPanel";
 import { IdentityPanel } from "./panels/IdentityPanel";
 import { VaultPanel } from "./panels/vault/VaultPanel";
@@ -29,7 +28,7 @@ import { AiSettingsPanel } from "./panels/AiSettingsPanel";
 import { DiagnosticsPanel } from "./panels/DiagnosticsPanel";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import { MessageBar, MessageBarBody, Spinner, Text, Title3 } from "@fluentui/react-components";
-import { usePaneStyles } from "./ui/layout";
+import { PaneFooter, usePaneStyles } from "./ui/layout";
 
 const settingsStore = new MemoryUserSettingsStore<ResolvedConfiguration>();
 
@@ -60,7 +59,7 @@ async function bootstrapHost(): Promise<{
 
       // Graph submission requires auth (NAA, falling back to popup); it's also
       // our fallback for user email. Interactive auth is deferred to the actual
-      // send (a real button click) â€” never triggered here at boot, since a
+      // send (a real button click) never triggered here at boot, since a
       // background/init popup attempt would just get blocked by the browser.
       let graphSubmissionAdapter: GraphSubmissionAdapter | null = null;
       const graphDiagnostics: GraphDiagnostics = {
@@ -73,7 +72,7 @@ async function bootstrapHost(): Promise<{
         graphSubmissionAdapter = new GraphSubmissionAdapter(new HttpMicrosoftGraphClient(identity));
 
         // Silent-only best-effort: only succeeds if a session is already
-        // cached (e.g. NAA SSO through the host) â€” never prompts.
+        // cached (e.g. NAA SSO through the host) never prompts.
         const user = await identity.trySilentUser();
         if (user && !userEmail) {
           userEmail = user.mail ?? user.userPrincipalName ?? undefined;
@@ -91,7 +90,7 @@ async function bootstrapHost(): Promise<{
         graphDiagnostics,
       };
     }
-    // Not an Outlook mailbox session â€” office.js loaded standalone outside any
+    // Not an Outlook mailbox session office.js loaded standalone outside any
     // Office host (e.g. a plain browser tab). Fall through to MockMailHost below.
   }
 
@@ -105,7 +104,7 @@ async function bootstrapHost(): Promise<{
 
   const mailHost = new MockMailHost({
     mode: "read",
-    subject: "Mock message â€” browser dev",
+    subject: "Mock message browser dev",
     bodyHtml: simpleFixtureHtml,
     from: { emailAddress: "sender@example.com", displayName: "Sender" },
     to: [{ emailAddress: "muzamiltest9@gmail.com", displayName: "You" }],
@@ -118,7 +117,7 @@ async function bootstrapHost(): Promise<{
     isMockHost: true,
     userEmail: "muzamiltest9@gmail.com",
     graphSubmissionAdapter: null,
-    graphDiagnostics: { clientIdConfigured: false, probedSuccessfully: null, error: "Mock host â€” Graph not applicable." },
+    graphDiagnostics: { clientIdConfigured: false, probedSuccessfully: null, error: "Mock host Graph not applicable." },
   };
 }
 
@@ -126,7 +125,7 @@ export function App() {
   const styles = usePaneStyles();
   const launch = useMemo(() => readTaskPaneLaunch(), []);
   const [ready, setReady] = useState(false);
-  const [activeModule, setActiveModule] = useState<NavModule>(launch.module ?? "message");
+  const [activeModule, setActiveModule] = useState<NavModule>(launch.module ?? "security");
   const [mailHost, setMailHost] = useState<MailHost | null>(null);
   const [capabilities, setCapabilities] = useState(detectOutlookCapabilities());
   const [isMockHost, setIsMockHost] = useState(false);
@@ -153,7 +152,7 @@ export function App() {
       return;
     }
     const next = await mailHost.getCurrentMessage();
-    // TEMP diagnostic â€” remove after item-switch / compose-mode issues are confirmed fixed.
+    // TEMP diagnostic remove after item-switch / compose-mode issues are confirmed fixed.
     console.info("[scomm-temp:refresh-message]", {
       reason,
       id: next.id ?? null,
@@ -297,7 +296,7 @@ export function App() {
   if (!ready) {
     return (
       <div className={styles.panel}>
-        <Spinner size="small" label="Loading Scomm.AIâ€¦" />
+        <Spinner size="small" label="Loading Scomm.AI" />
       </div>
     );
   }
@@ -324,27 +323,23 @@ export function App() {
       <div className={styles.shell}>
         {isMockHost ? (
           <MessageBar intent="warning">
-            <MessageBarBody>Mock host â€” running outside Outlook with a testkit fixture.</MessageBarBody>
+            <MessageBarBody>Mock host running outside Outlook with a testkit fixture.</MessageBarBody>
           </MessageBar>
         ) : null}
-        <header className={styles.header}>
-          <Title3 className={styles.headerTitle}>Scomm.AI</Title3>
-          <Text size={200}>
-            Outlook add-in â€” OpenPGP, discovery.scomm.ai, semantics, and compliance
-          </Text>
-        </header>
         <Navigation active={activeModule} onChange={setActiveModule} />
         <main className={styles.panel}>
-          {activeModule === "message" ? <MessagePanel /> : null}
           {activeModule === "account" ? <AccountBillingPanel /> : null}
           {activeModule === "identity" ? <IdentityPanel /> : null}
-          {activeModule === "security" ? <VaultPanel launchAction={launch.action} /> : null}
+          {activeModule === "security" || activeModule === "message" ? (
+            <VaultPanel launchAction={launch.action} />
+          ) : null}
           {activeModule === "compliance" ? <CompliancePanel /> : null}
           {activeModule === "idr" ? <IdrPanel /> : null}
           {activeModule === "ai" ? <AiSettingsPanel /> : null}
           {activeModule === "diagnostics" ? <DiagnosticsPanel /> : null}
           {activeModule === "settings" ? <SettingsPanel /> : null}
         </main>
+        <PaneFooter />
       </div>
     </HostContext.Provider>
   );
