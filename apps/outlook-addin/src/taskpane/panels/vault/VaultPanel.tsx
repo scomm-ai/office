@@ -21,7 +21,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 
 /**
  * Vault tab: contextual read/compose screens plus a guided setup, device
- * pairing, and recovery flow, and a tabbed Settings (Status/Devices/Keys).
+ * pairing, and recovery flow, and a tabbed Settings (Overview/Devices/Keys).
  * Business logic lives in `lib/pubkey-session.ts` and the `hooks/` in this
  * folder — this component only wires screens to that state.
  */
@@ -50,6 +50,7 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
 
   const composeMode = message?.mode === "compose" || isMockHost;
   const { route, canBack, nav, back } = useVaultRoute(composeMode ? "compose" : "read");
+  const enrolled = identity.status === "verified";
 
   // Follow the mail item's real mode while the user is on a top-level
   // context screen; leave them alone mid setup/pairing/recovery/settings.
@@ -95,7 +96,11 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
           />
         ) : null}
         <span className={secStyles.headerTitle}>{title}</span>
-        {route === "read" || route === "compose" ? (
+        {/* Settings has nothing to manage before there's an identity - showing
+            it next to "Set up your secure vault" reads as a second, competing
+            action. It only appears once the user actually has something
+            configured to manage. */}
+        {(route === "read" || route === "compose") && enrolled ? (
           <Button
             appearance="transparent"
             className={secStyles.iconButton}

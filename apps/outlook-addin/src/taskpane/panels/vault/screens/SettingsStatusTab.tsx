@@ -30,21 +30,13 @@ export function SettingsStatusTab({
             <VaultBadge tone="muted">Not set up on this device</VaultBadge>
           )}
         </div>
-        <div className={secStyles.statusRow}>
+        <div className={secStyles.statusRow} style={{ borderBottom: "none" }}>
           <span className={secStyles.statusLabel}>Mail encryption</span>
           {identity.engineReady ? (
             <VaultBadge tone="ok">OpenPGP</VaultBadge>
           ) : (
             <VaultBadge tone="muted">OpenPGP engine unavailable</VaultBadge>
           )}
-        </div>
-        <div className={secStyles.statusRow}>
-          <span className={secStyles.statusLabel}>Directory</span>
-          <span className={secStyles.statusValue}>{directoryLabel}</span>
-        </div>
-        <div className={secStyles.statusRow} style={{ borderBottom: "none" }}>
-          <span className={secStyles.statusLabel}>Pubkey server</span>
-          <span className={secStyles.statusValue}>{pubkeyBase || "— (set in Settings)"}</span>
         </div>
       </div>
 
@@ -130,6 +122,25 @@ export function SettingsStatusTab({
       ) : null}
 
       {identity.statusMessage ? <Note>{identity.statusMessage}</Note> : null}
+
+      {/* Directory/server endpoints are implementation detail, not something a
+          normal user needs to see to know their mail is protected - kept for
+          troubleshooting, not as part of the primary state. */}
+      <details>
+        <summary style={{ cursor: "pointer", fontSize: tokens.fontSizeBase200, fontWeight: tokens.fontWeightSemibold }}>
+          Advanced details
+        </summary>
+        <div className={styles.stack} style={{ marginTop: tokens.spacingVerticalS }}>
+          <div className={secStyles.statusRow}>
+            <span className={secStyles.statusLabel}>Directory</span>
+            <span className={secStyles.statusValue}>{directoryLabel}</span>
+          </div>
+          <div className={secStyles.statusRow} style={{ borderBottom: "none" }}>
+            <span className={secStyles.statusLabel}>Pubkey server</span>
+            <span className={secStyles.statusValue}>{pubkeyBase || "—"}</span>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

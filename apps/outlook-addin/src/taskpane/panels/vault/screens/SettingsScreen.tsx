@@ -13,7 +13,7 @@ import { tokens } from "@fluentui/react-components";
 type SettingsTab = "status" | "devices" | "keys";
 
 const TABS: Array<{ id: SettingsTab; label: string }> = [
-  { id: "status", label: "Status" },
+  { id: "status", label: "Overview" },
   { id: "devices", label: "Devices" },
   { id: "keys", label: "Keys" },
 ];

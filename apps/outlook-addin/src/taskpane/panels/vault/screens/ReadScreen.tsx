@@ -149,6 +149,24 @@ export function ReadScreen({
     );
   }
 
+  // Configured, but this particular message carries no OpenPGP armor at all -
+  // show the plain state instead of an "Encrypted message" heading with
+  // Decrypt/Verify buttons that would just error on a message that was never
+  // protected in the first place.
+  if (!isEncryptedMessage && !isSignedOnlyMessage) {
+    return (
+      <div className={secStyles.screen}>
+        <div className={secStyles.row}>
+          <span className={secStyles.statusDot} style={{ backgroundColor: tokens.colorNeutralForeground3 }} />
+          <VaultHeading
+            title="Not encrypted"
+            description="This message wasn't protected with Scomm.AI. There's nothing to decrypt or verify here."
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={secStyles.screen}>
       <div className={secStyles.row}>
