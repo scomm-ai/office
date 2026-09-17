@@ -9,6 +9,7 @@ import { Button } from "../../ui/layout";
 import { useVaultStyles } from "./styles";
 import { useVaultRoute } from "./hooks/useVaultRoute";
 import { useVaultIdentity } from "./hooks/useVaultIdentity";
+import { useReadDecryption } from "./hooks/useReadDecryption";
 import { useVaultDevices } from "./hooks/useVaultDevices";
 import { useVaultKeys } from "./hooks/useVaultKeys";
 import { useVaultBackup } from "./hooks/useVaultBackup";
@@ -44,6 +45,7 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
   );
 
   const identity = useVaultIdentity(session, userEmail, settings.billingOrigin);
+  const decryption = useReadDecryption(session, identity, launchAction);
   const devices = useVaultDevices(session, userEmail);
   const keys = useVaultKeys(session, userEmail);
   const backup = useVaultBackup(session, userEmail, () => identity.refreshFromVault());
@@ -112,7 +114,7 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
       </div>
 
       {route === "read" ? (
-        <ReadScreen session={session} identity={identity} launchAction={launchAction} onGoSetup={() => nav("setup")} />
+        <ReadScreen identity={identity} decryption={decryption} onGoSetup={() => nav("setup")} />
       ) : null}
       {route === "compose" ? (
         <ComposeScreen session={session} identity={identity} userEmail={userEmail} onGoSetup={() => nav("setup")} />
@@ -127,6 +129,7 @@ export function VaultPanel({ launchAction = null }: { launchAction?: TaskPaneCry
       {route === "settings" ? (
         <SettingsScreen
           identity={identity}
+          decryption={decryption}
           devices={devices}
           keys={keys}
           backup={backup}

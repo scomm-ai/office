@@ -1,21 +1,26 @@
 import { Button, Note, Textarea, tokens, usePaneStyles } from "../../../ui/layout";
 import { PGP_ADDON_REQUIRED_MESSAGE } from "../../../../lib/billing-pgp";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
+import type { UseReadDecryptionResult } from "../hooks/useReadDecryption";
 import { VaultBadge } from "../VaultBadge";
+import { VaultHeading } from "../VaultHeading";
 import { useVaultStyles } from "../styles";
 
 export function SettingsStatusTab({
   identity,
+  decryption,
   directoryLabel,
   pubkeyBase,
 }: {
   identity: UseVaultIdentityResult;
+  decryption: UseReadDecryptionResult;
   directoryLabel: string;
   pubkeyBase: string;
 }) {
   const styles = usePaneStyles();
   const secStyles = useVaultStyles();
   const verified = identity.status === "verified";
+  const hasCurrentMessage = decryption.isEncryptedMessage || decryption.isSignedOnlyMessage;
 
   return (
     <div className={secStyles.screen}>
@@ -141,6 +146,48 @@ export function SettingsStatusTab({
           </div>
         </div>
       </details>
+
+      {/* Manual decrypt/verify for the message currently open in Outlook -
+          moved here from the main Security screen, which now only shows the
+          read-only outcome (or points here when there's something to do). */}
+      {hasCurrentMessage ? (
+        <div className={styles.stack}>
+          <VaultHeading
+            title={decryption.decryptedBody ? "Decrypted" : "Encrypted message"}
+            description={
+              decryption.decryptedBody
+                ? "Only you can read this. It was encrypted to your key."
+                : "Decrypt and verify stay in this pane so plaintext is not written back to the mailbox."
+            }
+          />
+          {!identity.pgpEntitled ? <Note>{PGP_ADDON_REQUIRED_MESSAGE}</Note> : null}
+          {decryption.attachmentNotice ? <Note>{decryption.attachmentNotice}</Note> : null}
+          <div className={styles.actions}>
+            <Button
+              appearance="primary"
+              size="medium"
+              className={secStyles.actionButton}
+              disabled={decryption.busy || !identity.engineReady}
+              onClick={() => void decryption.handleDecrypt()}
+            >
+              Decrypt message
+            </Button>
+            <Button
+              appearance="secondary"
+              size="medium"
+              className={secStyles.actionButton}
+              disabled={decryption.busy || !identity.engineReady}
+              onClick={() => void decryption.handleVerify()}
+            >
+              Verify signature
+            </Button>
+          </div>
+          {decryption.autoDecryptLocked && !decryption.decryptedBody ? (
+            <Note>This message is encrypted — unlock your Vault to auto-decrypt it.</Note>
+          ) : null}
+          {decryption.mailStatus ? <Note>{decryption.mailStatus}</Note> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

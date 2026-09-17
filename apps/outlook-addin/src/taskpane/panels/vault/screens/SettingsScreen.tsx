@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useVaultStyles } from "../styles";
 import type { UseVaultIdentityResult } from "../hooks/useVaultIdentity";
+import type { UseReadDecryptionResult } from "../hooks/useReadDecryption";
 import type { useVaultDevices } from "../hooks/useVaultDevices";
 import type { useVaultKeys } from "../hooks/useVaultKeys";
 import type { useVaultBackup } from "../hooks/useVaultBackup";
@@ -20,6 +21,7 @@ const TABS: Array<{ id: SettingsTab; label: string }> = [
 
 export function SettingsScreen({
   identity,
+  decryption,
   devices,
   keys,
   backup,
@@ -29,6 +31,7 @@ export function SettingsScreen({
   onCreateKey,
 }: {
   identity: UseVaultIdentityResult;
+  decryption: UseReadDecryptionResult;
   devices: ReturnType<typeof useVaultDevices>;
   keys: ReturnType<typeof useVaultKeys>;
   backup: ReturnType<typeof useVaultBackup>;
@@ -68,6 +71,7 @@ export function SettingsScreen({
       {tab === "status" ? (
         <SettingsStatusTab
           identity={identity}
+          decryption={decryption}
           directoryLabel={directoryLabel}
           pubkeyBase={pubkeyBase}
         />
