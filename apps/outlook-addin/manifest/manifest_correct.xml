@@ -347,7 +347,7 @@
         </bt:LongStrings>
       </Resources>
       <!-- Replace YOUR_AZURE_CLIENT_ID below with the Entra app registration's
-           Application (client) ID â€” the same value as VITE_AZURE_CLIENT_ID in
+           Application (client) ID  the same value as VITE_AZURE_CLIENT_ID in
            apps/outlook-addin/.env. Required for Nested App Authentication (NAA),
            which GraphSubmissionAdapter needs to send PGP/MIME-correct mail. -->
       <WebApplicationInfo>

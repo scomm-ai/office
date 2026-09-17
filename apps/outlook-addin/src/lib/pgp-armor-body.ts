@@ -43,7 +43,7 @@ export function escapeHtml(text: string): string {
 export interface EncryptedPlaceholder {
   /** Plain-text intro prepended to the text/plain body. */
   text: string;
-  /** Trusted, pre-styled HTML prepended to the HTML body â€” not escaped. */
+  /** Trusted, pre-styled HTML prepended to the HTML body  not escaped. */
   html: string;
 }
 

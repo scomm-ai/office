@@ -206,7 +206,7 @@ export async function encryptComposeBody(options: {
     });
   } catch (err) {
     // pgpEngine.encrypt's own message ("OpenPGP encrypt failed") is a generic
-    // wrapper â€” the actual reason (e.g. a malformed recipient key) is on
+    // wrapper  the actual reason (e.g. a malformed recipient key) is on
     // `.cause`, set by PubkeyError in packages/scomm-pubkey/src/engines/pgp.js.
     const cause = (err as { cause?: unknown } | undefined)?.cause;
     const causeMessage = cause instanceof Error ? cause.message : undefined;
@@ -289,7 +289,7 @@ export async function decryptCurrentBody(options: {
   }
 
   // Prefer keys whose ID actually matches the ciphertext's recipient key
-  // ID(s) â€” falls back to trying every vault key only when no match is
+  // ID(s)  falls back to trying every vault key only when no match is
   // found (e.g. a ciphertext with no PKESK key-ID hints).
   const matched = await matchDecryptionKeys(armored, privateKeys);
   const candidates = matched.length > 0 ? matched : privateKeys;

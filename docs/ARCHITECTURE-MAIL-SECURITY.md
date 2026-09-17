@@ -23,7 +23,7 @@ Engine   Negotiation  Signatures  SDK
          +----------+----------+
          |                     |
    OpenPGP Provider      S/MIME Provider
-   (RFC 3156 MIME)       (CMS â€” native bridge)
+   (RFC 3156 MIME)       (CMS  native bridge)
                     |
             Submission Adapter
                     |
@@ -47,9 +47,9 @@ Engine   Negotiation  Signatures  SDK
 
 ## Standards vs SComm-specific
 
-- **OpenPGP/MIME** â€” RFC 3156 `multipart/signed` and `multipart/encrypted`. Independently verifiable.
-- **S/MIME** â€” Standard CMS/S/MIME. Platform trust stores for PKI.
-- **Semantic signature** â€” Additional layer over canonical authored plain text. Survives benign transport mutations.
+- **OpenPGP/MIME**  RFC 3156 `multipart/signed` and `multipart/encrypted`. Independently verifiable.
+- **S/MIME**  Standard CMS/S/MIME. Platform trust stores for PKI.
+- **Semantic signature**  Additional layer over canonical authored plain text. Survives benign transport mutations.
 
 ## Authoritative content
 
@@ -59,7 +59,7 @@ Engine   Negotiation  Signatures  SDK
 
 ## Private keys
 
-Private keys remain behind `SigningKeyHandle` / `DecryptionKeyHandle`. The Office add-in requests operations via handles backed by CKVF/SComm Vault â€” not raw key bytes in UI code.
+Private keys remain behind `SigningKeyHandle` / `DecryptionKeyHandle`. The Office add-in requests operations via handles backed by CKVF/SComm Vault  not raw key bytes in UI code.
 
 ## discovery.scomm.ai
 

@@ -17,7 +17,7 @@ Classic Outlook can take up to ~24 hours to show a sideloaded add-in because of 
 
 ### Classic Outlook (Windows)
 
-Classic is the Win32 client (**New Outlook** toggle off). This is an Office.js add-in, not COM â€” it will not appear under File â†’ Options â†’ COM Add-ins.
+Classic is the Win32 client (**New Outlook** toggle off). This is an Office.js add-in, not COM  it will not appear under File â†’ Options â†’ COM Add-ins.
 
 Use **Add from File** as above. Microsoft 365 / Exchange Online mailbox required (POP/IMAP-only profiles usually cannot install).
 
@@ -28,7 +28,7 @@ Admins can deploy the XML in **Microsoft 365 admin center â†’ Integrated ap
 ## Local development
 
 Committed template: `apps/outlook-addin/manifest/manifest.xml` (default **https://localhost:5173**).  
-After `pnpm dev`, sideload **`manifest.local.xml`** â€” it is rewritten from `ADDIN_PORT` in the repo-root `.env` (default `5173`).  
+After `pnpm dev`, sideload **`manifest.local.xml`**  it is rewritten from `ADDIN_PORT` in the repo-root `.env` (default `5173`).  
 Do **not** share those files or URLs for production installs.
 
 ### 1. Start the add-in dev server
@@ -75,4 +75,4 @@ Keep the Vite server running.
 
 ### 7. Browser-only (no Outlook)
 
-Open `https://localhost:<ADDIN_PORT>/taskpane.html` (default 5173) â€” **MockMailHost** and a **Mock host** banner. Real encrypt/decrypt against a mailbox still needs Outlook + a sideloaded manifest.
+Open `https://localhost:<ADDIN_PORT>/taskpane.html` (default 5173)  **MockMailHost** and a **Mock host** banner. Real encrypt/decrypt against a mailbox still needs Outlook + a sideloaded manifest.

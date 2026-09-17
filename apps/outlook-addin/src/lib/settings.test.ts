@@ -10,7 +10,7 @@ import {
 
 describe("formatAddresses", () => {
   it("returns em dash when empty", () => {
-    expect(formatAddresses(undefined)).toBe("â€”");
+    expect(formatAddresses(undefined)).toBe("");
   });
 
   it("formats display names", () => {
