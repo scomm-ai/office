@@ -52,7 +52,7 @@ describe("office SDK catalog seats", () => {
     const payload = {
       payloadVersion: 4,
       payingParty: { id: "pp", billingEmail: "a@b.com", organizationName: "" },
-      usingParty: { identityProvider: "better-auth", identitySubject: "sub" },
+      usingParty: { identityProvider: "test-idp", identitySubject: "sub" },
       devices: [],
       subscriptions: [seat("mystery", "mystery"), seat("ai_assistant", "ai_assistant")],
     } as LicensePayload;

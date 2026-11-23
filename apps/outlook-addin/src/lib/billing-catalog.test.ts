@@ -29,7 +29,7 @@ function license(subscriptions: LicenseSubscription[]): LicensePayload {
   return {
     payloadVersion: 4,
     payingParty: { id: "7", billingEmail: "a@example.com", organizationName: "" },
-    usingParty: { identityProvider: "better-auth", identitySubject: "u1" },
+    usingParty: { identityProvider: "test-idp", identitySubject: "u1" },
     devices: [],
     subscriptions,
   } as LicensePayload;
