@@ -1,23 +1,20 @@
-import {
-  SCOMM_OFFICE_CATALOG,
-  licenseGrantsFeature,
-  type LicenseNormalizedProducts,
-} from "./billing-catalog";
+import type { LicenseProcessor } from "@2key/browser-sdk/billing";
+import { OFFICE_ADDON_CODES } from "./billing-catalog";
 
 /**
  * Active catalog add-ons from a verified license. Never includes prices.
  */
 export function activeAddonCodes(
-  products: LicenseNormalizedProducts | null | undefined,
-  catalogAddonCodes: readonly string[] = SCOMM_OFFICE_CATALOG.addonCodes,
+  gate: Pick<LicenseProcessor, "holds"> | null | undefined,
+  catalogAddonCodes: readonly string[] = OFFICE_ADDON_CODES,
 ): string[] {
-  if (!products) return [];
+  if (!gate) return [];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const code of catalogAddonCodes) {
     const key = code.trim();
     if (!key || seen.has(key)) continue;
-    if (licenseGrantsFeature(products, key)) {
+    if (gate.holds(key)) {
       seen.add(key);
       out.push(key);
     }

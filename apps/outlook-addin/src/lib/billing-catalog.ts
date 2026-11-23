@@ -1,5 +1,5 @@
-import { catalogForHost, type OfferingCatalog } from "@2key/browser-sdk/billing";
-import hosts from "./hosts.json";
+import { OfferingCatalog } from "@2key/browser-sdk/billing";
+import catalogExport from "./billing-catalog-export.json";
 
 /** Catalog code for premium AI (cloud BYOAI / local IDR). */
 export const BILLING_ADDON_AI_ASSISTANT = "ai_assistant";
@@ -9,51 +9,28 @@ export const BILLING_ADDON_PGP = "pgp";
 
 /**
  * Catalog code for Outlook OpenPGP ECC+PQC. Shared with Email.
- * Catalog-ready only — do not show a PQC buy CTA until a PQC engine ships.
+ * Catalog-ready only: do not show a PQC buy CTA until a PQC engine ships.
  */
 export const BILLING_ADDON_PQC = "pqc";
 
 /**
- * Product → feature → `{ count, …resources }` from SDK `normalizedEntitlements()`.
+ * Offering codes this Outlook binary knows how to gate. Never list `linux`
+ * or `accent_color`. `pqc` is here so a future engine can gate; until then
+ * omit PQC upsell UI.
  */
-export type LicenseNormalizedProducts = Record<
-  string,
-  Record<string, Record<string, number>>
->;
+export const OFFICE_ADDON_CODES: readonly string[] = [
+  BILLING_ADDON_PGP,
+  BILLING_ADDON_PQC,
+  BILLING_ADDON_AI_ASSISTANT,
+];
 
 /**
- * SUM of `count` for [feature] across every product. Tenant-unaware.
+ * Billing's public catalog export, bundled at build time; the add-in never
+ * fetches it. Codes the license grants but this catalog does not know unlock
+ * nothing. Regenerate from the billing repo:
+ * `npm run billing-seed -- export --dir ../2key-scomm-seed-templates --out <this folder>/billing-catalog-export.json`
+ *
+ * Not narrowed to a host: the `pgp` offering has the `office` surface while
+ * the shared add-ons have `scomm`, and both are gated here.
  */
-export function licenseFeatureCount(
-  products: LicenseNormalizedProducts | undefined,
-  feature: string,
-): number {
-  if (!products) return 0;
-  const needle = feature.trim();
-  if (!needle) return 0;
-  let total = 0;
-  for (const features of Object.values(products)) {
-    const n = features[needle]?.count;
-    if (typeof n === "number" && Number.isFinite(n) && n > 0) {
-      total += n;
-    }
-  }
-  return total;
-}
-
-/**
- * Fail-closed paid-function gate: `count >= 1` for [feature].
- */
-export function licenseGrantsFeature(
-  products: LicenseNormalizedProducts | undefined,
-  feature: string,
-): boolean {
-  return licenseFeatureCount(products, feature) >= 1;
-}
-
-/**
- * Offerings this Outlook binary knows how to gate.
- * Baked from seed-repo `hosts.json` at build time (`hosts.office`).
- * Intersected with the verified license JWT by `@2key/browser-sdk`.
- */
-export const SCOMM_OFFICE_CATALOG: OfferingCatalog = catalogForHost(hosts, "office");
+export const SCOMM_OFFICE_CATALOG: OfferingCatalog = OfferingCatalog.fromJson(catalogExport);

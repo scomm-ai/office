@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { licenseEntitlements, type BillingSubscription } from "@2key/browser-sdk/billing";
+import {
+  LicenseProcessor,
+  type LicensePayload,
+  type LicenseSubscription,
+} from "@2key/browser-sdk/billing";
 import {
   activeAddonCodes,
   deviceBoundLabel,
@@ -8,17 +12,12 @@ import {
   validateDeviceFriendlyName,
   resolveBillingPortalOpenUrl,
 } from "./billing-account-sync";
-import { SCOMM_OFFICE_CATALOG, licenseFeatureCount } from "./billing-catalog";
+import { SCOMM_OFFICE_CATALOG } from "./billing-catalog";
 
 describe("activeAddonCodes", () => {
   it("lists catalog add-ons that the license grants, without prices", () => {
     expect(
-      activeAddonCodes({
-        Scomm: {
-          ai_assistant: { count: 1 },
-          pgp: { count: 1 },
-        },
-      }),
+      activeAddonCodes({ holds: (code) => code === "ai_assistant" || code === "pgp" }),
     ).toEqual(["pgp", "ai_assistant"]);
   });
 
@@ -28,62 +27,42 @@ describe("activeAddonCodes", () => {
 
   it("lists pqc when entitled and never linux", () => {
     expect(
-      activeAddonCodes({
-        Scomm: {
-          pqc: { count: 1 },
-          linux: { count: 1 },
-        },
-      }),
+      activeAddonCodes({ holds: (code) => code === "pqc" || code === "linux" }),
     ).toEqual(["pqc"]);
   });
 });
 
 describe("office SDK catalog seats", () => {
-  const seat = (addonCode: string, planName: string): BillingSubscription => ({
-    subscriptionId: addonCode,
-    planId: addonCode,
-    productId: "Scomm",
-    planName,
-    productName: "Scomm",
+  const NOW = 1_800_000_000;
+  const seat = (offering: string, planCode: string): LicenseSubscription => ({
+    subscriptionId: offering,
+    payingPartyId: "pp",
+    product: { code: "scomm", name: "Scomm" },
+    plan: { code: planCode, name: planCode, isBundle: false },
     quantity: 1,
-    subscriptionStatus: "active",
-    validUntilUnix: 4102444800,
-    addonCode,
-    offerings: [
-      {
-        offeringId: addonCode,
-        offeringCode: addonCode,
-        productId: "Scomm",
-        productName: "Scomm",
-        units: 1,
-        resources: { addon_code: addonCode },
-      },
-    ],
-    devices: [],
+    status: "active",
+    billingInterval: "annual",
+    validFromUnix: NOW - 86_400,
+    validUntilUnix: NOW + 86_400,
+    offerings: { [offering]: 1 },
+    resources: {},
   });
 
-  it("licenseEntitlements hides linux seats and keeps local AI", () => {
-    const e = licenseEntitlements(
-      {
-        payloadVersion: 3,
-        payingParty: {
-          id: "pp",
-          identityProvider: "google",
-          identitySubject: "sub",
-          billingEmail: "a@b.com",
-        },
-        subscriptions: [
-          seat("linux", "Linux Version"),
-          seat("ai_assistant", "Local AI"),
-        ],
-      },
-      1_700_000_000,
-      SCOMM_OFFICE_CATALOG,
-    );
-    const snap = e.normalizedJson();
-    expect(snap.products.Scomm?.linux).toBeUndefined();
-    expect(licenseFeatureCount(snap.products, "ai_assistant")).toBeGreaterThanOrEqual(1);
-    expect(e.subscriptions.map((s) => s.addonCode)).toEqual(["ai_assistant"]);
+  it("LicenseProcessor drops codes the catalog does not know and keeps local AI", () => {
+    const payload = {
+      payloadVersion: 4,
+      payingParty: { id: "pp", billingEmail: "a@b.com", organizationName: "" },
+      usingParty: { identityProvider: "better-auth", identitySubject: "sub" },
+      devices: [],
+      subscriptions: [seat("mystery", "mystery"), seat("ai_assistant", "ai_assistant")],
+    } as LicensePayload;
+    const gate = new LicenseProcessor(payload, {
+      catalog: SCOMM_OFFICE_CATALOG,
+      clock: () => NOW,
+    });
+    expect(gate.holds("ai_assistant")).toBe(true);
+    expect(gate.holds("mystery")).toBe(false);
+    expect(activeAddonCodes(gate)).toEqual(["ai_assistant"]);
   });
 });
 

@@ -13,21 +13,19 @@ describe("hasPgpEntitlement", () => {
     expect(hasPgpEntitlement(undefined)).toBe(false);
   });
 
-  it("accepts pgp count >= 1", () => {
-    expect(
-      hasPgpEntitlement({
-        products: { Scomm: { [BILLING_ADDON_PGP]: { count: 1 } } },
-      }),
-    ).toBe(true);
+  it("accepts a license that holds pgp", () => {
+    expect(hasPgpEntitlement({ holds: (code) => code === BILLING_ADDON_PGP })).toBe(true);
   });
 
-  it("ignores other features and empty products", () => {
+  it("ignores other add-ons and a gate that throws", () => {
+    expect(hasPgpEntitlement({ holds: (code) => code === "ai_assistant" })).toBe(false);
     expect(
       hasPgpEntitlement({
-        products: { Scomm: { ai_assistant: { count: 1 } } },
+        holds: () => {
+          throw new Error("no license");
+        },
       }),
     ).toBe(false);
-    expect(hasPgpEntitlement({ products: {} })).toBe(false);
   });
 });
 

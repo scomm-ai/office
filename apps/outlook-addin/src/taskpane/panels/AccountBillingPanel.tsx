@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { shopUrl } from "@2key/browser-sdk/auth";
 import {
   licenseListsSki,
-  type BillingSubscription,
   type LicensePayload,
+  type LicenseSubscription,
 } from "@2key/browser-sdk/billing";
-import { BILLING_ADDON_AI_ASSISTANT, BILLING_ADDON_PGP, licenseGrantsFeature } from "../../lib/billing-catalog";
+import {
+  BILLING_ADDON_AI_ASSISTANT,
+  BILLING_ADDON_PGP,
+  OFFICE_ADDON_CODES,
+} from "../../lib/billing-catalog";
 import {
   deviceBoundLabel,
   encodePublicJwkForPortal,
@@ -36,7 +40,7 @@ export function AccountBillingPanel() {
   const [busyRegion, setBusyRegion] = useState<AlertRegion | null>(null);
   const [pasteToken, setPasteToken] = useState("");
   const [payload, setPayload] = useState<LicensePayload | null>(null);
-  const [hostSeats, setHostSeats] = useState<BillingSubscription[]>([]);
+  const [hostSeats, setHostSeats] = useState<LicenseSubscription[]>([]);
   const [deviceSki, setDeviceSki] = useState<string | null>(null);
   const [deviceKeyJson, setDeviceKeyJson] = useState("");
   const [publicJwk, setPublicJwk] = useState<Record<string, unknown> | null>(null);
@@ -85,10 +89,18 @@ export function AccountBillingPanel() {
       setPayload(restored);
       setDeviceBound(Boolean(restored && licenseListsSki(restored, device.ski)));
       try {
-        const snap = billing.normalizedEntitlements();
-        setHostSeats(billing.hostSubscriptions());
-        setAiOk(licenseGrantsFeature(snap.products, BILLING_ADDON_AI_ASSISTANT));
-        setPgpOk(licenseGrantsFeature(snap.products, BILLING_ADDON_PGP));
+        const gate = restored ? billing.licenseProcessor() : null;
+        setHostSeats(
+          gate
+            ? gate
+                .liveSubscriptions()
+                .filter((sub) =>
+                  OFFICE_ADDON_CODES.some((code) => (sub.offerings[code] ?? 0) > 0),
+                )
+            : [],
+        );
+        setAiOk(Boolean(gate?.holds(BILLING_ADDON_AI_ASSISTANT)));
+        setPgpOk(Boolean(gate?.holds(BILLING_ADDON_PGP)));
       } catch {
         setHostSeats([]);
         setAiOk(false);
@@ -356,8 +368,10 @@ export function AccountBillingPanel() {
         <ul className={styles.list}>
           {hostSeats.map((sub) => (
             <li key={sub.subscriptionId}>
-              {sub.planName} / {sub.subscriptionStatus}
-              {sub.addonCode ? ` [${sub.addonCode}]` : ""}
+              {sub.plan.name} x {sub.quantity} / {sub.status}
+              {Object.keys(sub.offerings).length > 0
+                ? ` [${Object.keys(sub.offerings).join(", ")}]`
+                : ""}
             </li>
           ))}
         </ul>

@@ -9,7 +9,7 @@ import {
   type CloudAiProfile,
   type CloudAiProviderKind,
 } from "@scomm-office/byoai";
-import { BILLING_ADDON_AI_ASSISTANT, licenseGrantsFeature } from "../../lib/billing-catalog";
+import { BILLING_ADDON_AI_ASSISTANT } from "../../lib/billing-catalog";
 import { createOfficeBillingClient } from "../../lib/billing-client";
 import { useHostContext } from "../../lib/host-context";
 import { Dropdown, Option, OptionGroup } from "@fluentui/react-components";
@@ -94,10 +94,11 @@ export function AiSetupView({ onReady }: { onReady: (profiles: CloudAiProfile[])
       setEntitled(false);
       return;
     }
-    void billing.restore(ACCOUNT_KEY).then(() => {
+    void billing.restore(ACCOUNT_KEY).then((license) => {
       try {
-        const snap = billing.normalizedEntitlements();
-        setEntitled(licenseGrantsFeature(snap.products, BILLING_ADDON_AI_ASSISTANT));
+        setEntitled(
+          Boolean(license && billing.licenseProcessor().holds(BILLING_ADDON_AI_ASSISTANT)),
+        );
       } catch {
         setEntitled(false);
       }

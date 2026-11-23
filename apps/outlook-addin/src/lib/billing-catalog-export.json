@@ -1,0 +1,345 @@
+{
+	"exportVersion": 1,
+	"surfaces": [
+		"scomm",
+		"office"
+	],
+	"platforms": [
+		"windows",
+		"macos",
+		"linux"
+	],
+	"hosts": {
+		"scommDesktop": {
+			"surfaces": [
+				"scomm"
+			],
+			"licensedPlatforms": [
+				"desktop"
+			]
+		}
+	},
+	"products": {
+		"scomm": {
+			"displayName": "Scomm.AI",
+			"description": "Scomm Desktop base license and optional add-ons: AI-Assistant, Post-Quantum E2EE, Custom Colours & Backgrounds, and the Basic Bundle",
+			"isActive": true,
+			"resources": {},
+			"offerings": {
+				"accent_color": {
+					"displayName": "Custom Colours & Backgrounds",
+					"isActive": true,
+					"resources": {},
+					"settings": {
+						"requiresOfferings": [
+							"desktop"
+						],
+						"surfaces": [
+							"scomm"
+						]
+					}
+				},
+				"ai_assistant": {
+					"displayName": "AI-Assistant",
+					"isActive": true,
+					"resources": {},
+					"settings": {
+						"requiresOfferings": [
+							"desktop"
+						],
+						"surfaces": [
+							"scomm"
+						]
+					}
+				},
+				"campaign_manager": {
+					"displayName": "Campaign-Manager",
+					"isActive": true,
+					"resources": {},
+					"settings": {
+						"requiresOfferings": [
+							"desktop"
+						],
+						"surfaces": [
+							"scomm"
+						]
+					}
+				},
+				"desktop": {
+					"displayName": "Scomm Desktop",
+					"isActive": true,
+					"resources": {},
+					"settings": {
+						"maxDevices": 3,
+						"surfaces": [
+							"scomm"
+						]
+					}
+				},
+				"linux": {
+					"displayName": "Scomm Linux",
+					"isActive": false,
+					"resources": {},
+					"settings": {
+						"maxDevices": 3,
+						"satisfiesOfferings": [
+							"desktop"
+						],
+						"surfaces": [
+							"scomm"
+						]
+					}
+				},
+				"pgp": {
+					"displayName": "Outlook OpenPGP ECC",
+					"isActive": false,
+					"resources": {},
+					"settings": {
+						"surfaces": [
+							"office"
+						]
+					}
+				},
+				"pqc": {
+					"displayName": "Post-Quantum E2EE",
+					"isActive": true,
+					"resources": {},
+					"settings": {
+						"requiresOfferings": [
+							"desktop"
+						],
+						"surfaces": [
+							"scomm"
+						]
+					}
+				}
+			},
+			"plans": {
+				"accent_color": {
+					"displayName": "Custom Colours & Backgrounds",
+					"description": "Unlock the full colour spectrum for accent colours and custom background gradients.",
+					"isActive": true,
+					"trialDays": 30,
+					"offerings": {
+						"accent_color": 1
+					},
+					"isBundle": false,
+					"isBase": false,
+					"isAddOn": true,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 5
+						}
+					}
+				},
+				"ai_assistant": {
+					"displayName": "AI-Assistant",
+					"description": "Integrated local and cloud AI",
+					"isActive": true,
+					"trialDays": 30,
+					"offerings": {
+						"ai_assistant": 1
+					},
+					"isBundle": false,
+					"isBase": false,
+					"isAddOn": true,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 10
+						}
+					}
+				},
+				"all_addons_bundle": {
+					"displayName": "All Add-ons Bundle",
+					"description": "Retired: replaced by the Basic Bundle.",
+					"isActive": false,
+					"trialDays": 30,
+					"offerings": {
+						"accent_color": 1,
+						"ai_assistant": 1,
+						"linux": 1,
+						"pgp": 1,
+						"pqc": 1
+					},
+					"isBundle": true,
+					"isBase": true,
+					"isAddOn": false,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 25
+						}
+					}
+				},
+				"basic_bundle": {
+					"displayName": "Basic Bundle",
+					"description": "Scomm Desktop, AI-Assistant, Post-Quantum E2EE, and Custom Colours & Backgrounds in one bundle.",
+					"isActive": true,
+					"trialDays": 30,
+					"offerings": {
+						"accent_color": 1,
+						"ai_assistant": 1,
+						"desktop": 1,
+						"pqc": 1
+					},
+					"isBundle": true,
+					"isBase": true,
+					"isAddOn": false,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 25
+						}
+					}
+				},
+				"campaign_manager": {
+					"displayName": "Campaign-Manager",
+					"description": "Plan and run email campaigns.",
+					"isActive": false,
+					"comingSoon": true,
+					"trialDays": 30,
+					"offerings": {
+						"campaign_manager": 1
+					},
+					"isBundle": false,
+					"isBase": false,
+					"isAddOn": true,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 15
+						}
+					}
+				},
+				"desktop": {
+					"displayName": "Scomm Desktop",
+					"description": "Base license for Scomm.AI on Windows, macOS and Linux. Required for every other add-on. One license covers up to 3 devices.",
+					"isActive": true,
+					"trialDays": 30,
+					"offerings": {
+						"desktop": 1
+					},
+					"isBundle": false,
+					"isBase": true,
+					"isAddOn": false,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 10
+						}
+					}
+				},
+				"linux_version": {
+					"displayName": "Linux Version",
+					"description": "Retired: replaced by Scomm Desktop.",
+					"isActive": false,
+					"trialDays": 30,
+					"offerings": {
+						"linux": 1
+					},
+					"isBundle": false,
+					"isBase": true,
+					"isAddOn": false,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 5
+						}
+					}
+				},
+				"local_ai": {
+					"displayName": "Local-AI",
+					"description": "Retired: renamed AI-Assistant.",
+					"isActive": false,
+					"trialDays": 30,
+					"offerings": {
+						"ai_assistant": 1
+					},
+					"isBundle": false,
+					"isBase": false,
+					"isAddOn": true,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 10
+						}
+					}
+				},
+				"outlook_pgp_ecc": {
+					"displayName": "Outlook OpenPGP ECC",
+					"description": "Retired: the Outlook add-in is not sold.",
+					"isActive": false,
+					"trialDays": 30,
+					"offerings": {
+						"pgp": 1
+					},
+					"isBundle": false,
+					"isBase": true,
+					"isAddOn": false,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 5
+						}
+					}
+				},
+				"outlook_pgp_pqc": {
+					"displayName": "Outlook OpenPGP ECC+PQC",
+					"description": "Retired: renamed Post-Quantum E2EE.",
+					"isActive": false,
+					"trialDays": 30,
+					"offerings": {
+						"pqc": 1
+					},
+					"isBundle": false,
+					"isBase": false,
+					"isAddOn": true,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 15
+						}
+					}
+				},
+				"pqc": {
+					"displayName": "Post-Quantum E2EE",
+					"description": "Post-Quantum cryptography",
+					"isActive": true,
+					"trialDays": 30,
+					"offerings": {
+						"pqc": 1
+					},
+					"isBundle": false,
+					"isBase": false,
+					"isAddOn": true,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 15
+						}
+					}
+				},
+				"scomm_linux": {
+					"displayName": "Scomm Linux",
+					"description": "Retired: replaced by Scomm Desktop.",
+					"isActive": false,
+					"trialDays": 30,
+					"offerings": {
+						"linux": 1
+					},
+					"isBundle": false,
+					"isBase": true,
+					"isAddOn": false,
+					"pricings": {
+						"annual": {
+							"currency": "USD",
+							"basePrice": 10
+						}
+					}
+				}
+			}
+		}
+	}
+}
